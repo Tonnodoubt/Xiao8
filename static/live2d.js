@@ -1,6 +1,40 @@
 window.PIXI = PIXI;
 const {Live2DModel} = PIXI.live2d;
 
+// 初始化窗口管理对象（如果不存在）
+if (!window._openSettingsWindows) {
+    window._openSettingsWindows = {};
+}
+
+// 初始化窗口管理函数（如果不存在）
+if (!window.openSettingsWindow) {
+    window.openSettingsWindow = function(url, windowKey, options) {
+        const existing = window._openSettingsWindows[windowKey];
+        if (existing && !existing.closed) {
+            existing.focus();
+            return existing;
+        }
+        if (existing) delete window._openSettingsWindows[windowKey];
+        
+        const features = options?.windowFeatures || 'width=1000,height=800,menubar=no,toolbar=no,location=no,status=no';
+        const win = window.open(url, '_blank', features);
+        if (!win) return null;
+        
+        window._openSettingsWindows[windowKey] = win;
+        if (options?.moveTo) win.moveTo(options.moveTo.x || 0, options.moveTo.y || 0);
+        if (options?.resizeTo) win.resizeTo(options.resizeTo.width || screen.availWidth, options.resizeTo.height || screen.availHeight);
+        
+        const timer = setInterval(() => {
+            if (win.closed) {
+                delete window._openSettingsWindows[windowKey];
+                clearInterval(timer);
+                if (options?.onClose) options.onClose();
+            }
+        }, 500);
+        return win;
+    };
+}
+
 // 全局变量
 let currentModel = null;
 let emotionMapping = null;
@@ -42,6 +76,7 @@ class Live2DManager {
         this._floatingButtonsContainer = null;
         this._floatingButtons = {}; // 存储所有按钮元素
         this._popupTimers = {}; // 存储弹出框的定时器
+        this._agentCheckInterval = null; // Agent 弹出框的定时检查器
         this._goodbyeClicked = false; // 标记是否点击了"请她离开"
 
         // 口型同步控制
@@ -691,6 +726,11 @@ class Live2DManager {
                 // 清理所有弹出框定时器
                 Object.values(this._popupTimers).forEach(timer => clearTimeout(timer));
                 this._popupTimers = {};
+                // 清除 Agent 检查定时器
+                if (this._agentCheckInterval) {
+                    clearInterval(this._agentCheckInterval);
+                    this._agentCheckInterval = null;
+                }
                 
                 // 暂停 ticker，期间做销毁，随后恢复
                 this.pixi_app.ticker && this.pixi_app.ticker.stop();
@@ -1317,6 +1357,16 @@ class Live2DManager {
             return;
         }
 
+        // 防止重复初始化：如果按钮容器已存在，先清理
+        const existingContainer = document.getElementById('live2d-floating-buttons');
+        if (existingContainer) {
+            existingContainer.remove();
+        }
+        if (this._floatingButtonsContainer) {
+            this._floatingButtonsContainer = null;
+            this._floatingButtons = {};
+        }
+
         // 创建按钮容器
         const buttonsContainer = document.createElement('div');
         buttonsContainer.id = 'live2d-floating-buttons';
@@ -1485,7 +1535,7 @@ class Live2DManager {
                 // 直接将弹出框添加到btnWrapper，这样定位更准确
                 btnWrapper.appendChild(popup);
                 
-                btn.addEventListener('click', (e) => {
+                btn.addEventListener('click', async (e) => {
                     e.stopPropagation();
                     
                     // 检查弹出框当前状态
@@ -1628,8 +1678,9 @@ class Live2DManager {
             } else {
                 // 普通点击按钮
                 btnWrapper.appendChild(btn);
-                btn.addEventListener('click', (e) => {
+                btn.addEventListener('click', async (e) => {
                     e.stopPropagation();
+                    
                     const event = new CustomEvent(`live2d-${config.id}-click`);
                     window.dispatchEvent(event);
                 });
@@ -1697,6 +1748,12 @@ class Live2DManager {
 
     // 创建弹出框
     createPopup(buttonId) {
+        // 防止重复创建：如果弹出框已存在，先移除
+        const existingPopup = document.getElementById(`live2d-popup-${buttonId}`);
+        if (existingPopup) {
+            existingPopup.remove();
+        }
+        
         const popup = document.createElement('div');
         popup.id = `live2d-popup-${buttonId}`;
         popup.className = 'live2d-popup';
@@ -1774,6 +1831,11 @@ class Live2DManager {
                     display: 'none'
                 });
                 
+                // 初始化时，键鼠控制和MCP工具默认禁用（需要先开启Agent总开关）
+                if (toggle.id === 'agent-keyboard' || toggle.id === 'agent-mcp') {
+                    checkbox.disabled = true;
+                }
+                
                 // 创建自定义圆形指示器
                 const indicator = document.createElement('div');
                 Object.assign(indicator.style, {
@@ -1784,27 +1846,52 @@ class Live2DManager {
                     backgroundColor: 'transparent',
                     cursor: 'pointer',
                     flexShrink: '0',
-                    transition: 'all 0.2s ease'
+                    transition: 'all 0.2s ease',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center'
                 });
                 
-                const label = document.createElement('label');
+                // 创建对勾图标（初始隐藏）
+                const checkmark = document.createElement('div');
+                checkmark.innerHTML = '✓';
+                Object.assign(checkmark.style, {
+                    color: '#fff',
+                    fontSize: '13px',
+                    fontWeight: 'bold',
+                    lineHeight: '1',
+                    opacity: '0',
+                    transition: 'opacity 0.2s ease',
+                    pointerEvents: 'none',
+                    userSelect: 'none'
+                });
+                indicator.appendChild(checkmark);
+                
+                const label = document.createElement('span'); // 改为 span，不使用 label 的 htmlFor，统一由 toggleItem 处理点击
                 label.innerText = toggle.label;
-                label.htmlFor = `live2d-${toggle.id}`;
                 label.style.cursor = 'pointer';
                 label.style.userSelect = 'none';
                 label.style.fontSize = '13px';
                 label.style.color = '#333';  // 文本始终为深灰色，不随选中状态改变
                 
+                // 同步更新 label 和 toggleItem 的 title（当 checkbox 的 title 改变时）
+                const updateLabelTitle = () => {
+                    label.title = checkbox.title || '';
+                    toggleItem.title = checkbox.title || '';
+                };
+                
                 // 根据 checkbox 状态更新指示器颜色（文本颜色保持不变）
                 const updateStyle = () => {
                     if (checkbox.checked) {
-                        // 选中状态：蓝色填充，无边框
+                        // 选中状态：蓝色填充，显示对勾
                         indicator.style.backgroundColor = '#44b7fe';
                         indicator.style.borderColor = '#44b7fe';
+                        checkmark.style.opacity = '1';
                     } else {
-                        // 未选中状态：灰色边框，透明填充
+                        // 未选中状态：灰色边框，透明填充，隐藏对勾
                         indicator.style.backgroundColor = 'transparent';
                         indicator.style.borderColor = '#ccc';
+                        checkmark.style.opacity = '0';
                     }
                 };
                 
@@ -1820,24 +1907,42 @@ class Live2DManager {
                 popup.appendChild(toggleItem);
                 
                 toggleItem.addEventListener('mouseenter', () => {
-                    toggleItem.style.background = 'rgba(79, 140, 255, 0.1)';
+                    if (checkbox.disabled && checkbox.title?.includes('不可用')) {
+                        const statusEl = document.getElementById('live2d-agent-status');
+                        if (statusEl) statusEl.textContent = checkbox.title;
+                    } else if (!checkbox.disabled) {
+                        toggleItem.style.background = 'rgba(79, 140, 255, 0.1)';
+                    }
                 });
                 toggleItem.addEventListener('mouseleave', () => {
                     toggleItem.style.background = 'transparent';
                 });
                 
-                // 点击切换（点击整个项目或指示器都可以切换）
-                toggleItem.addEventListener('click', (e) => {
-                    if (e.target !== checkbox) {
-                        checkbox.checked = !checkbox.checked;
-                        checkbox.dispatchEvent(new Event('change', { bubbles: true }));
-                        updateStyle();  // 更新样式
+                // 当 checkbox 被禁用时，更新样式和光标
+                const updateDisabledStyle = () => {
+                    const disabled = checkbox.disabled;
+                    const cursor = disabled ? 'default' : 'pointer';
+                    const opacity = disabled ? '0.5' : '1';
+                    [toggleItem, label, indicator].forEach(el => {
+                        el.style.cursor = cursor;
+                    });
+                    toggleItem.style.opacity = opacity;
+                };
+                
+                // 监听 disabled 和 title 状态变化
+                const disabledObserver = new MutationObserver((mutations) => {
+                    updateDisabledStyle();
+                    if (mutations.some(m => m.attributeName === 'title')) {
+                        updateLabelTitle();
                     }
                 });
+                disabledObserver.observe(checkbox, { attributes: true, attributeFilter: ['disabled', 'title'] });
+                updateDisabledStyle(); // 初始化
+                updateLabelTitle(); // 初始化 title
                 
-                // 点击指示器也可以切换
-                indicator.addEventListener('click', (e) => {
-                    e.stopPropagation();
+                // 点击整行都可以切换（左边、中间、右边）
+                toggleItem.addEventListener('click', (e) => {
+                    if (checkbox.disabled) return;
                     checkbox.checked = !checkbox.checked;
                     checkbox.dispatchEvent(new Event('change', { bubbles: true }));
                     updateStyle();
@@ -2094,12 +2199,9 @@ class Live2DManager {
                             // 从 window.lanlan_config 动态获取 lanlan_name
                             const lanlanName = (window.lanlan_config && window.lanlan_config.lanlan_name) || '';
                             finalUrl = `${item.urlBase}?lanlan_name=${encodeURIComponent(lanlanName)}`;
-                            // Live2D设置页直接跳转
-                            window.location.href = finalUrl;
-                        } else {
-                            // 其他页面弹出新窗口
-                            window.open(finalUrl, '_blank', 'width=1000,height=800,menubar=no,toolbar=no,location=no,status=no');
                         }
+                        // 所有页面都使用窗口管理函数打开新窗口
+                        window.openSettingsWindow(finalUrl, finalUrl);
                     }
                 });
                 
@@ -2146,6 +2248,12 @@ class Live2DManager {
                 popup.style.right = 'auto';
                 popup.style.top = '0';
             }, 200);
+            
+            // 如果是 agent 弹出框，清除定时检查器
+            if (buttonId === 'agent' && this._agentCheckInterval) {
+                clearInterval(this._agentCheckInterval);
+                this._agentCheckInterval = null;
+            }
         } else {
             // 如果隐藏，则显示
             popup.style.display = 'flex';
@@ -2199,6 +2307,44 @@ class Live2DManager {
                 popup.style.opacity = '1';
                 popup.style.transform = 'translateX(0)';
             }, 10);
+            
+            // 如果是 agent 弹出框，启动定时检查器
+            if (buttonId === 'agent') {
+                // 清除之前的定时器
+                if (this._agentCheckInterval) {
+                    clearInterval(this._agentCheckInterval);
+                }
+                
+                // 每秒检查一次键鼠控制和MCP工具的可用性
+                const checkAgentCapabilities = async () => {
+                    const checks = [
+                        { id: 'live2d-agent-keyboard', api: '/api/agent/computer_use/availability', name: '键鼠控制' },
+                        { id: 'live2d-agent-mcp', api: '/api/agent/mcp/availability', name: 'MCP工具' }
+                    ];
+                    
+                    for (const check of checks) {
+                        const checkbox = document.getElementById(check.id);
+                        if (!checkbox) continue;
+                        try {
+                            const r = await fetch(check.api);
+                            if (r.ok) {
+                                const j = await r.json();
+                                const available = j.ready === true;
+                                checkbox.disabled = !available;
+                                checkbox.title = available ? check.name : `${check.name}不可用`;
+                            }
+                        } catch (e) {
+                            // 检查失败，保持当前状态
+                        }
+                    }
+                };
+                
+                // 立即检查一次
+                checkAgentCapabilities();
+                
+                // 每秒检查一次
+                this._agentCheckInterval = setInterval(checkAgentCapabilities, 1000);
+            }
             
             // 设置、agent、麦克风弹出框不自动隐藏，其他的1秒后隐藏
             if (buttonId !== 'settings' && buttonId !== 'agent' && buttonId !== 'mic') {

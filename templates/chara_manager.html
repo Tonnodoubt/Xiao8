@@ -441,23 +441,51 @@ function showCatgirlForm(key, container) {
                 await showAlert('请先填写猫娘档案名，然后再设置Live2D模型');
                 return;
             }
-            const popup = window.open(
-                `/l2d?lanlan_name=${encodeURIComponent(catgirlName)}`,
-                '_blank',
-                'toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,width=' + screen.availWidth + ',height=' + screen.availHeight + ',top=0,left=0'
-            );
+            
+            // 确保窗口管理函数存在（如果未加载 live2d.js，则定义）
+            if (!window.openSettingsWindow) {
+                if (!window._openSettingsWindows) window._openSettingsWindows = {};
+                window.openSettingsWindow = function(url, windowKey, options) {
+                    const existing = window._openSettingsWindows[windowKey];
+                    if (existing && !existing.closed) {
+                        existing.focus();
+                        return existing;
+                    }
+                    if (existing) delete window._openSettingsWindows[windowKey];
+                    
+                    const features = options?.windowFeatures || 'width=1000,height=800,menubar=no,toolbar=no,location=no,status=no';
+                    const win = window.open(url, '_blank', features);
+                    if (!win) return null;
+                    
+                    window._openSettingsWindows[windowKey] = win;
+                    if (options?.moveTo) win.moveTo(options.moveTo.x || 0, options.moveTo.y || 0);
+                    if (options?.resizeTo) win.resizeTo(options.resizeTo.width || screen.availWidth, options.resizeTo.height || screen.availHeight);
+                    
+                    const timer = setInterval(() => {
+                        if (win.closed) {
+                            delete window._openSettingsWindows[windowKey];
+                            clearInterval(timer);
+                            if (options?.onClose) options.onClose();
+                        }
+                    }, 500);
+                    return win;
+                };
+            }
+            
+            // 构建 URL 并使用窗口管理函数打开窗口
+            const url = `/l2d?lanlan_name=${encodeURIComponent(catgirlName)}`;
+            const { availWidth: w, availHeight: h } = screen;
+            const popup = window.openSettingsWindow(url, url, {
+                windowFeatures: `toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,width=${w},height=${h},top=0,left=0`,
+                moveTo: { x: 0, y: 0 },
+                resizeTo: { width: w, height: h },
+                onClose: loadCharacterData
+            });
+            
             if (!popup) {
                 await showAlert('请允许弹窗！');
                 return;
             }
-            popup.moveTo(0, 0);
-            popup.resizeTo(screen.availWidth, screen.availHeight);
-            const timer = setInterval(() => {
-                if (popup.closed) {
-                    clearInterval(timer);
-                    loadCharacterData();
-                }
-            }, 500);
         };
     }
     // 新增自定义项按钮
