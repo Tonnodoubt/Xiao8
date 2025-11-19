@@ -246,6 +246,42 @@
             visibility: hidden;
         }
 
+        #mmd-container {
+            position: fixed;
+            right: 0px;
+            bottom: 0px;
+            width: 100%;
+            height: 100%;
+            z-index: 1000; /* 提高 z-index，确保在 Live2D 之上 */
+            pointer-events: none;
+            background: none;
+            opacity: 1;
+            overflow: hidden;
+            visibility: visible;
+            transition: all 1s ease-in-out, height 0ms 1s, width 0ms 1s, visibility 0ms 1s;
+        }
+
+        #mmd-container.minimized {
+            right: -800px;
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        #mmd-canvas {
+            right: 0;
+            bottom: 0;
+            pointer-events: auto; /* 允许鼠标事件，以便拖拽和缩放 */
+            display: block;
+            opacity: 1;
+            visibility: visible;
+            background: transparent;
+        }
+
+        #mmd-canvas.minimized {
+            opacity: 0;
+            visibility: hidden;
+        }
+
         #chat-container {
             margin-bottom: 50px;
             pointer-events: auto; /* 恢复鼠标交互 */
@@ -973,6 +1009,9 @@
 <div id="live2d-container">
     <canvas id="live2d-canvas"></canvas>
 </div>
+<div id="mmd-container" style="display: none;">
+    <canvas id="mmd-canvas"></canvas>
+</div>
 
 <script>
     // 页面配置 - 从 URL 或 API 获取
@@ -1266,6 +1305,208 @@
 <script src="/static/libs/live2d.min.js"></script>  <!-- Cubism 2.1核心库（支持旧模型） -->
 <script src="/static/libs/pixi.min.js"></script>  <!-- PixiJS v7 CDN -->
 <script src="/static/libs/index.min.js"></script>  <!-- pixi-live2d-display v0.5.0-ls-6（RaSan147 fork，支持v7） -->
+<!-- Three.js 和 MMD 支持 -->
+<!-- 使用多个 CDN 源作为备用，避免加载失败 -->
+<script>
+    // 尝试从多个 CDN 源加载 Three.js
+    (function() {
+        const cdnSources = [
+            'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js',
+            'https://unpkg.com/three@0.160.0/build/three.min.js',
+            'https://cdn.skypack.dev/three@0.160.0'
+        ];
+        
+        let currentIndex = 0;
+        let loaded = false;
+        
+        function tryLoadNext() {
+            if (loaded) return; // 已经加载成功，不再尝试
+            
+            if (currentIndex >= cdnSources.length) {
+                console.error('所有 Three.js CDN 源都加载失败，尝试使用本地文件...');
+                // 最后尝试本地文件
+                // 注意：three.module.js 是 ES 模块，需要通过 import 加载
+                // 但为了兼容性，我们尝试加载本地的 three.module.js 作为 ES 模块
+                // 或者使用 Import Maps 中的配置
+                console.warn('CDN 加载失败，将依赖 Import Maps 中的本地 Three.js 配置');
+                // Import Maps 中已经配置了 three 的路径，ES 模块会自动使用
+                return;
+            }
+            
+            const script = document.createElement('script');
+            script.src = cdnSources[currentIndex];
+            script.onload = function() {
+                loaded = true;
+                console.log(`✓ Three.js 从 ${cdnSources[currentIndex]} 加载成功`);
+                // 确保 THREE 已设置到全局
+                if (typeof THREE !== 'undefined') {
+                    window.THREE = THREE;
+                }
+            };
+            script.onerror = function() {
+                console.warn(`✗ Three.js 从 ${cdnSources[currentIndex]} 加载失败，尝试下一个源...`);
+                currentIndex++;
+                setTimeout(tryLoadNext, 100); // 延迟一下再尝试下一个
+            };
+            document.head.appendChild(script);
+        }
+        
+        tryLoadNext();
+    })();
+</script>
+<!-- 先加载 ammo.js（CommonJS 格式，需要先加载到全局） -->
+<script src="/static/libs/node_modules/ammojs-typed/ammo/ammo.js"></script>
+<script>
+    // 确保 Ammo 在全局可用
+    if (typeof Ammo === 'undefined') {
+        console.warn('Ammo.js 未正确加载');
+    } else {
+        console.log('Ammo.js 已加载到全局');
+    }
+    
+    // 初始化 MMD 模块加载标记
+    window.mmdModuleLoaded = false;
+    window.MMDLoader = undefined;
+</script>
+<!-- Import Maps 配置，用于解析 ES 模块的 bare specifiers -->
+<!-- 注意：Import Maps 需要现代浏览器支持（Chrome 89+, Edge 89+, Safari 16.4+） -->
+<!-- Import Maps 必须在所有使用它的模块脚本之前 -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "/static/libs/node_modules/three/build/three.module.js",
+    "three/addons/": "/static/libs/node_modules/three/examples/jsm/",
+    "ammojs-typed": "/static/libs/ammojs-typed-wrapper.js",
+    "@noname0310/mmd-parser": "/static/libs/mmd-parser/index.js",
+    "@moeru/three-mmd": "/static/libs/three-mmd.js"
+  }
+}
+</script>
+<!-- 将 ES 模块版本的 Three.js 导出为全局 THREE，供非模块代码使用 -->
+<script type="module">
+    // 从本地文件加载 Three.js ES 模块并导出为全局
+    (async function() {
+        console.log('[Three.js] 开始加载 ES 模块...');
+        try {
+            const threeModule = await import('three');
+            console.log('[Three.js] ES 模块导入成功，模块键:', Object.keys(threeModule).slice(0, 10), '...');
+            
+            // Three.js ES 模块使用命名导出，将所有导出合并到 window.THREE
+            window.THREE = {};
+            // 复制所有命名导出
+            let exportCount = 0;
+            for (const key in threeModule) {
+                if (key !== 'default') {
+                    window.THREE[key] = threeModule[key];
+                    exportCount++;
+                }
+            }
+            // 如果有 default，也合并进去
+            if (threeModule.default) {
+                Object.assign(window.THREE, threeModule.default);
+            }
+            console.log('✓ Three.js ES 模块已加载并导出为全局 THREE');
+            console.log('THREE 对象包含', exportCount, '个导出');
+            console.log('THREE.Scene:', typeof window.THREE.Scene);
+            console.log('THREE.Vector3:', typeof window.THREE.Vector3);
+        } catch (error) {
+            console.error('[Three.js] 加载本地 ES 模块失败:', error);
+            console.error('[Three.js] 错误详情:', error.message, error.stack);
+            // 如果本地加载失败，尝试从 CDN 加载
+            console.log('[Three.js] 尝试从 CDN 加载...');
+            const script = document.createElement('script');
+            script.src = 'https://unpkg.com/three@0.160.0/build/three.min.js';
+            script.onload = () => {
+                console.log('✓ Three.js 从 CDN 加载成功');
+                if (typeof THREE !== 'undefined') {
+                    window.THREE = THREE;
+                    console.log('THREE 已设置到 window.THREE');
+                } else {
+                    console.error('THREE 未定义，即使 CDN 加载成功');
+                }
+            };
+            script.onerror = (e) => {
+                console.error('✗ Three.js CDN 也加载失败:', e);
+            };
+            document.head.appendChild(script);
+        }
+    })();
+</script>
+<!-- @moeru/three-mmd 库加载（使用本地安装的版本） -->
+<!-- 这个脚本必须立即执行，不能延迟 -->
+<script type="module">
+    // 立即执行的模块脚本
+    // 添加全局错误处理
+    window.addEventListener('error', function(e) {
+        if (e.message && e.message.includes('three-mmd')) {
+            console.error('[MMD] 全局错误捕获:', e.message, e.filename, e.lineno);
+        }
+    });
+    
+    (async function() {
+        console.log('[MMD] 开始加载 MMDLoader...');
+        // 等待 THREE 加载完成（检查 window.THREE）
+        let threeWaitCount = 0;
+        while ((typeof window.THREE === 'undefined' || !window.THREE.Scene) && threeWaitCount < 100) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            threeWaitCount++;
+            if (threeWaitCount % 10 === 0) {
+                console.log(`[MMD] 等待 THREE.js 加载... (${threeWaitCount}/100)`);
+            }
+        }
+        
+        if (typeof window.THREE === 'undefined' || !window.THREE.Scene) {
+            console.error('[MMD] THREE.js 未加载，无法加载 MMDLoader');
+            console.error('[MMD] window.THREE:', typeof window.THREE);
+            window.mmdModuleLoaded = false;
+            return;
+        }
+        
+        console.log('[MMD] THREE.js 已加载，开始加载 MMDLoader...');
+        
+        try {
+            let module;
+            // 先尝试使用 Import Map
+            try {
+                console.log('[MMD] 尝试使用 Import Map 加载 @moeru/three-mmd...');
+                module = await import('@moeru/three-mmd');
+                console.log('[MMD] ✓ 使用 Import Map 加载成功');
+            } catch (importMapError) {
+                console.warn('[MMD] Import Map 加载失败，尝试直接路径:', importMapError.message);
+                // 如果 Import Map 失败，尝试直接路径
+                try {
+                    console.log('[MMD] 尝试直接路径 /static/libs/three-mmd.js...');
+                    module = await import('/static/libs/three-mmd.js');
+                    console.log('[MMD] ✓ 使用直接路径加载成功');
+                } catch (directPathError1) {
+                    console.warn('[MMD] 直接路径失败，尝试备用路径:', directPathError1.message);
+                    try {
+                        module = await import('/static/libs/node_modules/@moeru/three-mmd/dist/index.js');
+                        console.log('[MMD] ✓ 使用备用路径加载成功');
+                    } catch (directPathError2) {
+                        console.error('[MMD] 所有路径都失败');
+                        throw directPathError2;
+                    }
+                }
+            }
+            
+            console.log('[MMD] 模块加载完成，提取 MMDLoader...');
+            const { MMDLoader } = module;
+            if (typeof MMDLoader === 'undefined') {
+                throw new Error('MMDLoader 未在模块中找到');
+            }
+            
+            // 导出到全局，供非模块代码使用
+            window.MMDLoader = MMDLoader;
+            window.mmdModuleLoaded = true;
+            console.log('[MMD] ✓ MMDLoader 已加载并导出到全局');
+        } catch (error) {
+            console.error('[MMD] ❌ 加载 @moeru/three-mmd 失败:', error);
+            console.error('[MMD] 错误详情:', error.message);
+            window.mmdModuleLoaded = false;
+        }
+    })();
+</script>
 <script src="/static/common_ui.js"></script>
 <script>
     // 等待配置加载完成后再加载 Live2D 和 app.js
@@ -1278,6 +1519,188 @@
             const live2dScript = document.createElement('script');
             live2dScript.src = '/static/live2d.js';
             document.body.appendChild(live2dScript);
+            
+            // 动态加载 mmd.js
+            const mmdScript = document.createElement('script');
+            mmdScript.src = '/static/mmd.js';
+            document.body.appendChild(mmdScript);
+            
+            // 等待 mmd.js 和 three.js 加载完成后初始化 MMD
+            // 注意：MMD 初始化失败不应该阻塞其他功能
+            mmdScript.onload = async function() {
+                // 异步初始化，不阻塞其他脚本
+                setTimeout(async () => {
+                    try {
+                        // 等待 three.js 和 @moeru/three-mmd 加载完成
+                        await new Promise((resolve) => {
+                            let checkCount = 0;
+                            const checkLibraries = setInterval(() => {
+                                checkCount++;
+                                const hasThree = typeof THREE !== 'undefined';
+                                const hasMMDLoader = typeof window.MMDLoader !== 'undefined';
+                                
+                                if (hasThree && hasMMDLoader) {
+                                    clearInterval(checkLibraries);
+                                    resolve();
+                                }
+                                // 最多等待 10 秒，避免长时间阻塞
+                                if (checkCount >= 100) {
+                                    clearInterval(checkLibraries);
+                                    resolve();
+                                }
+                            }, 100);
+                        });
+                        
+                        // 初始化 MMD 管理器（但不自动加载模型）
+                        // MMD 功能保留供以后开发使用，默认不加载
+                        if (window.mmdManager) {
+                            await window.mmdManager.initThree('mmd-canvas', 'mmd-container');
+                            // 确保 MMD 容器默认隐藏，Live2D 显示
+                            const mmdContainer = document.getElementById('mmd-container');
+                            const live2dContainer = document.getElementById('live2d-container');
+                            if (mmdContainer) {
+                                mmdContainer.style.display = 'none';
+                            }
+                            if (live2dContainer) {
+                                live2dContainer.style.display = '';
+                            }
+                        }
+                    } catch (error) {
+                        // MMD 初始化失败不影响其他功能，只记录警告
+                        console.warn('MMD 管理器初始化失败（不影响其他功能）:', error);
+                        // 确保即使初始化失败，Live2D 仍然显示
+                        const live2dContainer = document.getElementById('live2d-container');
+                        if (live2dContainer) {
+                            live2dContainer.style.display = '';
+                        }
+                    }
+                }, 100); // 延迟 100ms 初始化，确保不阻塞 Live2D 加载
+            };
+            
+            // 添加全局切换函数，方便在控制台调用
+            window.switchToMMD = async function(modelPath) {
+                if (!window.mmdManager) {
+                    console.error('MMD 管理器未创建，请等待页面加载完成');
+                    return;
+                }
+                
+                // 检查并等待 MMDLoader 加载
+                if (typeof window.MMDLoader === 'undefined') {
+                    console.log('等待 MMDLoader 加载...');
+                    // 等待最多 5 秒
+                    let waitCount = 0;
+                    while (typeof window.MMDLoader === 'undefined' && waitCount < 50) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        waitCount++;
+                    }
+                    
+                    if (typeof window.MMDLoader === 'undefined') {
+                        console.error('MMDLoader 加载超时，请检查：');
+                        console.error('1. 文件 /static/libs/three-mmd.js 是否存在');
+                        console.error('2. 服务器是否正确提供该文件');
+                        console.error('3. 浏览器控制台是否有 404 错误');
+                        console.error('提示：MMD 功能需要 @moeru/three-mmd 库，当前无法加载');
+                        return;
+                    }
+                    console.log('✓ MMDLoader 已加载');
+                }
+                
+                // 检查是否已初始化，如果没有则先初始化
+                if (!window.mmdManager.isInitialized) {
+                    console.log('MMD 管理器未初始化，正在初始化...');
+                    try {
+                        await window.mmdManager.initThree('mmd-canvas', 'mmd-container');
+                        console.log('✓ MMD 管理器初始化成功');
+                    } catch (error) {
+                        console.error('MMD 管理器初始化失败:', error);
+                        return;
+                    }
+                }
+                
+                // 如果没有提供路径，使用默认路径
+                if (!modelPath) {
+                    modelPath = '/static/mmd/default_model.pmx';
+                }
+                
+                try {
+                    // 先尝试 .pmx，失败则尝试 .pmd
+                    let loaded = false;
+                    try {
+                        await window.mmdManager.loadAndShowModel(modelPath, {
+                            dragEnabled: true
+                        });
+                        loaded = true;
+                        console.log('✓ MMD 模型加载成功');
+                        
+                        // 确保 Live2D 容器被隐藏
+                        const live2dContainer = document.getElementById('live2d-container');
+                        if (live2dContainer) {
+                            live2dContainer.style.display = 'none';
+                            live2dContainer.style.visibility = 'hidden';
+                            console.log('✓ Live2D 容器已隐藏');
+                        }
+                        
+                        // 确保 MMD 容器可见
+                        const mmdContainer = document.getElementById('mmd-container');
+                        if (mmdContainer) {
+                            mmdContainer.style.display = 'block';
+                            mmdContainer.style.visibility = 'visible';
+                            mmdContainer.style.opacity = '1';
+                            console.log('✓ MMD 容器已显示');
+                        }
+                    } catch (error) {
+                        if (modelPath.endsWith('.pmx')) {
+                            // 尝试 .pmd
+                            const pmdPath = modelPath.replace('.pmx', '.pmd');
+                            try {
+                                await window.mmdManager.loadAndShowModel(pmdPath, {
+                                    dragEnabled: true
+                                });
+                                loaded = true;
+                                console.log('✓ MMD 模型加载成功 (.pmd)');
+                                
+                                // 确保 Live2D 容器被隐藏
+                                const live2dContainer = document.getElementById('live2d-container');
+                                if (live2dContainer) {
+                                    live2dContainer.style.display = 'none';
+                                    live2dContainer.style.visibility = 'hidden';
+                                }
+                                
+                                // 确保 MMD 容器可见
+                                const mmdContainer = document.getElementById('mmd-container');
+                                if (mmdContainer) {
+                                    mmdContainer.style.display = 'block';
+                                    mmdContainer.style.visibility = 'visible';
+                                    mmdContainer.style.opacity = '1';
+                                }
+                            } catch (error2) {
+                                console.error('MMD 模型加载失败:', error2);
+                            }
+                        } else {
+                            console.error('MMD 模型加载失败:', error);
+                        }
+                    }
+                } catch (error) {
+                    console.error('切换 MMD 模型失败:', error);
+                }
+            };
+            
+            window.switchToLive2D = function() {
+                if (window.mmdManager) {
+                    window.mmdManager.hideModel();
+                    console.log('✓ 已切换回 Live2D');
+                } else {
+                    const mmdContainer = document.getElementById('mmd-container');
+                    const live2dContainer = document.getElementById('live2d-container');
+                    if (mmdContainer) {
+                        mmdContainer.style.display = 'none';
+                    }
+                    if (live2dContainer) {
+                        live2dContainer.style.display = '';
+                    }
+                    console.log('✓ 已切换回 Live2D');
+                }
+            };
             
             // 等待 live2d.js 加载完成后再加载 app.js
             live2dScript.onload = function() {

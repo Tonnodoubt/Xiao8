@@ -169,10 +169,19 @@ app = FastAPI()
 
 class CustomStaticFiles(StaticFiles):
     async def get_response(self, path, scope):
-        response = await super().get_response(path, scope)
-        if path.endswith('.js'):
-            response.headers['Content-Type'] = 'application/javascript'
-        return response
+        try:
+            response = await super().get_response(path, scope)
+            # 设置正确的 MIME 类型
+            if path.endswith('.js'):
+                response.headers['Content-Type'] = 'application/javascript; charset=utf-8'
+            elif path.endswith('.mjs'):
+                response.headers['Content-Type'] = 'application/javascript; charset=utf-8'
+            # 允许 CORS（如果需要）
+            response.headers['Access-Control-Allow-Origin'] = '*'
+            return response
+        except Exception as e:
+            logger.error(f"StaticFiles 错误: {path}, {e}")
+            raise
 
 # 确定 static 目录位置（支持 PyInstaller 打包）
 if getattr(sys, 'frozen', False):
@@ -1964,6 +1973,27 @@ async def update_model_config(model_name: str, request: Request):
     except Exception as e:
         logger.error(f"更新模型配置失败: {e}")
         return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+@app.get('/api/test/mmd-files')
+async def test_mmd_files():
+    """测试 MMD 相关文件是否可以通过 HTTP 访问"""
+    import os
+    files_to_check = [
+        'static/libs/three-mmd.js',
+        'static/libs/mmd-parser/index.js',
+        'static/libs/mmd-parser/Parser.js',
+        'static/libs/mmd-parser/CharsetEncoder.js',
+    ]
+    results = {}
+    for file_path in files_to_check:
+        full_path = os.path.join(os.getcwd(), file_path)
+        exists = os.path.exists(full_path)
+        results[file_path] = {
+            'exists': exists,
+            'full_path': full_path if exists else None,
+            'url': f'/{file_path.replace(os.sep, "/")}'
+        }
+    return results
 
 @app.get('/api/live2d/model_files/{model_name}')
 async def get_model_files(model_name: str):

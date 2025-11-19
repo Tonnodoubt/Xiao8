@@ -1,0 +1,30 @@
+export declare type IndexType = 1 | 2 | 4;
+export declare class DataViewEx {
+    readonly littleEndian: boolean;
+    private _offset;
+    private readonly _dv;
+    constructor(buffer: ArrayBufferLike, littleEndian?: boolean);
+    get offset(): number;
+    getInt8(): number;
+    getInt8Array(size: number): number[];
+    getUint8(): number;
+    getUint8Array(size: number): number[];
+    getInt16(): number;
+    getInt16Array(size: number): number[];
+    getUint16(): number;
+    getUint16Array(size: number): number[];
+    getInt32(): number;
+    getInt32Array(size: number): number[];
+    getUint32(): number;
+    getUint32Array(size: number): number[];
+    getFloat32(): number;
+    getFloat32Array(size: number): number[];
+    getFloat64(): number;
+    getFloat64Array(size: number): number[];
+    getIndex(type: IndexType, isUnsigned: boolean): number;
+    getIndexArray(type: IndexType, size: number, isUnsigned: boolean): number[];
+    getChars(size: number): string;
+    getSjisStringsAsUnicode(size: number): string;
+    getUnicodeStrings(size: number): string;
+    getTextBuffer(): string;
+}

@@ -1723,9 +1723,20 @@ function init_app(){
 
                 source.connect(globalAnalyser);
 
-                if (!lipSyncActive && window.LanLan1 && window.LanLan1.live2dModel) {
-                    startLipSync(window.LanLan1.live2dModel, globalAnalyser);
-                    lipSyncActive = true;
+                if (!lipSyncActive) {
+                    // 支持 Live2D
+                    if (window.LanLan1 && window.LanLan1.live2dModel) {
+                        startLipSync(window.LanLan1.live2dModel, globalAnalyser);
+                        lipSyncActive = true;
+                    }
+                    // 支持 MMD（仅在 MMD 容器可见时）
+                    if (window.mmdManager && window.mmdManager.getCurrentModel()) {
+                        const mmdContainer = document.getElementById('mmd-container');
+                        if (mmdContainer && mmdContainer.style.display !== 'none' && mmdContainer.offsetParent) {
+                            window.mmdManager.startLipSync(globalAnalyser);
+                            lipSyncActive = true;
+                        }
+                    }
                 }
 
                 // 精确时间调度
@@ -1745,6 +1756,10 @@ function init_app(){
                     if (scheduledSources.length === 0 && audioBufferQueue.length === 0) {
                         if (window.LanLan1 && window.LanLan1.live2dModel) {
                             stopLipSync(window.LanLan1.live2dModel);
+                        }
+                        // 停止 MMD 口型同步（如果正在运行）
+                        if (window.mmdManager && window.mmdManager.getCurrentModel()) {
+                            window.mmdManager.stopLipSync();
                         }
                         lipSyncActive = false;
                         isPlaying = false; // 新增：所有音频播放完毕，重置isPlaying
