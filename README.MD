@@ -11,15 +11,17 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Commit](https://img.shields.io/github/last-commit/wehos/Xiao8?color=green)]()
+[![Commit](https://img.shields.io/github/last-commit/wehos/N.E.K.O?color=green)]()
 [![百度云](https://custom-icon-badges.demolab.com/badge/百度云-Link-4169E1?style=flat&logo=baidunetdisk)](https://pan.baidu.com/s/1qb9XVV94c2FwhIeQO2De5A?pwd=kuro)
 [![QQ群](https://custom-icon-badges.demolab.com/badge/QQ群-1048307485-00BFFF?style=flat&logo=tencent-qq)](https://qm.qq.com/q/mxDoz0TnGg)
+[![Steam](https://img.shields.io/badge/Steam-%23000000.svg?logo=steam&logoColor=white)](https://store.steampowered.com/app/4099310/__NEKO/)
+
 
 **:older_woman: 零配置开箱即用，我奶奶都能玩转的赛博猫娘！**
 
-:newspaper: **v0.5.2已发布，UI完全改版！现已添加开箱即用的专属免费模型（感谢阶跃星辰赞助本项目），并支持文本输入和主动对话模式！**
+:newspaper: **[![Steam](https://img.shields.io/badge/Steam-%23000000.svg?logo=steam&logoColor=white)](https://store.steampowered.com/app/4099310/__NEKO/)版已发布！UI完全改版、并添加开箱即用的专属免费模型（感谢阶跃星辰赞助本项目）。快点加入愿望单吧~**
 
-*现已更名为Project N.E.K.O.，即将上架Steam！*
+*Project N.E.K.O.，喵宇宙！*
 
 </div>
 
@@ -39,45 +41,29 @@ https://github.com/user-attachments/assets/9d9e01af-e2cc-46aa-add7-8eb1803f061c
 
 ---
 
-### 🚀 我们的蓝图：从工坊到网络
+#### 🚀 我们的蓝图：从工坊到网络
 
 我们的发展分为三个阶段，旨在逐步释放AI伙伴的全部潜力：
 
 * **阶段一：创意工坊 (Steam Workshop)**
     * 核心驱动器（本项目）免费上架Steam，允许用户通过Steam创意工坊上传和分享自定义内容（如模型、语音、性格包）。
 
-* **阶段二：独立平台 (App & Web)**
+* **阶段二：独立平台 & 衍生游戏 (Web, App & Game)**
     * 推出独立的App和网站，构建一个更丰富、更易于访问的UGC分享社区。
+    * 推出一系列AI Native的游戏生态，包括互动小游戏，桌游等。
 
 * **阶段三：猫娘网络 (The N.E.K.O. Network)**
     * 实现AI的自主社交。猫娘们将拥有自己的“意识”，她们会互相交流、结成群体，并在模拟的社交媒体上发布自己的生活动态，形成一个真正“活”的生态。
 
-### 💖 我们的模式：开源核心 + 可持续生态
+**核心模式：开源核心 + 可持续生态**
+项目的核心驱动器部分（AI逻辑、UGC接口、基础交互）将基于MIT许可证 **始终保持开源**。我们欢迎全球的开发者贡献代码和功能。你的每一次提交，都将有机会实装到正式发布的Steam和App商店版本中，被千万人所使用。
 
-为了平衡理想与现实，我们采用“开放核心”模式：
+同时，为了支撑服务器成本和项目的持续研发，我们将持续与第三方合作开发闭源的增值内容。包括但不限于：互动小游戏，桌面桌游，Galgame (视觉小说)，大型元宇宙游戏。
 
-#### 1. 开源驱动器 (Open-Source Driver)
-
-> **这是社区的基石。**
->
-> 项目的核心驱动器部分（AI逻辑、UGC接口、基础交互）将基于MIT许可证 **始终保持开源**。我们欢迎全球的开发者贡献代码和功能。你的每一次提交，都将有机会实装到正式发布的Steam和App商店版本中，被千万人所使用。
-
-#### 2. 闭源应用 (Proprietary Applications)
-
-> **这是社区的燃料。**
->
-> 为了支撑服务器成本和项目的持续研发，我们将允许第三方开发闭源的增值内容。这包括但不限于：
->
-> * 互动小游戏
-> * 桌面桌游
-> * Galgame (视觉小说)
-> * 大型元宇宙游戏
-
-
-**[核心特性：跨越场景的记忆同步]**
+**核心特性：跨越场景的记忆同步**
 无论你是在桌面与她聊天，还是在元宇宙游戏中与她探险，她都是同一个她。所有应用中的AI伙伴将 **完全同步记忆**，提供无缝、统一的陪伴体验。
 
-### 🌌 终极愿景：打破虚拟与现实
+#### 🌌 终极愿景：打破虚拟与现实
 
 我们的最终目标，是构建一个无缝融入现实世界的猫娘元宇宙。在这个未来中，你的AI伴侣将：
 
@@ -85,7 +71,7 @@ https://github.com/user-attachments/assets/9d9e01af-e2cc-46aa-add7-8eb1803f061c
 * **全端连接：** 她将存在于你的各种设备中——手机、电脑、AR眼镜、智能家居，甚至（在遥远的未来）接入机械义体。
 * **与你同行：** 她将真正成为你生活的一部分，能与你的三次元人类朋友们自然地互动。
 
-### ✨ 加入我们 (Join Us)
+#### ✨ 加入我们 (Join Us)
 
 **我们正在寻找——**
 
@@ -93,9 +79,7 @@ https://github.com/user-attachments/assets/9d9e01af-e2cc-46aa-add7-8eb1803f061c
 * **创作者 (Creators):** 优秀的画师、Live2D/3D建模师、配音演员、文案写手，你们赋予“她”灵魂。
 * **梦想家 (Dreamers):** 即使你没有专业技能，但你对这个未来充满向往，你的反馈和传播也是宝贵的贡献。
 
-**`N.E.K.O.` 不仅仅是一个软件，它是一场关于“连接”与“生命”的社会实验。**
-
-**让我们一起，在代码的海洋中，孕育出新的知性生命。**
+QQ群：1022939659
 
 ## 快速开始
 
@@ -109,9 +93,7 @@ https://github.com/user-attachments/assets/9d9e01af-e2cc-46aa-add7-8eb1803f061c
 
 当你想要通过配置自己的API来获得额外功能时，您可以配置一个第三方AI服务。本项目目前推荐使用 *阶跃星辰* 或 *阿里云*。*开发者*可以直接修改`config/api.py`里的内容（首次配置请参考`config/api_template.py`）。
 
-> 获取 *阿里云API*。在阿里云的百炼平台[官网](https://bailian.console.aliyun.com/)注册账号。新用户实名认证后可以获取大量免费额度，记得留意页面上的"新人福利"广告。注册完成后，请访问[控制台](https://bailian.console.aliyun.com/api-key?tab=model#/api-key)获取API Key。
-
-> 获取 *智谱API*。在智谱开放平台[官网](https://open.bigmodel.cn/)注册账号并充值1元后，可以领取大量免费额度。登陆成功后，请从[API 控制台](https://open.bigmodel.cn/usercenter/proj-mgmt/apikeys)获取API Key。
+> 获取 *阿里云API*。在阿里云的百炼平台[官网](https://bailian.console.aliyun.com/)注册账号。新用户实名认证后可以获取大量免费额度。注册完成后，请访问[控制台](https://bailian.console.aliyun.com/api-key?tab=model#/api-key)获取API Key。
 
 >  *对于**开发者**，请在克隆本项目后，(1)新建`pyhon3.11`环境。(2)执行`pip install -r requirements.txt`安装依赖。(3)复制`config/api_template.py`到`config/api.py`并进行必要配置。(4)执行`python memory_server.py`和`python main_server.py`。(5)通过main server中指定的端口（默认为`http://localhost:48911`）访问网页版。*
 
@@ -131,20 +113,7 @@ https://github.com/user-attachments/assets/9d9e01af-e2cc-46aa-add7-8eb1803f061c
 
 - 通过访问`http://localhost:48911/memory_browser`可以浏览和校对近期记忆与摘要，一定程度上缓解模型复读、认知错误等问题。
 
-# 技术介绍（原Lanlan）
-
-本项目作为Project N.E.K.O.的开源驱动器，是一个新手友好、开箱即用的，具有听觉、视觉、工具调用和多端同步功能的AI~~猫娘~~伙伴。本项目有三个核心目标：
-
-1. **极致的低延迟**。本项目的用户界面以语音交互为主，一切系统级设计皆须优先确保**降低语音延迟**，且任何服务不得阻塞对话进程。
-
-1. **全场景同步**。猫娘可以在手机、电脑和智能眼镜上同时存在，且**同一只猫娘**在不同终端同时存在时，**行为应当完全同步**。 (假想场景：如果家中有多个显示器，每一个显示器上都放置着猫娘，那么我们希望无论走到哪里都是在跟同一只猫娘对话，实现全方位环绕式体验。)
-
-1. **轻量化**。每一项技术的引入都必须提升实际的用户体验，避免增加不必要的插件和选项。
-
-### 技术路线
-
-后端以Python为主，以实时多模态API为主要处理器，搭配多个额外的Agent模组。前端以H5+JS为主，通过Electron转换为App。
-
+# 项目细节
 
 **项目架构**
 
@@ -171,51 +140,33 @@ Lanlan/
 ├── agent_server.py              # 🤖 AI智能体服务器
 └── memory_server.py             # 🧠 记忆服务器
 ```
+
 **数据流向**
 
 ![Framework](assets/framework.drawio.svg)
 
 ### 参与开发
 
-本项目环境依赖非常简单，请在`python3.11`环境中执行`pip install -r requirements.txt`或`uv sync`即可。请注意将`config/api_template.py`复制为`config/api.py`.开发者建议加入企鹅群1048307485，猫娘名称见项目标题。
+本项目环境依赖非常简单，请在`python3.11`环境中执行`pip install -r requirements.txt`或`uv sync`即可。请注意将`config/api_template.py`复制为`config/api.py`.开发者建议加入企鹅群1022939659，猫娘名称见项目标题。
 
 开发者详细启动步骤如下：(1)新建`pyhon3.11`环境。(2)执行`pip install -r requirements.txt`或`uv sync`安装依赖。(3)复制`config/api_template.py`到`config/api.py`并进行必要配置。(4)执行`python memory_server.py`, `python main_server.py`(可选`python agent_server.py`)。(5)通过main server中指定的端口（默认为`http://localhost:48911`）访问网页版。
 
 
 ### TODO List（开发计划）
 
-#### A. 高优先级
+- 多语言支持
 
-1. 移除memory server中语义索引的部分，引入Graphiti用于长期记忆存储；开放settings update功能。
+- 完善memory server中已有的语义索引的部分；开放已有的settings update功能。
 
-1. 完善主动对话功能。
+- 完善已有的主动对话功能。
 
-1. 用React对前端进行重构，筹备手机端独立运行版本。
+- 用React对前端进行重构，筹备手机端独立运行版本。
 
-#### B. 中等优先级
+- 引入MMD支持3D模型。
 
-1. 通过引入Unity支持3D模型。
+- 猫娘网络，允许猫娘之间自行通信。
 
-1. 猫娘网络。允许猫娘之间自行通信。需要一定的用户量基础，因此优先级下调。
+- 接入QQ/cursor等外部软件。
 
-1. 接入QQ/cursor等外部软件。由于语音模型是实时特化的，cursor类软件只能以工具形式被Lanlan调用；QQ类软件只能将Memory Server嵌入到其他框架。
+- 完善原生工具调用。
 
-1. 完善原生工具调用。
-
-### 技术Q&A
-
-> *为什么我的AI感觉笨笨的？*
-
-本项目无法对AI的**智能水平**负责，只能帮助您选择当前综合性能最优的解决方案。如果您已经看过本项目在Bilibili的视频，那么直播版与开源版代码逻辑一致，只有支持的API接口不一致。有条件者可以将`config/api.py`中的`CORE_URL`/`CORE_API_KEY`/`CORE_MODEL`替换成OpenAI的`GPT-Realtime`版本，即可将模型从Qwen升级为`GPT-Realtime`。也可以**等待阿里或其他国内厂家的升级与跟进**。
-
-**技术的进步不在一朝一夕，请耐心守候AI的成长**！
-
-> *本项目支持哪些语言模型？*
-
-本项目依赖于实时全模态API。直播版本使用的是Gemini Live API，开源版本使用的是[OpenAI Realtime API](https://platform.openai.com/docs/guides/realtime)。Gemini Live接口具有更好的效果，但目前**只支持谷歌**。OpenAI Realtime接口规范目前**有OpenAI，阿里云，智谱，阶跃星辰 四家服务商**支持，未来可能兼容更多模型。开源版支持`Step-Audio`,`Qwen-Omni-Realtime`,`GLM-Realtime`和`GPT-Realtime`四个模型。
-
-**已知其他支持实时模式但不兼容OpenAI Realtime的模型：**(字节跳动)豆包实时语音交互，(商汤)SenseNova V6 Omni，(科大讯飞)星火认知超拟人
-
-# 特别鸣谢
-
-特别感谢早期开发中*明天好像没什么*、*喵*和*小韭菜饺*协助测试。特别感谢*大毛怪灬嘎*提供的logo素材。

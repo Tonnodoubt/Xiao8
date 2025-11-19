@@ -920,9 +920,11 @@ function init_app(){
             await new Promise(resolve => setTimeout(resolve, 1500)); // 从500ms增加到1500ms
         }
         
-        // 隐藏文本输入区
+        // 隐藏文本输入区（仅非移动端）
         const textInputArea = document.getElementById('text-input-area');
-        textInputArea.classList.add('hidden');
+        if (!isMobile()) {
+            textInputArea.classList.add('hidden');
+        }
         
         // 立即禁用所有语音按钮
         micButton.disabled = true;
@@ -2958,7 +2960,7 @@ function init_app(){
         connectWebSocket();
         
         // 更新页面标题
-        document.title = `${newCatgirl} Terminal - Project Lanlan`;
+        document.title = `${newCatgirl} Terminal - Project N.E.K.O.`;
         
         // 重新加载 Live2D 模型（强制重新加载，因为猫娘已切换）
         try {
