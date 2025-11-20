@@ -85,11 +85,23 @@ class MMDManager {
         this.renderer = new THREE.WebGLRenderer({
             canvas: canvas,
             alpha: true,
-            antialias: true
+            antialias: true,
+            preserveDrawingBuffer: true  // 保留绘制缓冲区，用于调试
         });
         this.renderer.setSize(width, height);
         this.renderer.setPixelRatio(window.devicePixelRatio);
         this.renderer.shadowMap.enabled = true;
+        
+        // 设置清除颜色为透明（alpha: true 时默认就是透明）
+        this.renderer.setClearColor(0x000000, 0);  // 黑色，完全透明
+        this.renderer.clear();  // 立即清除一次
+        
+        console.log('[MMD] 渲染器初始化完成');
+        console.log('[MMD] Canvas 尺寸:', width, 'x', height);
+        console.log('[MMD] Canvas 实际尺寸:', canvas.width, 'x', canvas.height);
+        console.log('[MMD] 容器尺寸:', container.clientWidth, 'x', container.clientHeight);
+        console.log('[MMD] 容器显示状态:', window.getComputedStyle(container).display);
+        console.log('[MMD] Canvas 显示状态:', window.getComputedStyle(canvas).display);
 
         // 添加灯光
         const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -127,13 +139,28 @@ class MMDManager {
         const container = document.getElementById('mmd-container');
         if (container) {
             const computedStyle = window.getComputedStyle(container);
-            if (computedStyle.display === 'none' || 
-                computedStyle.visibility === 'hidden' || 
-                computedStyle.opacity === '0' ||
-                !container.offsetParent) {
+            const isHidden = computedStyle.display === 'none' || 
+                           computedStyle.visibility === 'hidden' || 
+                           computedStyle.opacity === '0' ||
+                           !container.offsetParent;
+            
+            if (isHidden) {
                 // 容器隐藏，延迟下一帧检查
                 this.animationFrameId = requestAnimationFrame(() => this.animate());
                 return;
+            }
+            
+            // 检查 canvas 尺寸，如果为 0 则重新设置
+            const canvas = this.renderer.domElement;
+            if (canvas.width === 0 || canvas.height === 0) {
+                const newWidth = container.clientWidth || window.innerWidth;
+                const newHeight = container.clientHeight || window.innerHeight;
+                if (newWidth > 0 && newHeight > 0) {
+                    console.warn('[MMD] Canvas 尺寸为 0，重新设置为:', newWidth, 'x', newHeight);
+                    this.renderer.setSize(newWidth, newHeight);
+                    this.camera.aspect = newWidth / newHeight;
+                    this.camera.updateProjectionMatrix();
+                }
             }
         }
         
@@ -141,6 +168,20 @@ class MMDManager {
         
         if (this.currentModel && this.currentModel.mixer) {
             this.currentModel.mixer.update(0.016);
+        }
+        
+        // 确保渲染器尺寸正确
+        if (this.renderer && container) {
+            const currentWidth = container.clientWidth || window.innerWidth;
+            const currentHeight = container.clientHeight || window.innerHeight;
+            if (currentWidth > 0 && currentHeight > 0) {
+                const canvas = this.renderer.domElement;
+                if (canvas.width !== currentWidth || canvas.height !== currentHeight) {
+                    this.renderer.setSize(currentWidth, currentHeight);
+                    this.camera.aspect = currentWidth / currentHeight;
+                    this.camera.updateProjectionMatrix();
+                }
+            }
         }
         
         this.renderer.render(this.scene, this.camera);
@@ -209,19 +250,47 @@ class MMDManager {
             const fileName = pathParts.pop();
             const basePath = '/' + pathParts.join('/');
             
-            // 设置加载器路径
+            // 设置加载器路径（用于加载模型文件）
+            // path 用于 FileLoader 加载模型文件本身
             if (typeof loader.setPath === 'function' && basePath && basePath !== '/') {
                 const pathToSet = basePath.endsWith('/') ? basePath : basePath + '/';
                 loader.setPath(pathToSet);
+                console.log('[MMD] 设置模型文件路径:', pathToSet);
             }
             
             // 设置资源路径（用于加载纹理文件）
-            if (typeof loader.setResourcePath === 'function' && basePath && basePath !== '/') {
+            // resourcePath 用于 MaterialBuilder 加载纹理文件
+            // MMD 模型的纹理文件通常在模型文件所在目录或其子目录中
+            let resourcePath = basePath;
+            
+            // 检查是否有同名的纹理文件夹（例如 default_model.pmx 对应 default_model/ 文件夹）
+            const modelNameWithoutExt = fileName.replace(/\.(pmx|pmd)$/i, '');
+            const possibleTextureDirs = [
+                basePath + '/' + modelNameWithoutExt + '/',  // default_model/
+                basePath + '/' + modelNameWithoutExt + ' (2)/',  // default_model (2)/
+                basePath + '/tex/',  // tex/ 子目录
+                basePath + '/'  // 直接在模型目录
+            ];
+            
+            // 尝试设置 resourcePath，优先使用可能的纹理目录
+            // 注意：实际的纹理路径会在模型文件中指定，这里只是设置基础路径
+            if (typeof loader.setResourcePath === 'function') {
+                // 使用模型文件所在目录作为基础路径
+                // 如果纹理在子目录中，模型文件中的路径会包含子目录名
                 const resourcePathToSet = basePath.endsWith('/') ? basePath : basePath + '/';
                 loader.setResourcePath(resourcePathToSet);
+                console.log('[MMD] 设置纹理资源路径:', resourcePathToSet);
+                console.log('[MMD] 可能的纹理目录:', possibleTextureDirs);
             } else if (basePath && basePath !== '/') {
                 loader.resourcePath = basePath.endsWith('/') ? basePath : basePath + '/';
+                console.log('[MMD] 设置纹理资源路径（直接属性）:', loader.resourcePath);
             }
+            
+            resourcePath = basePath.endsWith('/') ? basePath : basePath + '/';
+            
+            // 注意：MMDLoader 内部会使用 resolveResourcePath 来确定最终的 resourcePath
+            // 它会优先使用 loader.resourcePath，然后是 loader.path，最后是 URL 的基础路径
+            // 我们已经设置了 loader.setResourcePath，所以应该会使用我们设置的路径
             
             const mesh = await new Promise((resolve, reject) => {
                 try {
@@ -231,6 +300,7 @@ class MMDManager {
                     console.log('[MMD] 开始加载模型文件:', urlToLoad);
                     console.log('[MMD] 基础路径:', basePath);
                     console.log('[MMD] 文件名:', fileName);
+                    console.log('[MMD] 资源路径:', resourcePath);
                     
                     if (typeof loader.load === 'function') {
                         loader.load(
@@ -678,6 +748,23 @@ class MMDManager {
                         }
                         
                         // 渲染
+                        // 确保渲染器尺寸正确（container 已在上面声明）
+                        if (container) {
+                            const containerWidth = container.clientWidth || window.innerWidth;
+                            const containerHeight = container.clientHeight || window.innerHeight;
+                            if (containerWidth > 0 && containerHeight > 0) {
+                                const canvas = this.renderer.domElement;
+                                if (canvas.width !== containerWidth || canvas.height !== containerHeight) {
+                                    console.log('[MMD] 调整 Canvas 尺寸:', containerWidth, 'x', containerHeight);
+                                    this.renderer.setSize(containerWidth, containerHeight);
+                                    this.camera.aspect = containerWidth / containerHeight;
+                                    this.camera.updateProjectionMatrix();
+                                }
+                            }
+                        }
+                        
+                        // 强制清除并渲染
+                        this.renderer.clear();
                         this.renderer.render(this.scene, this.camera);
                         console.log('MMD 模型已显示，场景对象数量:', this.scene.children.length);
                         console.log('MMD 模型位置:', this.currentModel.position.x, this.currentModel.position.y, this.currentModel.position.z);

@@ -1531,13 +1531,21 @@
                     module = await import('/static/libs/three-mmd.js');
                     console.log('[MMD] ✓ 使用直接路径加载成功');
                 } catch (directPathError1) {
-                    console.warn('[MMD] 直接路径失败，尝试备用路径:', directPathError1.message);
+                    console.warn('[MMD] 直接路径失败，尝试本地下载的库:', directPathError1.message);
                     try {
-                        module = await import('/static/libs/node_modules/@moeru/three-mmd/dist/index.js');
-                        console.log('[MMD] ✓ 使用备用路径加载成功');
+                        // 尝试使用本地下载的库（需要构建）
+                        // 注意：这需要服务器支持 TypeScript 或已构建的版本
+                        module = await import('/static/libs/three-mmd/packages/three-mmd/src/index.ts');
+                        console.log('[MMD] ✓ 使用本地下载的库加载成功');
                     } catch (directPathError2) {
-                        console.error('[MMD] 所有路径都失败');
-                        throw directPathError2;
+                        console.warn('[MMD] 本地库失败，尝试备用路径:', directPathError2.message);
+                        try {
+                            module = await import('/static/libs/node_modules/@moeru/three-mmd/dist/index.js');
+                            console.log('[MMD] ✓ 使用备用路径加载成功');
+                        } catch (directPathError3) {
+                            console.error('[MMD] 所有路径都失败');
+                            throw directPathError3;
+                        }
                     }
                 }
             }
