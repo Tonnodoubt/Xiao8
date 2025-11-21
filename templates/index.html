@@ -254,8 +254,8 @@
             bottom: 0px;
             width: 100%;
             height: 100%;
-            z-index: 1000; /* 提高 z-index，确保在 Live2D 之上 */
-            pointer-events: none;
+            z-index: 10000; /* 提高 z-index，确保在所有元素之上 */
+            pointer-events: auto; /* 允许鼠标事件，以便拖拽和缩放 */
             background: none;
             opacity: 1;
             overflow: hidden;
@@ -270,13 +270,19 @@
         }
 
         #mmd-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
             right: 0;
             bottom: 0;
+            width: 100%;
+            height: 100%;
             pointer-events: auto; /* 允许鼠标事件，以便拖拽和缩放 */
             display: block;
             opacity: 1;
             visibility: visible;
             background: transparent;
+            z-index: 1;
         }
 
         #mmd-canvas.minimized {

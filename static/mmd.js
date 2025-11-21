@@ -30,6 +30,11 @@ class MMDManager {
         this.dragStartPos = null;
         this.modelPosition = null;
         this.modelScale = 1.0;
+        this.modelRotation = { x: 0, y: 0 }; // 模型旋转角度
+        
+        // 触摸缩放相关
+        this.lastTouchDistance = 0;
+        this.isPinching = false;
         
         // 默认模型路径（需要用户提供）
         // 注意：MMD 模型通常需要 .pmd 或 .pmx 文件，以及对应的 .vmd 动作文件
@@ -67,6 +72,9 @@ class MMDManager {
         if (!this.modelPosition) {
             this.modelPosition = new THREE.Vector3(0, 0, 0);
         }
+        if (!this.modelRotation) {
+            this.modelRotation = { x: 0, y: 0 };
+        }
 
         // 创建场景
         this.scene = new THREE.Scene();
@@ -93,8 +101,15 @@ class MMDManager {
         this.renderer.shadowMap.enabled = true;
         
         // 设置清除颜色为透明（alpha: true 时默认就是透明）
+        // 注意：alpha: true 时，清除颜色的 alpha 值会被忽略，背景总是透明的
         this.renderer.setClearColor(0x000000, 0);  // 黑色，完全透明
         this.renderer.clear();  // 立即清除一次
+        
+        // 确保渲染器正确设置 alpha
+        if (this.renderer.domElement) {
+            this.renderer.domElement.style.width = '100%';
+            this.renderer.domElement.style.height = '100%';
+        }
         
         console.log('[MMD] 渲染器初始化完成');
         console.log('[MMD] Canvas 尺寸:', width, 'x', height);
@@ -114,11 +129,24 @@ class MMDManager {
 
         // 处理窗口大小变化
         this._resizeHandler = () => {
-            const newWidth = container.clientWidth || window.innerWidth;
-            const newHeight = container.clientHeight || window.innerHeight;
-            this.camera.aspect = newWidth / newHeight;
-            this.camera.updateProjectionMatrix();
-            this.renderer.setSize(newWidth, newHeight);
+            // 使用防抖，避免频繁调整
+            if (this._resizeTimeout) {
+                clearTimeout(this._resizeTimeout);
+            }
+            this._resizeTimeout = setTimeout(() => {
+                const newWidth = container.clientWidth > 0 ? container.clientWidth : window.innerWidth;
+                const newHeight = container.clientHeight > 0 ? container.clientHeight : window.innerHeight;
+                if (newWidth > 0 && newHeight > 0) {
+                    console.log('[MMD] 窗口尺寸变化，调整渲染器:', newWidth, 'x', newHeight);
+                    this.camera.aspect = newWidth / newHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(newWidth, newHeight);
+                    // 强制渲染一帧
+                    if (this.scene && this.camera) {
+                        this.renderer.render(this.scene, this.camera);
+                    }
+                }
+            }, 100);
         };
         window.addEventListener('resize', this._resizeHandler);
 
@@ -170,13 +198,15 @@ class MMDManager {
             this.currentModel.mixer.update(0.016);
         }
         
-        // 确保渲染器尺寸正确
+        // 确保渲染器尺寸正确（每次渲染都检查，确保窗口尺寸变化时及时更新）
         if (this.renderer && container) {
-            const currentWidth = container.clientWidth || window.innerWidth;
-            const currentHeight = container.clientHeight || window.innerHeight;
+            const currentWidth = container.clientWidth > 0 ? container.clientWidth : window.innerWidth;
+            const currentHeight = container.clientHeight > 0 ? container.clientHeight : window.innerHeight;
             if (currentWidth > 0 && currentHeight > 0) {
                 const canvas = this.renderer.domElement;
-                if (canvas.width !== currentWidth || canvas.height !== currentHeight) {
+                // 检查是否需要更新尺寸（容差 1px，避免频繁更新）
+                if (Math.abs(canvas.width - currentWidth) > 1 || Math.abs(canvas.height - currentHeight) > 1) {
+                    console.log('[MMD] 检测到尺寸变化，更新渲染器:', currentWidth, 'x', currentHeight, '(Canvas:', canvas.width, 'x', canvas.height, ')');
                     this.renderer.setSize(currentWidth, currentHeight);
                     this.camera.aspect = currentWidth / currentHeight;
                     this.camera.updateProjectionMatrix();
@@ -184,7 +214,10 @@ class MMDManager {
             }
         }
         
-        this.renderer.render(this.scene, this.camera);
+        // 确保渲染
+        if (this.renderer && this.scene && this.camera) {
+            this.renderer.render(this.scene, this.camera);
+        }
     }
 
     // 加载 MMD 模型
@@ -297,10 +330,13 @@ class MMDManager {
                     const urlToLoad = (typeof loader.setPath === 'function' && basePath && basePath !== '/') 
                         ? fileName 
                         : modelPath;
-                    console.log('[MMD] 开始加载模型文件:', urlToLoad);
+                    console.log('[MMD] ========== 模型加载信息 ==========');
+                    console.log('[MMD] 原始模型路径:', modelPath);
+                    console.log('[MMD] 实际加载URL:', urlToLoad);
                     console.log('[MMD] 基础路径:', basePath);
                     console.log('[MMD] 文件名:', fileName);
                     console.log('[MMD] 资源路径:', resourcePath);
+                    console.log('[MMD] ====================================');
                     
                     if (typeof loader.load === 'function') {
                         loader.load(
@@ -326,9 +362,19 @@ class MMDManager {
                                     }
                                 }
                                 
-                                // 检查材质
+                                // 检查材质和纹理
                                 if (mesh.material) {
                                     const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+                                    console.log('[MMD] 材质数量:', materials.length);
+                                    materials.forEach((mat, idx) => {
+                                        console.log(`[MMD] 材质 ${idx}:`, {
+                                            type: mat.type,
+                                            name: mat.name,
+                                            map: mat.map ? mat.map.image?.src || '有纹理但路径未知' : '无纹理',
+                                            normalMap: mat.normalMap ? '有法线贴图' : '无法线贴图',
+                                            emissiveMap: mat.emissiveMap ? '有发光贴图' : '无发光贴图'
+                                        });
+                                    });
                                     console.log('[MMD] 材质数量:', materials.length);
                                     materials.forEach((mat, i) => {
                                         if (mat) {
@@ -380,6 +426,16 @@ class MMDManager {
             // 查找嘴巴 morph 索引（用于口型同步）
             this.findMouthMorphIndex(mesh);
 
+            // 初始化模型位置和缩放
+            if (!this.modelPosition) {
+                this.modelPosition = new THREE.Vector3(0, 0, 0);
+            }
+            if (!this.modelRotation) {
+                this.modelRotation = { x: 0, y: 0 };
+            }
+            mesh.position.copy(this.modelPosition);
+            mesh.scale.set(this.modelScale, this.modelScale, this.modelScale);
+            
             // 设置拖动和缩放
             if (options.dragEnabled !== false) {
                 this.setupDragAndDrop();
@@ -388,6 +444,7 @@ class MMDManager {
 
             // 解锁模型（允许拖拽和交互）
             this.setLocked(false);
+            console.log('[MMD] 模型已解锁，isLocked:', this.isLocked);
 
             // 调用回调函数
             if (this.onModelLoaded) {
@@ -518,6 +575,15 @@ class MMDManager {
     setupDragAndDrop() {
         const canvas = this.renderer.domElement;
         
+        if (!canvas) {
+            console.error('[MMD] 无法获取 canvas 元素，拖动功能无法启用');
+            return;
+        }
+        
+        console.log('[MMD] 设置拖动功能，canvas:', canvas);
+        console.log('[MMD] isLocked:', this.isLocked);
+        console.log('[MMD] currentModel:', this.currentModel);
+        
         // 移除旧的事件监听器（如果存在）
         if (this._dragHandlers) {
             this._removeDragHandlers(canvas);
@@ -526,31 +592,61 @@ class MMDManager {
         // 确保 canvas 可以接收鼠标事件
         canvas.style.pointerEvents = 'auto';
         canvas.style.touchAction = 'none';
+        canvas.style.zIndex = '10001'; // 确保在最上层
+        
+        // 计算两点之间的距离（用于双指缩放）
+        const getTouchDistance = (touch1, touch2) => {
+            const dx = touch1.clientX - touch2.clientX;
+            const dy = touch1.clientY - touch2.clientY;
+            return Math.sqrt(dx * dx + dy * dy);
+        };
         
         // 创建事件处理器对象
         this._dragHandlers = {
             mousedown: (event) => {
-                if (this.isLocked) return;
+                console.log('[MMD] mousedown 事件触发, isLocked:', this.isLocked, 'currentModel:', !!this.currentModel);
+                if (this.isLocked) {
+                    console.warn('[MMD] 模型已锁定，无法拖动');
+                    return;
+                }
+                if (!this.currentModel) {
+                    console.warn('[MMD] 当前没有模型，无法拖动');
+                    return;
+                }
+                // 左键拖动位置，右键拖动旋转
+                const isRightButton = event.button === 2 || event.ctrlKey || event.metaKey;
+                if (isRightButton) {
+                    // 右键旋转功能（可选，暂时禁用）
+                    return;
+                }
                 this.isDragging = true;
                 this.dragStartPos.set(event.clientX, event.clientY);
                 canvas.style.cursor = 'grabbing';
+                console.log('[MMD] 开始拖动');
                 event.preventDefault();
             },
             mousemove: (event) => {
-                if (!this.isDragging || this.isLocked) return;
+                if (!this.isDragging || this.isLocked || !this.currentModel) {
+                    if (this.isDragging) {
+                        console.log('[MMD] mousemove 被阻止, isDragging:', this.isDragging, 'isLocked:', this.isLocked, 'currentModel:', !!this.currentModel);
+                    }
+                    return;
+                }
                 
                 const deltaX = event.clientX - this.dragStartPos.x;
                 const deltaY = event.clientY - this.dragStartPos.y;
-                const moveX = deltaX * 0.01;
-                const moveY = -deltaY * 0.01;
+                
+                // 改进拖动：使用更平滑的移动速度
+                const moveSpeed = 0.015; // 调整移动速度
+                const moveX = deltaX * moveSpeed;
+                const moveY = -deltaY * moveSpeed; // Y轴反转
                 
                 this.modelPosition.x += moveX;
                 this.modelPosition.y += moveY;
                 
-                if (this.currentModel) {
-                    this.currentModel.position.x = this.modelPosition.x;
-                    this.currentModel.position.y = this.modelPosition.y;
-                }
+                // 应用位置到模型
+                this.currentModel.position.x = this.modelPosition.x;
+                this.currentModel.position.y = this.modelPosition.y;
                 
                 this.dragStartPos.set(event.clientX, event.clientY);
             },
@@ -566,47 +662,97 @@ class MMDManager {
                     canvas.style.cursor = 'grab';
                 }
             },
-            touchstart: (event) => {
-                if (this.isLocked || event.touches.length !== 1) return;
-                this.isDragging = true;
-                const touch = event.touches[0];
-                this.dragStartPos.set(touch.clientX, touch.clientY);
+            contextmenu: (event) => {
+                // 禁用右键菜单，避免干扰拖动
                 event.preventDefault();
+            },
+            touchstart: (event) => {
+                if (this.isLocked) return;
+                
+                if (event.touches.length === 2) {
+                    // 双指缩放
+                    this.isPinching = true;
+                    this.isDragging = false;
+                    const touch1 = event.touches[0];
+                    const touch2 = event.touches[1];
+                    this.lastTouchDistance = getTouchDistance(touch1, touch2);
+                    event.preventDefault();
+                } else if (event.touches.length === 1) {
+                    // 单指拖动
+                    this.isDragging = true;
+                    this.isPinching = false;
+                    const touch = event.touches[0];
+                    this.dragStartPos.set(touch.clientX, touch.clientY);
+                    event.preventDefault();
+                }
             },
             touchmove: (event) => {
-                if (!this.isDragging || this.isLocked || event.touches.length !== 1) return;
-                const touch = event.touches[0];
-                const deltaX = touch.clientX - this.dragStartPos.x;
-                const deltaY = touch.clientY - this.dragStartPos.y;
-                const moveX = deltaX * 0.01;
-                const moveY = -deltaY * 0.01;
-                this.modelPosition.x += moveX;
-                this.modelPosition.y += moveY;
-                if (this.currentModel) {
+                if (this.isLocked || !this.currentModel) return;
+                
+                if (event.touches.length === 2 && this.isPinching) {
+                    // 双指缩放
+                    const touch1 = event.touches[0];
+                    const touch2 = event.touches[1];
+                    const currentDistance = getTouchDistance(touch1, touch2);
+                    
+                    if (this.lastTouchDistance > 0) {
+                        const scaleFactor = currentDistance / this.lastTouchDistance;
+                        const newScale = this.modelScale * scaleFactor;
+                        this.modelScale = Math.max(0.1, Math.min(5.0, newScale));
+                        this.currentModel.scale.set(this.modelScale, this.modelScale, this.modelScale);
+                    }
+                    
+                    this.lastTouchDistance = currentDistance;
+                    event.preventDefault();
+                } else if (event.touches.length === 1 && this.isDragging) {
+                    // 单指拖动
+                    const touch = event.touches[0];
+                    const deltaX = touch.clientX - this.dragStartPos.x;
+                    const deltaY = touch.clientY - this.dragStartPos.y;
+                    
+                    const moveSpeed = 0.015;
+                    const moveX = deltaX * moveSpeed;
+                    const moveY = -deltaY * moveSpeed;
+                    
+                    this.modelPosition.x += moveX;
+                    this.modelPosition.y += moveY;
+                    
                     this.currentModel.position.x = this.modelPosition.x;
                     this.currentModel.position.y = this.modelPosition.y;
+                    
+                    this.dragStartPos.set(touch.clientX, touch.clientY);
+                    event.preventDefault();
                 }
-                this.dragStartPos.set(touch.clientX, touch.clientY);
-                event.preventDefault();
             },
             touchend: (event) => {
-                if (this.isDragging) {
+                if (event.touches.length === 0) {
+                    // 所有手指都离开
                     this.isDragging = false;
+                    this.isPinching = false;
+                    this.lastTouchDistance = 0;
+                } else if (event.touches.length === 1) {
+                    // 从双指变为单指，切换到拖动模式
+                    this.isPinching = false;
+                    this.isDragging = true;
+                    const touch = event.touches[0];
+                    this.dragStartPos.set(touch.clientX, touch.clientY);
                 }
                 event.preventDefault();
             }
         };
         
         // 添加所有事件监听器
-        canvas.addEventListener('mousedown', this._dragHandlers.mousedown);
-        canvas.addEventListener('mousemove', this._dragHandlers.mousemove);
-        canvas.addEventListener('mouseup', this._dragHandlers.mouseup);
-        canvas.addEventListener('mouseleave', this._dragHandlers.mouseleave);
-        canvas.addEventListener('touchstart', this._dragHandlers.touchstart);
-        canvas.addEventListener('touchmove', this._dragHandlers.touchmove);
-        canvas.addEventListener('touchend', this._dragHandlers.touchend);
+        canvas.addEventListener('mousedown', this._dragHandlers.mousedown, { passive: false });
+        canvas.addEventListener('mousemove', this._dragHandlers.mousemove, { passive: false });
+        canvas.addEventListener('mouseup', this._dragHandlers.mouseup, { passive: false });
+        canvas.addEventListener('mouseleave', this._dragHandlers.mouseleave, { passive: false });
+        canvas.addEventListener('contextmenu', this._dragHandlers.contextmenu, { passive: false });
+        canvas.addEventListener('touchstart', this._dragHandlers.touchstart, { passive: false });
+        canvas.addEventListener('touchmove', this._dragHandlers.touchmove, { passive: false });
+        canvas.addEventListener('touchend', this._dragHandlers.touchend, { passive: false });
         
         canvas.style.cursor = 'grab';
+        console.log('[MMD] 拖动事件监听器已添加');
     }
     
     // 移除拖动事件监听器
@@ -616,6 +762,7 @@ class MMDManager {
         canvas.removeEventListener('mousemove', this._dragHandlers.mousemove);
         canvas.removeEventListener('mouseup', this._dragHandlers.mouseup);
         canvas.removeEventListener('mouseleave', this._dragHandlers.mouseleave);
+        canvas.removeEventListener('contextmenu', this._dragHandlers.contextmenu);
         canvas.removeEventListener('touchstart', this._dragHandlers.touchstart);
         canvas.removeEventListener('touchmove', this._dragHandlers.touchmove);
         canvas.removeEventListener('touchend', this._dragHandlers.touchend);
@@ -626,6 +773,15 @@ class MMDManager {
     setupZoom() {
         const canvas = this.renderer.domElement;
         
+        if (!canvas) {
+            console.error('[MMD] 无法获取 canvas 元素，缩放功能无法启用');
+            return;
+        }
+        
+        console.log('[MMD] 设置缩放功能，canvas:', canvas);
+        console.log('[MMD] isLocked:', this.isLocked);
+        console.log('[MMD] currentModel:', this.currentModel);
+        
         // 移除旧的事件监听器（如果存在）
         if (this._zoomHandler) {
             canvas.removeEventListener('wheel', this._zoomHandler);
@@ -634,19 +790,34 @@ class MMDManager {
         canvas.style.pointerEvents = 'auto';
         
         this._zoomHandler = (event) => {
-            if (this.isLocked || !this.currentModel) return;
+            console.log('[MMD] wheel 事件触发, isLocked:', this.isLocked, 'currentModel:', !!this.currentModel);
+            if (this.isLocked || !this.currentModel) {
+                console.warn('[MMD] 缩放被阻止, isLocked:', this.isLocked, 'currentModel:', !!this.currentModel);
+                return;
+            }
             
             event.preventDefault();
             event.stopPropagation();
             
-            const zoomSpeed = 0.1;
-            const delta = event.deltaY > 0 ? -zoomSpeed : zoomSpeed;
-            this.modelScale = Math.max(0.1, Math.min(5.0, this.modelScale + delta));
+            // 改进缩放：使用更平滑的缩放速度，支持 Ctrl/Cmd 键加速
+            const baseZoomSpeed = 0.05;
+            const zoomSpeed = (event.ctrlKey || event.metaKey) ? baseZoomSpeed * 2 : baseZoomSpeed;
             
+            // 根据滚轮方向缩放
+            const delta = event.deltaY > 0 ? -zoomSpeed : zoomSpeed;
+            const newScale = this.modelScale + delta;
+            this.modelScale = Math.max(0.1, Math.min(5.0, newScale));
+            
+            // 应用缩放
             this.currentModel.scale.set(this.modelScale, this.modelScale, this.modelScale);
+            console.log('[MMD] 缩放完成，新缩放值:', this.modelScale);
+            
+            // 可选：缩放时调整位置，使缩放中心在鼠标位置
+            // 这里暂时使用模型中心作为缩放中心
         };
         
         canvas.addEventListener('wheel', this._zoomHandler, { passive: false });
+        console.log('[MMD] 缩放事件监听器已添加');
     }
 
     // 获取当前模型
@@ -661,6 +832,9 @@ class MMDManager {
 
     // 加载并显示 MMD 模型（隐藏 Live2D）
     async loadAndShowModel(modelPath, options = {}) {
+        console.log('[MMD] loadAndShowModel 被调用，模型路径:', modelPath);
+        console.log('[MMD] 完整模型路径:', modelPath);
+        console.log('[MMD] 当前工作目录:', window.location.pathname);
         try {
             await this.loadModel(modelPath, options);
             
@@ -683,22 +857,26 @@ class MMDManager {
                 live2dContainer.style.display = 'none';
             }
             
-            // 确保渲染器大小正确
-            if (this.renderer && mmdContainer) {
-                const width = mmdContainer.clientWidth || window.innerWidth;
-                const height = mmdContainer.clientHeight || window.innerHeight;
-                this.renderer.setSize(width, height);
-                if (this.camera) {
-                    this.camera.aspect = width / height;
-                    this.camera.updateProjectionMatrix();
+            // 等待一帧，确保容器已正确显示并计算尺寸
+            requestAnimationFrame(() => {
+                // 确保渲染器大小正确
+                if (this.renderer && mmdContainer) {
+                    // 优先使用容器尺寸，如果为0则使用窗口尺寸
+                    const width = mmdContainer.clientWidth > 0 ? mmdContainer.clientWidth : window.innerWidth;
+                    const height = mmdContainer.clientHeight > 0 ? mmdContainer.clientHeight : window.innerHeight;
+                    console.log('[MMD] 设置渲染器尺寸:', width, 'x', height, '(容器尺寸:', mmdContainer.clientWidth, 'x', mmdContainer.clientHeight, ')');
+                    this.renderer.setSize(width, height);
+                    if (this.camera) {
+                        this.camera.aspect = width / height;
+                        this.camera.updateProjectionMatrix();
+                    }
                 }
-            }
-            
-            // 强制渲染一帧，确保模型显示
-            if (this.renderer && this.scene && this.camera && this.currentModel) {
-                // 等待一帧，确保模型几何体已完全加载
-                requestAnimationFrame(() => {
-                    try {
+                
+                // 强制渲染一帧，确保模型显示
+                if (this.renderer && this.scene && this.camera && this.currentModel) {
+                    // 再等待一帧，确保模型几何体已完全加载
+                    requestAnimationFrame(() => {
+                        try {
                         // 检查模型边界，调整相机位置
                         const box = new THREE.Box3().setFromObject(this.currentModel);
                         const center = box.getCenter(new THREE.Vector3());
@@ -959,8 +1137,9 @@ class MMDManager {
                         this.camera.lookAt(0, 0, 0);
                         this.renderer.render(this.scene, this.camera);
                     }
-                });
-            }
+                    });
+                }
+            });
             
             return true;
         } catch (error) {
