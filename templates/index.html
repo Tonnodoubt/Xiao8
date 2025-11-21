@@ -8,7 +8,9 @@
     <link rel="apple-touch-icon" href="/static/xiaoba_192.png">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta charset="UTF-8">
-    <title>Project N.E.K.O.</title>
+    <title data-i18n="app.title">Project N.E.K.O.</title>
+    <!-- i18next 加载器（统一处理 CDN 加载和初始化） -->
+    <script src="/static/i18n-i18next.js"></script>
     <script src="/static/common_dialogs.js"></script>
     <style>
         *:focus {
@@ -1018,12 +1020,12 @@
 <!-- 旧的按钮面板已迁移到浮动按钮系统（live2d.js），保留隐藏的旧按钮元素供功能触发使用 -->
 <div id="sidebar" style="display: none;">
     <div id="sidebarbox">
-        <button id="micButton" class="side-btn">🎤 开始语音</button>
-        <button id="muteButton" class="side-btn" disabled>⏸️ 休息一下</button>
-        <button id="screenButton" class="side-btn" disabled>🖥️ 屏幕共享</button>
-        <button id="stopButton" class="side-btn" disabled>🛑 停止共享</button>
-        <button id="resetSessionButton" class="side-btn">👋 请她离开</button>
-        <button id="returnSessionButton" class="side-btn">🫴 请她回来</button>
+        <button id="micButton" class="side-btn" data-i18n="voiceControl.startVoice">🎤 开始语音</button>
+        <button id="muteButton" class="side-btn" disabled data-i18n="voiceControl.rest">⏸️ 休息一下</button>
+        <button id="screenButton" class="side-btn" disabled data-i18n="voiceControl.screenShare">🖥️ 屏幕共享</button>
+        <button id="stopButton" class="side-btn" disabled data-i18n="voiceControl.stopShare">🛑 停止共享</button>
+        <button id="resetSessionButton" class="side-btn" data-i18n="voiceControl.leave">👋 请她离开</button>
+        <button id="returnSessionButton" class="side-btn" data-i18n="voiceControl.return">🫴 请她回来</button>
         <div id="status"></div>
     </div>
 </div>
@@ -1032,28 +1034,28 @@
 <div id="status-toast"></div>
 <div id="chat-container">
     <div id="chat-header">
-        <span id="chat-title">💬 对话</span>
+        <span id="chat-title" data-i18n="chat.title">💬 对话</span>
     </div>
-    <button id="toggle-chat-btn" title="最小化"><img src="/static/icons/minimize_icon.png" alt="最小化" style="width: 24px; height: 24px; object-fit: contain; pointer-events: none;"></button>
-    <div id="chat-tooltip">✨ 对话区</div>
+    <button id="toggle-chat-btn" data-i18n-title="common.minimize" title="最小化"><img src="/static/icons/minimize_icon.png" alt="最小化" data-i18n-alt="common.minimize" style="width: 24px; height: 24px; object-fit: contain; pointer-events: none;"></button>
+    <div id="chat-tooltip" data-i18n="chat.tooltip">✨ 对话区</div>
     <div id="chat-content-wrapper">
         <div id="chatContainer"></div>
     </div>
     <div id="text-input-area">
         <div id="screenshot-thumbnail-container">
             <div id="screenshots-header">
-                <span id="screenshots-title">📸 待发送截图 (<span id="screenshot-count">0</span>)</span>
-                <button id="clear-all-screenshots">清空全部</button>
+                <span id="screenshots-title" data-i18n="chat.screenshotsTitle">📸 待发送截图</span> (<span id="screenshot-count">0</span>)
+                <button id="clear-all-screenshots" data-i18n="chat.clearAll">清空全部</button>
             </div>
             <div id="screenshots-list">
                 <!-- 截图项将动态添加到这里 -->
             </div>
         </div>
         <div id="text-input-row">
-            <textarea id="textInputBox" placeholder="文字聊天模式...回车发送，Shift+回车换行" tabindex="0"></textarea>
+            <textarea id="textInputBox" data-i18n-placeholder="chat.textInputPlaceholder" placeholder="文字聊天模式...回车发送，Shift+回车换行" tabindex="0"></textarea>
             <div id="button-group">
-                <button id="textSendButton">📤 发送</button>
-                <button id="screenshotButton"><span class="desktop-text">📸 截图</span><span class="mobile-text">📷 拍照</span></button>
+                <button id="textSendButton" data-i18n="chat.send">📤 发送</button>
+                <button id="screenshotButton"><span class="desktop-text" data-i18n="chat.screenshot">📸 截图</span><span class="mobile-text" data-i18n="chat.takePhoto">📷 拍照</span></button>
             </div>
         </div>
     </div>
@@ -1244,7 +1246,8 @@
             console.log('检查模型配置是否有更新...');
             
             // 1. 获取当前角色名称
-            const currentLanlanName = lanlan_config.lanlan_name;
+            let currentLanlanName = lanlan_config.lanlan_name;
+            console.log('BEFORE currentLanlanName: ', currentLanlanName);
             
             // 2. 获取最新的角色配置（包含所有猫娘的完整配置）
             const charResponse = await fetch('/api/characters');
@@ -1253,6 +1256,10 @@
                 return;
             }
             const charactersData = await charResponse.json();
+
+            // 确保 lanlan_config.lanlan_name 更新到 chara_manager.html 当前选中的猫娘
+            currentLanlanName = lanlan_config.lanlan_name = charactersData['当前猫娘'];
+            console.log('AFTER currentLanlanName: ', currentLanlanName);
             
             // 从猫娘配置中获取当前角色的 live2d 模型名称
             const catgirlConfig = charactersData['猫娘']?.[currentLanlanName];
@@ -1261,6 +1268,7 @@
                 return;
             }
             const newModelName = catgirlConfig.live2d || 'mao_pro';
+            console.log('AFTER newModelName: ', newModelName);
             
             // 3. 获取所有可用模型列表
             const modelsResponse = await fetch('/api/live2d/models');
@@ -1277,6 +1285,7 @@
                 return;
             }
             const newModelPath = modelInfo.path;
+            console.log('AFTER newModelPath: ', newModelPath);
             
             // 5. 检查当前加载的模型路径
             const currentModel = window.live2dManager?.getCurrentModel();
