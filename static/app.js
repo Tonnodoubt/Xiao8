@@ -1626,6 +1626,14 @@ function init_app(){
         
         // 连接source到analyser(用于音量检测)
         source.connect(inputAnalyser);
+        
+        // 启动 MMD 口型同步（如果MMD模型已加载）
+        if (window.mmdManager && window.mmdManager.getCurrentModel()) {
+            const mmdContainer = document.getElementById('mmd-container');
+            if (mmdContainer && mmdContainer.style.display !== 'none' && mmdContainer.offsetParent) {
+                window.mmdManager.startLipSync(inputAnalyser);
+            }
+        }
 
         try {
             // 加载AudioWorklet处理器
@@ -1692,6 +1700,11 @@ function init_app(){
         
         // 停止静音检测
         stopSilenceDetection();
+        
+        // 停止 MMD 口型同步（如果正在运行）
+        if (window.mmdManager && window.mmdManager.getCurrentModel()) {
+            window.mmdManager.stopLipSync();
+        }
         
         // 清理输入analyser
         inputAnalyser = null;
