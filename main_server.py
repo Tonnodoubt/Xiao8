@@ -16,7 +16,10 @@ from fastapi.staticfiles import StaticFiles
 from main_helper import core as core, cross_server as cross_server
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import HTMLResponse, JSONResponse
-from utils.preferences import load_user_preferences, update_model_preferences, validate_model_preferences, move_model_to_top
+from utils.preferences import (
+    load_user_preferences, update_model_preferences, validate_model_preferences, move_model_to_top,
+    load_parameter_presets, save_parameter_preset, delete_parameter_preset, get_parameter_preset
+)
 from utils.frontend_utils import find_models, find_model_config_file, find_model_directory
 from multiprocessing import Process, Queue, Event
 import atexit
@@ -2071,6 +2074,13 @@ async def get_model_files(model_name: str):
         logger.error(f"获取模型文件列表失败: {e}")
         return {"success": False, "error": str(e)}
 
+@app.get('/live2d_parameter_editor', response_class=HTMLResponse)
+async def get_live2d_parameter_editor(request: Request):
+    """Live2D 参数编辑器页面"""
+    return templates.TemplateResponse("templates/live2d_parameter_editor.html", {
+        "request": request
+    })
+
 @app.get('/live2d_emotion_manager', response_class=HTMLResponse)
 async def live2d_emotion_manager(request: Request):
     """Live2D情感映射管理器页面"""
@@ -2222,6 +2232,66 @@ async def upload_live2d_model(files: list[UploadFile] = File(...)):
             
     except Exception as e:
         logger.error(f"上传Live2D模型失败: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+@app.get('/api/live2d/parameter_presets')
+async def get_parameter_presets(model_path: str = None):
+    """获取 Live2D 参数预设列表"""
+    try:
+        presets = load_parameter_presets(model_path)
+        return {"success": True, "presets": presets}
+    except Exception as e:
+        logger.error(f"获取参数预设失败: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+@app.post('/api/live2d/parameter_presets')
+async def save_parameter_preset_api(request: Request):
+    """保存 Live2D 参数预设"""
+    try:
+        data = await request.json()
+        
+        if not data:
+            return JSONResponse(status_code=400, content={"success": False, "error": "无效的数据"})
+        
+        preset_name = data.get('name')
+        model_path = data.get('model_path')
+        values = data.get('values')
+        
+        if not preset_name or not model_path or not values:
+            return JSONResponse(status_code=400, content={"success": False, "error": "缺少必要字段: name, model_path, values"})
+        
+        if save_parameter_preset(preset_name, model_path, values):
+            return {"success": True, "message": "预设已保存"}
+        else:
+            return JSONResponse(status_code=500, content={"success": False, "error": "保存失败"})
+            
+    except Exception as e:
+        logger.error(f"保存参数预设失败: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+@app.delete('/api/live2d/parameter_presets/{preset_name}')
+async def delete_parameter_preset_api(preset_name: str):
+    """删除 Live2D 参数预设"""
+    try:
+        if delete_parameter_preset(preset_name):
+            return {"success": True, "message": "预设已删除"}
+        else:
+            return JSONResponse(status_code=404, content={"success": False, "error": "预设不存在"})
+    except Exception as e:
+        logger.error(f"删除参数预设失败: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+@app.get('/api/live2d/parameter_presets/{preset_name}')
+async def get_parameter_preset_api(preset_name: str):
+    """获取指定的 Live2D 参数预设"""
+    try:
+        preset = get_parameter_preset(preset_name)
+        if preset:
+            return {"success": True, "preset": preset}
+        else:
+            return JSONResponse(status_code=404, content={"success": False, "error": "预设不存在"})
+    except Exception as e:
+        logger.error(f"获取参数预设失败: {e}")
         return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
 @app.post('/api/live2d/emotion_mapping/{model_name}')

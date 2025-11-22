@@ -1,6 +1,7 @@
 import json
 import os
 from typing import Dict, Any, Optional, List
+from datetime import datetime
 from utils.config_manager import get_config_manager
 
 # 初始化配置管理器
@@ -194,4 +195,124 @@ def move_model_to_top(model_path: str) -> bool:
             return False
     except Exception as e:
         print(f"移动模型到顶部失败: {e}")
-        return False 
+        return False
+
+# ============================================================================
+# Live2D 参数预设管理
+# ============================================================================
+
+# 参数预设文件路径
+PARAMETER_PRESETS_FILE = str(_config_manager.get_config_path('live2d_parameter_presets.json'))
+
+def load_parameter_presets(model_path: Optional[str] = None) -> Dict[str, Any]:
+    """
+    加载 Live2D 参数预设
+    
+    Args:
+        model_path (str, optional): 模型路径，如果指定则只返回该模型的预设
+        
+    Returns:
+        Dict[str, Any]: 预设字典，格式为 { preset_name: { model_path, values, timestamp } }
+                       如果指定了 model_path，则只返回该模型的预设
+    """
+    try:
+        if os.path.exists(PARAMETER_PRESETS_FILE):
+            with open(PARAMETER_PRESETS_FILE, 'r', encoding='utf-8') as f:
+                all_presets = json.load(f)
+                
+                if model_path:
+                    # 只返回指定模型的预设
+                    filtered_presets = {}
+                    for name, preset in all_presets.items():
+                        if preset.get('model_path') == model_path:
+                            filtered_presets[name] = preset
+                    return filtered_presets
+                else:
+                    return all_presets
+    except Exception as e:
+        print(f"加载参数预设失败: {e}")
+    return {}
+
+def save_parameter_preset(preset_name: str, model_path: str, values: Dict[str, float]) -> bool:
+    """
+    保存 Live2D 参数预设
+    
+    Args:
+        preset_name (str): 预设名称
+        model_path (str): 模型路径
+        values (Dict[str, float]): 参数值字典 { paramId: value }
+        
+    Returns:
+        bool: 保存成功返回True，失败返回False
+    """
+    try:
+        # 确保配置目录存在
+        _config_manager.ensure_config_directory()
+        # 更新路径（可能已迁移）
+        global PARAMETER_PRESETS_FILE
+        PARAMETER_PRESETS_FILE = str(_config_manager.get_config_path('live2d_parameter_presets.json'))
+        
+        # 加载现有预设
+        all_presets = load_parameter_presets()
+        
+        # 添加或更新预设
+        all_presets[preset_name] = {
+            'model_path': model_path,
+            'values': values,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+        # 保存到文件
+        with open(PARAMETER_PRESETS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(all_presets, f, ensure_ascii=False, indent=2)
+        
+        return True
+    except Exception as e:
+        print(f"保存参数预设失败: {e}")
+        return False
+
+def delete_parameter_preset(preset_name: str) -> bool:
+    """
+    删除 Live2D 参数预设
+    
+    Args:
+        preset_name (str): 预设名称
+        
+    Returns:
+        bool: 删除成功返回True，失败返回False
+    """
+    try:
+        # 加载现有预设
+        all_presets = load_parameter_presets()
+        
+        # 删除指定预设
+        if preset_name in all_presets:
+            del all_presets[preset_name]
+            
+            # 保存到文件
+            with open(PARAMETER_PRESETS_FILE, 'w', encoding='utf-8') as f:
+                json.dump(all_presets, f, ensure_ascii=False, indent=2)
+            
+            return True
+        else:
+            return False
+    except Exception as e:
+        print(f"删除参数预设失败: {e}")
+        return False
+
+def get_parameter_preset(preset_name: str) -> Optional[Dict[str, Any]]:
+    """
+    获取指定的参数预设
+    
+    Args:
+        preset_name (str): 预设名称
+        
+    Returns:
+        Optional[Dict[str, Any]]: 预设数据，如果不存在则返回None
+    """
+    try:
+        all_presets = load_parameter_presets()
+        return all_presets.get(preset_name)
+    except Exception as e:
+        print(f"获取参数预设失败: {e}")
+        return None 

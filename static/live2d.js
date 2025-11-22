@@ -518,10 +518,11 @@ class Live2DManager {
                 console.log(`开始重置${paramCount}个参数到默认值...`);
                 
                 // 遍历所有参数，将其重置为默认值
+                const parameters = coreModel.parameters;
                 for (let i = 0; i < paramCount; i++) {
                     try {
                         const paramId = coreModel.getParameterId(i);
-                        const defaultValue = coreModel.getParameterDefaultValueByIndex(i);
+                        const defaultValue = parameters.defaultValues[i];
                         
                         // 跳过嘴巴相关参数（这些由口型同步控制）
                         if (paramId === 'ParamMouthOpenY' || paramId === 'ParamO') {
@@ -2599,6 +2600,31 @@ class Live2DManager {
         return this.emotionMapping;
     }
 
+    /**
+     * 获取参数编辑器实例
+     * @returns {Live2DParameterEditor|null} 参数编辑器实例，如果模型未加载则返回 null
+     */
+    getParameterEditor() {
+        if (!this.currentModel) {
+            console.warn('无法创建参数编辑器：模型未加载');
+            return null;
+        }
+        
+        // 如果已存在编辑器且模型未变化，直接返回
+        if (this._parameterEditor && this._parameterEditor.model === this.currentModel) {
+            return this._parameterEditor;
+        }
+        
+        // 创建新的参数编辑器
+        try {
+            this._parameterEditor = new Live2DParameterEditor(this.currentModel);
+            return this._parameterEditor;
+        } catch (error) {
+            console.error('创建参数编辑器失败:', error);
+            return null;
+        }
+    }
+
     // 获取 PIXI 应用
     getPIXIApp() {
         return this.pixi_app;
@@ -2731,6 +2757,364 @@ Live2DManager.prototype.applyPersistentExpressionsNative = async function() {
 // 创建全局 Live2D 管理器实例
 window.Live2DManager = Live2DManager;
 window.live2dManager = new Live2DManager();
+
+// ============================================================================
+// Live2D 参数编辑器类 - 用于捏脸功能
+// ============================================================================
+class Live2DParameterEditor {
+    constructor(model) {
+        if (!model || !model.internalModel || !model.internalModel.coreModel) {
+            throw new Error('无效的 Live2D 模型对象');
+        }
+        
+        this.model = model;
+        this.coreModel = model.internalModel.coreModel;
+        this.parameterGroups = {}; // 按组分类的参数 { groupId: [param1, param2, ...] }
+        this.parameterInfo = {};   // 参数详细信息 { paramId: { name, groupId, min, max, default } }
+        this.currentValues = {};   // 当前参数值缓存
+        this.isInitialized = false;
+    }
+
+    /**
+     * 从 .cdi3.json 文件加载参数定义
+     * @param {string} cdi3Path - .cdi3.json 文件的路径
+     */
+    async loadParameterDefinitions(cdi3Path) {
+        try {
+            const response = await fetch(cdi3Path);
+            if (!response.ok) {
+                throw new Error(`无法加载参数定义文件: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            
+            // 清空现有数据
+            this.parameterGroups = {};
+            this.parameterInfo = {};
+            
+            // 处理参数定义
+            if (data.Parameters && Array.isArray(data.Parameters)) {
+                // 检查 parameters 对象是否存在，如果不存在则等待初始化（只检查一次）
+                let parameters = this.coreModel.parameters;
+                if (!parameters) {
+                    console.warn(`coreModel.parameters 未初始化，等待初始化...`);
+                    // 最多等待 1 秒，每 100ms 检查一次
+                    for (let i = 0; i < 10; i++) {
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        parameters = this.coreModel.parameters;
+                        if (parameters) break;
+                    }
+                    if (!parameters) {
+                        console.error(`coreModel.parameters 在 1 秒后仍未初始化，将使用默认值`);
+                    }
+                }
+                
+                // 遍历所有参数
+                for (const param of data.Parameters) {
+                    const paramId = param.Id;
+                    const groupId = param.GroupId || 'ParamGroupOther';
+                    const name = param.Name || paramId;
+                    
+                    // 获取参数的实际范围（从 coreModel）
+                    const index = this.coreModel.getParameterIndex(paramId);
+                    if (index === -1) {
+                        console.warn(`参数 ${paramId} 在模型中不存在，跳过`);
+                        continue;
+                    }
+                    
+                    // 检查 parameters 对象的属性是否存在
+                    if (!parameters || !parameters.minimumValues || !parameters.maximumValues || 
+                        !parameters.defaultValues || !parameters.values) {
+                        console.warn(`parameters 对象不可用，为参数 ${paramId} 使用默认值`);
+                        // 使用合理的默认值（大多数 Live2D 参数的范围是 -1 到 1，默认值是 0）
+                        const min = -1;
+                        const max = 1;
+                        const defaultValue = 0;
+                        const currentValue = 0;
+                        
+                        this.parameterInfo[paramId] = {
+                            id: paramId,
+                            name: name,
+                            groupId: groupId,
+                            min: min,
+                            max: max,
+                            default: defaultValue,
+                            current: currentValue,
+                            index: index
+                        };
+                        
+                        if (!this.parameterGroups[groupId]) {
+                            this.parameterGroups[groupId] = [];
+                        }
+                        this.parameterGroups[groupId].push(this.parameterInfo[paramId]);
+                        continue;
+                    }
+                    
+                    // 使用 parameters 对象访问参数值
+                    const min = parameters.minimumValues[index];
+                    const max = parameters.maximumValues[index];
+                    const defaultValue = parameters.defaultValues[index];
+                    const currentValue = parameters.values[index];
+                    
+                    // 保存参数信息
+                    this.parameterInfo[paramId] = {
+                        id: paramId,
+                        name: name,
+                        groupId: groupId,
+                        min: min,
+                        max: max,
+                        default: defaultValue,
+                        current: currentValue,
+                        index: index
+                    };
+                    
+                    // 按组分类
+                    if (!this.parameterGroups[groupId]) {
+                        this.parameterGroups[groupId] = [];
+                    }
+                    this.parameterGroups[groupId].push(this.parameterInfo[paramId]);
+                }
+            }
+            
+            // 处理参数组信息（用于显示组名）
+            if (data.ParameterGroups && Array.isArray(data.ParameterGroups)) {
+                this.groupNames = {};
+                data.ParameterGroups.forEach(group => {
+                    this.groupNames[group.Id] = group.Name || group.Id;
+                });
+            } else {
+                this.groupNames = {};
+            }
+            
+            this.isInitialized = true;
+            console.log(`参数编辑器初始化完成，共加载 ${Object.keys(this.parameterInfo).length} 个参数`);
+            
+            return {
+                groups: this.parameterGroups,
+                groupNames: this.groupNames,
+                parameters: this.parameterInfo
+            };
+        } catch (error) {
+            console.error('加载参数定义失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 获取参数当前值
+     * @param {string} paramId - 参数ID
+     * @returns {number|null} 参数值，如果参数不存在返回 null
+     */
+    getParameterValue(paramId) {
+        if (!this.parameterInfo[paramId]) {
+            console.warn(`参数 ${paramId} 未在定义中找到`);
+            return null;
+        }
+        
+        const paramInfo = this.parameterInfo[paramId];
+        
+        // 检查 parameters 对象是否存在
+        if (!this.coreModel.parameters || !this.coreModel.parameters.values) {
+            // 如果 parameters 不可用，返回保存的当前值或默认值
+            return paramInfo.current !== undefined ? paramInfo.current : paramInfo.default;
+        }
+        
+        try {
+            const index = paramInfo.index;
+            const value = this.coreModel.parameters.values[index];
+            paramInfo.current = value;
+            return value;
+        } catch (error) {
+            console.warn(`获取参数 ${paramId} 的值失败:`, error);
+            // 返回保存的当前值或默认值
+            return paramInfo.current !== undefined ? paramInfo.current : paramInfo.default;
+        }
+    }
+
+    /**
+     * 设置参数值（带范围限制和实时更新）
+     * @param {string} paramId - 参数ID
+     * @param {number} value - 参数值
+     * @returns {boolean} 是否设置成功
+     */
+    setParameterValue(paramId, value) {
+        if (!this.parameterInfo[paramId]) {
+            console.warn(`参数 ${paramId} 不存在`);
+            return false;
+        }
+        
+        const info = this.parameterInfo[paramId];
+        
+        // 限制值在范围内
+        const clampedValue = Math.max(info.min, Math.min(info.max, value));
+        
+        // 设置参数值
+        try {
+            // 设置参数值到 coreModel
+            // 使用 setParameterValueByIndex 可能更可靠，因为它直接操作参数数组
+            const paramIndex = this.coreModel.getParameterIndex(paramId);
+            if (paramIndex === -1) {
+                console.warn(`参数 ${paramId} 的索引未找到`);
+                return false;
+            }
+            
+            // 直接设置参数值（使用索引方式，更可靠）
+            this.coreModel.setParameterValueByIndex(paramIndex, clampedValue);
+            
+            // 也使用 ID 方式设置（双重保险）
+            this.coreModel.setParameterValueById(paramId, clampedValue);
+            
+            info.current = clampedValue;
+            this.currentValues[paramId] = clampedValue;
+            
+            // 验证参数值是否设置成功
+            const actualValue = this.coreModel.getParameterValueById(paramId);
+            if (Math.abs(actualValue - clampedValue) > 0.001) {
+                console.warn(`参数 ${paramId} 设置值 ${clampedValue} 但实际值为 ${actualValue}，可能存在覆盖`);
+            }
+            
+            // 标记此参数已被手动设置，防止被其他系统覆盖
+            // 在参数编辑器中，我们需要持续保持参数值
+            // 使用 requestAnimationFrame 持续设置，确保不被覆盖
+            if (!this._parameterProtectionInterval) {
+                this._parameterProtectionInterval = setInterval(() => {
+                    // 每帧都重新应用用户设置的参数值，防止被覆盖
+                    Object.keys(this.currentValues).forEach(pid => {
+                        try {
+                            const idx = this.coreModel.getParameterIndex(pid);
+                            if (idx !== -1) {
+                                this.coreModel.setParameterValueByIndex(idx, this.currentValues[pid]);
+                            }
+                        } catch (e) {
+                            // 忽略错误
+                        }
+                    });
+                }, 16); // 约 60fps
+            }
+            
+            // 确保 PIXI ticker 正在运行，以便模型能够实时更新
+            // pixi-live2d-display 的模型会在 PIXI ticker 中自动更新
+            // 但我们需要确保 ticker 正在运行
+            try {
+                const manager = window.live2dManager;
+                if (manager && manager.pixi_app && manager.pixi_app.ticker) {
+                    // 确保 ticker 正在运行
+                    if (!manager.pixi_app.ticker.started) {
+                        console.log('启动 PIXI ticker');
+                        manager.pixi_app.ticker.start();
+                    }
+                    
+                    // 强制触发一次渲染（使用 requestAnimationFrame 确保在下一帧渲染）
+                    // 这样可以确保参数变化立即反映到模型上
+                    requestAnimationFrame(() => {
+                        try {
+                            if (manager.pixi_app && manager.pixi_app.renderer && manager.pixi_app.stage) {
+                                manager.pixi_app.renderer.render(manager.pixi_app.stage);
+                            }
+                        } catch (renderError) {
+                            console.debug('强制渲染失败:', renderError);
+                        }
+                    });
+                } else {
+                    console.warn('PIXI 应用或 ticker 未找到，模型可能无法实时更新');
+                }
+            } catch (tickerError) {
+                // ticker 检查失败不影响参数设置
+                console.debug('Ticker 检查失败:', tickerError);
+            }
+            
+            return true;
+        } catch (error) {
+            console.error(`设置参数 ${paramId} 失败:`, error);
+            return false;
+        }
+    }
+    
+    /**
+     * 清理参数保护机制（在编辑器关闭时调用）
+     */
+    cleanup() {
+        if (this._parameterProtectionInterval) {
+            clearInterval(this._parameterProtectionInterval);
+            this._parameterProtectionInterval = null;
+        }
+    }
+
+    /**
+     * 重置单个参数到默认值
+     * @param {string} paramId - 参数ID
+     * @returns {boolean} 是否重置成功
+     */
+    resetParameter(paramId) {
+        if (!this.parameterInfo[paramId]) {
+            return false;
+        }
+        
+        const defaultValue = this.parameterInfo[paramId].default;
+        return this.setParameterValue(paramId, defaultValue);
+    }
+
+    /**
+     * 重置所有参数到默认值
+     */
+    resetAllParameters() {
+        Object.keys(this.parameterInfo).forEach(paramId => {
+            this.resetParameter(paramId);
+        });
+        console.log('所有参数已重置到默认值');
+    }
+
+    /**
+     * 获取所有参数的当前值（用于保存预设）
+     * @returns {Object} 参数值对象 { paramId: value }
+     */
+    getAllParameterValues() {
+        const values = {};
+        Object.keys(this.parameterInfo).forEach(paramId => {
+            values[paramId] = this.getParameterValue(paramId);
+        });
+        return values;
+    }
+
+    /**
+     * 应用参数值（用于加载预设）
+     * @param {Object} values - 参数值对象 { paramId: value }
+     */
+    applyParameterValues(values) {
+        let successCount = 0;
+        Object.keys(values).forEach(paramId => {
+            if (this.setParameterValue(paramId, values[paramId])) {
+                successCount++;
+            }
+        });
+        console.log(`应用了 ${successCount} 个参数值`);
+        return successCount;
+    }
+
+    /**
+     * 获取参数组列表
+     * @returns {Array} 参数组数组
+     */
+    getParameterGroups() {
+        return Object.keys(this.parameterGroups).map(groupId => ({
+            id: groupId,
+            name: this.groupNames[groupId] || groupId,
+            parameters: this.parameterGroups[groupId]
+        }));
+    }
+
+    /**
+     * 获取指定组的参数列表
+     * @param {string} groupId - 组ID
+     * @returns {Array} 参数数组
+     */
+    getParametersByGroup(groupId) {
+        return this.parameterGroups[groupId] || [];
+    }
+}
+
+// 导出到全局
+window.Live2DParameterEditor = Live2DParameterEditor;
 
 
 // 兼容性：保持原有的全局变量和函数

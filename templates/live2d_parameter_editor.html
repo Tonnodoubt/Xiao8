@@ -1,0 +1,1451 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="live2d.parameterEditor.title">Live2D 参数编辑器 - Project N.E.K.O.</title>
+    <!-- i18next 加载器（统一处理 CDN 加载和初始化） -->
+    <script src="/static/i18n-i18next.js"></script>
+    <script src="/static/common_dialogs.js"></script>
+    <style>
+        *:focus {
+            outline: none !important;
+            box-shadow: none !important; 
+        }
+        html, body {
+            height: 100%; 
+            margin: 0; 
+            padding: 0; 
+            background: #eee; 
+            color: #222;
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            overflow: hidden;
+        }
+        
+        #live2d-container {
+            position: fixed; 
+            right: 0px; 
+            bottom: 0px; 
+            width: 100%; 
+            height: 100%;
+            z-index: 10; 
+            pointer-events: auto;
+        }
+        
+        #live2d-canvas {
+            display: block; 
+            width: 100%; 
+            height: 100%; 
+            background: transparent;
+            cursor: grab; 
+            pointer-events: auto;
+        }
+        
+        #live2d-canvas:active { 
+            cursor: grabbing; 
+        }
+
+        #editor-panel {
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            width: 400px;
+            max-height: calc(100vh - 40px);
+            z-index: 20;
+            padding: 20px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .editor-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .editor-header h2 {
+            margin: 0;
+            font-size: 20px;
+            color: #333;
+        }
+
+        .editor-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+            color: white;
+            transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
+            text-align: center;
+            flex: 1;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+
+        .btn:disabled {
+            background: #e0e0e0;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+
+        .btn-primary { 
+            background: #44b7fe; 
+        }
+        
+        .btn-primary:hover:not(:disabled) { 
+            background: #2662c8; 
+        }
+        
+        .btn-secondary { 
+            background: #d5f1ff; 
+            color: #333;
+        }
+        
+        .btn-secondary:hover:not(:disabled) { 
+            background: #b8e5ff; 
+        }
+
+        .btn-danger {
+            background: #ff6b6b;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #ee5a5a;
+        }
+
+        .parameter-groups-container {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+            padding-right: 5px;
+        }
+
+        .parameter-groups-container::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .parameter-groups-container::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .parameter-groups-container::-webkit-scrollbar-thumb {
+            background: #888;
+            border-radius: 4px;
+        }
+
+        .parameter-groups-container::-webkit-scrollbar-thumb:hover {
+            background: #555;
+        }
+
+        .parameter-group {
+            margin-bottom: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 8px;
+            padding: 15px;
+            background: #fafafa;
+        }
+
+        .parameter-group-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .parameter-group-header h3 {
+            margin: 0;
+            font-size: 16px;
+            color: #333;
+            font-weight: 600;
+        }
+
+        .parameter-group-toggle {
+            font-size: 12px;
+            color: #666;
+            transition: transform 0.2s;
+        }
+
+        .parameter-group.collapsed .parameter-group-toggle {
+            transform: rotate(-90deg);
+        }
+
+        .parameter-group.collapsed .parameter-items {
+            display: none;
+        }
+
+        .parameter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 12px;
+            padding: 10px;
+            background: #fff;
+            border-radius: 6px;
+            border: 1px solid #e8e8e8;
+        }
+
+        .parameter-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .parameter-label-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .parameter-label {
+            font-size: 13px;
+            color: #555;
+            font-weight: 500;
+        }
+
+        .parameter-value-display {
+            font-size: 12px;
+            color: #888;
+            font-family: 'Courier New', monospace;
+            min-width: 50px;
+            text-align: right;
+        }
+
+        .parameter-slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .parameter-slider {
+            flex: 1;
+            height: 6px;
+            border-radius: 3px;
+            background: #e0e0e0;
+            outline: none;
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .parameter-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #44b7fe;
+            cursor: pointer;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        .parameter-slider::-webkit-slider-thumb:hover {
+            background: #2662c8;
+            transform: scale(1.1);
+        }
+
+        .parameter-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #44b7fe;
+            cursor: pointer;
+            border: none;
+            transition: background 0.2s, transform 0.2s;
+        }
+
+        .parameter-slider::-moz-range-thumb:hover {
+            background: #2662c8;
+            transform: scale(1.1);
+        }
+
+        .parameter-reset-btn {
+            padding: 4px 8px;
+            font-size: 11px;
+            background: #f0f0f0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #666;
+            transition: all 0.2s;
+        }
+
+        .parameter-reset-btn:hover {
+            background: #e0e0e0;
+            color: #333;
+        }
+
+        .status-message {
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 6px;
+            font-size: 13px;
+            text-align: center;
+        }
+
+        .status-message.info {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .status-message.error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .status-message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+
+        .preset-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #eee;
+        }
+
+        .preset-input-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        .preset-input {
+            flex: 1;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        .preset-list {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 8px;
+            background: #fafafa;
+        }
+
+        .preset-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 10px;
+            margin-bottom: 4px;
+            background: #fff;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .preset-item:hover {
+            background: #f0f0f0;
+        }
+
+        .preset-item-name {
+            font-size: 13px;
+            color: #333;
+        }
+
+        .preset-item-actions {
+            display: flex;
+            gap: 5px;
+        }
+
+        .preset-delete-btn {
+            padding: 2px 6px;
+            font-size: 11px;
+            background: #ff6b6b;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .preset-delete-btn:hover {
+            background: #ee5a5a;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <!-- Live2D 模型显示区域 -->
+    <div id="live2d-container">
+        <canvas id="live2d-canvas"></canvas>
+    </div>
+
+    <!-- 参数编辑器面板 -->
+    <div id="editor-panel">
+        <div class="editor-header">
+            <h2 data-i18n="live2d.parameterEditor.title">Live2D 参数编辑器</h2>
+        </div>
+
+        <div id="status-message" class="status-message info" style="display: none;"></div>
+
+        <div class="editor-controls">
+            <button class="btn btn-secondary" onclick="resetAllParameters()" data-i18n="live2d.parameterEditor.resetAll">重置全部</button>
+            <button class="btn btn-primary" onclick="savePreset()" data-i18n="live2d.parameterEditor.savePreset">保存预设</button>
+        </div>
+
+        <div id="parameter-groups-container" class="parameter-groups-container">
+            <div class="loading" data-i18n="live2d.parameterEditor.loadingParameters">正在加载参数...</div>
+        </div>
+
+        <div class="preset-section">
+            <h4 style="margin: 0 0 10px 0; font-size: 14px; color: #333;" data-i18n="live2d.parameterEditor.presetManagement">预设管理</h4>
+            <div class="preset-input-group">
+                <input type="text" id="preset-name-input" class="preset-input" data-i18n-placeholder="live2d.parameterEditor.presetNamePlaceholder" placeholder="输入预设名称..." maxlength="50">
+                <button class="btn btn-primary" onclick="savePresetWithName()" style="flex: 0 0 auto; padding: 8px 12px;" data-i18n="live2d.parameterEditor.save">保存</button>
+            </div>
+            <div id="preset-list" class="preset-list">
+                <div style="text-align: center; color: #999; padding: 10px; font-size: 12px;" data-i18n="live2d.parameterEditor.noPresets">暂无预设</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 加载必要的库 -->
+    <script src="/static/libs/live2dcubismcore.min.js"></script>
+    <script src="/static/libs/live2d.min.js"></script>
+    <script src="/static/libs/pixi.min.js"></script>
+    <script src="/static/libs/index.min.js"></script>
+    <script src="/static/live2d.js?v=3"></script>
+
+    <script>
+        // 全局变量
+        let parameterEditor = null;
+        let currentModelPath = null;
+        let parameterGroups = [];
+
+        // 安全的翻译函数包装器
+        function t(key, defaultValue, params = {}) {
+            if (typeof window.t === 'function') {
+                return window.t(key, defaultValue, params);
+            }
+            // 如果 i18next 未初始化，返回默认值或键名
+            if (defaultValue) {
+                // 如果有参数，简单替换
+                let result = defaultValue;
+                if (params && typeof params === 'object') {
+                    Object.keys(params).forEach(k => {
+                        result = result.replace(new RegExp(`\\{${k}\\}`, 'g'), params[k]);
+                    });
+                }
+                return result;
+            }
+            return key;
+        }
+
+        // 翻译参数组名称
+        function translateGroupName(groupId, defaultName) {
+            const key = `live2d.parameterEditor.parameterGroups.${groupId}`;
+            const translated = t(key, defaultName);
+            return translated !== key ? translated : defaultName;
+        }
+
+        // 翻译参数名称
+        function translateParameterName(paramName, paramId) {
+            // 先尝试用参数名称翻译
+            const nameKey = `live2d.parameterEditor.parameterNames.${paramName}`;
+            let translated = t(nameKey, paramName);
+            if (translated !== nameKey) {
+                return translated;
+            }
+            // 如果参数名称翻译不存在，尝试用参数ID翻译
+            const idKey = `live2d.parameterEditor.parameterNames.${paramId}`;
+            translated = t(idKey, paramName);
+            if (translated !== idKey) {
+                return translated;
+            }
+            // 如果都不存在，尝试通用翻译
+            translated = translateCommonEnglish(paramName);
+            if (translated !== paramName) {
+                return translated;
+            }
+            // 如果都不存在，返回原始名称
+            return paramName;
+        }
+
+        // 通用英文翻译函数
+        function translateCommonEnglish(text) {
+            if (!text) return text;
+            
+            // 常见单词翻译映射（按长度从长到短排序，避免部分匹配）
+            const commonTranslations = {
+                'Draw Order': '绘制顺序',
+                'Color Variation': '颜色变化',
+                'Magic Light': '魔法光线',
+                'Enhancement Magic': '强化魔法',
+                'Heal Magic': '治愈魔法',
+                'Shoulder Rotation': '肩部旋转',
+                'Elbow Rotation': '肘部旋转',
+                'Wrist Rotation': '手腕旋转',
+                'Mouth Corner': '嘴角',
+                'Pouting Mouth': '嘟嘴',
+                'Light Gathering': '光线聚集',
+                'Explosion Light': '爆炸光线',
+                'Dropping Ink': '滴落墨水',
+                'Front Hair': '前发',
+                'Side Hair': '侧发',
+                'Back Hair': '后发',
+                'Hat Ribbon': '帽子丝带',
+                'Hat Brim': '帽檐',
+                'Hat Top': '帽顶',
+                'Hood Rope': '兜帽绳',
+                'Robe Sway': '长袍摆动',
+                'Robe Flap': '长袍飘动',
+                'Pendant Sway': '吊坠摆动',
+                'Hair Sway': '头发摆动',
+                'Hair Streaks': '发丝',
+                'Heart Fail': '心形失败',
+                'Heart Heal': '心形治愈',
+                'Heart Drawing': '心形绘制',
+                'Magic Position': '魔法位置',
+                'Overall Movement': '整体移动',
+                'Overall Rotation': '整体旋转',
+                'Overall Color': '整体颜色',
+                'Rabbit Light': '兔子光线',
+                'Rabbit Move': '兔子移动',
+                'Rabbit Rotation': '兔子旋转',
+                'Rabbit Direction': '兔子方向',
+                'Rabbit Disappear': '兔子消失',
+                'Rabbit Appear': '兔子出现',
+                'Rabbit Scaling': '兔子缩放',
+                'Rabbit Ears': '兔子耳朵',
+                'Deformation': '变形',
+                'Rotation': '旋转',
+                'Movement': '移动',
+                'Position': '位置',
+                'Variation': '变化',
+                'Enhancement': '强化',
+                'Gathering': '聚集',
+                'Disappear': '消失',
+                'Appear': '出现',
+                'Scaling': '缩放',
+                'Direction': '方向',
+                'Movement': '移动',
+                'Display': '显示',
+                'Eyeballs': '眼球',
+                'Eyebrow': '眉毛',
+                'Shoulder': '肩膀',
+                'Pendant': '吊坠',
+                'Feather': '羽毛',
+                'Ribbon': '丝带',
+                'Brim': '帽檐',
+                'Rope': '绳',
+                'Robe': '长袍',
+                'Flap': '飘动',
+                'Streaks': '发丝',
+                'Fluff': '蓬松',
+                'Sway': '摆动',
+                'Corner': '嘴角',
+                'Upward': '向上',
+                'Downward': '向下',
+                'Pouting': '嘟嘴',
+                'Line': '线条',
+                'Breath': '呼吸',
+                'Elbow': '肘部',
+                'Wrist': '手腕',
+                'Hand': '手',
+                'Wand': '魔杖',
+                'Dropping': '滴落',
+                'Hat': '帽子',
+                'Smoke': '烟雾',
+                'Explosion': '爆炸',
+                'Light': '光线',
+                'Rabbit': '兔子',
+                'Ears': '耳朵',
+                'Aura': '光环',
+                'Overall': '整体',
+                'Color': '颜色',
+                'Heart': '心形',
+                'Magic': '魔法',
+                'Star': '星星',
+                'Rainbow': '彩虹',
+                'Green': '绿色',
+                'Fail': '失败',
+                'Heal': '治愈',
+                'Drawing': '绘制',
+                'Body': '身体',
+                'Arm': '手臂',
+                'Face': '面部',
+                'Ink': '墨水',
+                'Mouth': '嘴巴',
+                'Eye': '眼睛',
+                'Angle': '角度',
+                'Open': '睁开',
+                'Smile': '微笑',
+                'Shrink': '收缩',
+                'Effect': '效果',
+                'Blush': '脸红',
+                'Hair': '头发',
+                'Front': '前',
+                'Side': '侧',
+                'Back': '后',
+                'L': '左',
+                'R': '右',
+                'X': 'X',
+                'Y': 'Y',
+                'Z': 'Z',
+                'A': 'A',
+                'I': 'I',
+                'U': 'U',
+                'E': 'E',
+                'O': 'O',
+                '1': '1',
+                '2': '2'
+            };
+            
+            // 尝试翻译整个文本
+            let result = text;
+            
+            // 按单词顺序替换（从长到短，避免部分匹配问题）
+            const sortedKeys = Object.keys(commonTranslations).sort((a, b) => b.length - a.length);
+            for (const key of sortedKeys) {
+                // 使用单词边界匹配，避免部分匹配
+                const regex = new RegExp('\\b' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'gi');
+                result = result.replace(regex, commonTranslations[key]);
+            }
+            
+            // 处理下划线，替换为空格
+            result = result.replace(/_/g, ' ');
+            
+            // 清理多余的空格
+            result = result.replace(/\s+/g, ' ').trim();
+            
+            return result !== text ? result : text;
+        }
+
+        // 显示状态消息
+        function showStatus(message, type = 'info') {
+            const statusEl = document.getElementById('status-message');
+            // 支持 HTML 内容
+            statusEl.innerHTML = message;
+            statusEl.className = `status-message ${type}`;
+            statusEl.style.display = 'block';
+            
+            if (type === 'success') {
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                }, 2000);
+            }
+        }
+
+        // 初始化页面
+        async function initPage() {
+            try {
+                // 等待 i18next 初始化完成（最多等待 3 秒）
+                if (typeof window.t === 'undefined') {
+                    await new Promise((resolve) => {
+                        let checkCount = 0;
+                        const maxChecks = 30; // 最多等待 3 秒
+                        const checkInterval = setInterval(() => {
+                            checkCount++;
+                            if (typeof window.t === 'function') {
+                                clearInterval(checkInterval);
+                                resolve();
+                            } else if (checkCount >= maxChecks) {
+                                clearInterval(checkInterval);
+                                console.warn('i18next 初始化超时，使用默认翻译');
+                                resolve();
+                            }
+                        }, 100);
+                    });
+                }
+
+                // 检查 live2dManager 是否已加载
+                if (!window.live2dManager) {
+                    throw new Error(t('live2d.parameterEditor.managerNotLoaded', 'Live2D 管理器未加载，请刷新页面重试'));
+                }
+
+                // 检查 getParameterEditor 方法是否存在
+                if (typeof window.live2dManager.getParameterEditor !== 'function') {
+                    throw new Error(t('live2d.parameterEditor.functionNotLoaded', '参数编辑器功能未加载，请清除浏览器缓存后刷新页面'));
+                }
+
+                // 获取当前模型路径（从 URL 参数或默认模型）
+                const urlParams = new URLSearchParams(window.location.search);
+                currentModelPath = urlParams.get('model') || '/static/mao_pro/mao_pro.model3.json';
+
+                showStatus(t('live2d.parameterEditor.initializing', '正在初始化 Live2D...'), 'info');
+
+                // 初始化 PIXI 应用
+                await window.live2dManager.initPIXI('live2d-canvas', 'live2d-container');
+
+                // 加载模型
+                showStatus(t('live2d.parameterEditor.loadingModel', '正在加载模型...'), 'info');
+                await window.live2dManager.loadModel(currentModelPath, {
+                    dragEnabled: true,
+                    wheelEnabled: true,
+                    mouseTracking: false,  // 禁用鼠标跟踪，让模型静止
+                    loadEmotionMapping: false  // 禁用情感映射，避免表情覆盖参数
+                });
+                
+                // 禁用常驻表情的自动应用，防止覆盖用户设置的参数
+                if (window.live2dManager.persistentExpressionNames) {
+                    window.live2dManager.persistentExpressionNames = [];
+                    console.log('已禁用常驻表情，避免覆盖参数设置');
+                }
+                
+                // 停止所有动作和表情，让模型完全静止
+                const model = window.live2dManager.getCurrentModel();
+                if (model && model.internalModel) {
+                    try {
+                        // 停止所有动作
+                        if (model.internalModel.motionManager) {
+                            if (model.internalModel.motionManager.stopAllMotions) {
+                                model.internalModel.motionManager.stopAllMotions();
+                                console.log('已停止所有动作');
+                            }
+                            
+                            // 停止所有表情
+                            if (model.internalModel.motionManager.expressionManager) {
+                                if (model.internalModel.motionManager.expressionManager.stopAllExpressions) {
+                                    model.internalModel.motionManager.expressionManager.stopAllExpressions();
+                                }
+                                if (model.internalModel.motionManager.expressionManager.resetExpression) {
+                                    model.internalModel.motionManager.expressionManager.resetExpression();
+                                }
+                                console.log('已停止所有表情');
+                            }
+                        }
+                        
+                        // 禁用物理效果（通过将所有物理相关参数设置为0）
+                        const coreModel = model.internalModel.coreModel;
+                        if (coreModel) {
+                            const paramCount = coreModel.getParameterCount();
+                            
+                            // 需要禁用的物理相关参数（包括所有摆动、角度、呼吸等）
+                            const physicsParamPatterns = [
+                                'Angle', 'Breath', 'Sway', 'Rotation', 'Movement',
+                                'Body', 'Hair', 'Robe', 'Pendant', 'Feather',
+                                'Ribbon', 'Brim', 'Flap', 'Streaks', 'Fluff'
+                            ];
+                            
+                            // 重置所有物理相关参数到默认值（通常是0）
+                            let resetCount = 0;
+                            for (let i = 0; i < paramCount; i++) {
+                                try {
+                                    const paramId = coreModel.getParameterId(i);
+                                    // 检查是否是物理相关参数
+                                    const isPhysicsParam = physicsParamPatterns.some(pattern => 
+                                        paramId.includes(pattern)
+                                    );
+                                    
+                                    // 跳过嘴巴相关参数（这些由口型同步控制，但我们已经禁用了）
+                                    if (paramId === 'ParamMouthOpenY' || paramId === 'ParamO' || 
+                                        paramId === 'ParamA' || paramId === 'ParamI' || 
+                                        paramId === 'ParamU' || paramId === 'ParamE') {
+                                        continue;
+                                    }
+                                    
+                                    // 如果是物理参数，重置为默认值
+                                    if (isPhysicsParam) {
+                                        const defaultValue = coreModel.parameters.defaultValues[i];
+                                        coreModel.setParameterValueByIndex(i, defaultValue);
+                                        resetCount++;
+                                    }
+                                } catch (e) {
+                                    // 忽略错误
+                                }
+                            }
+                            
+                            // 强制重置关键角度参数为0（头部角度）
+                            try {
+                                coreModel.setParameterValueById('ParamAngleX', 0);
+                                coreModel.setParameterValueById('ParamAngleY', 0);
+                                coreModel.setParameterValueById('ParamAngleZ', 0);
+                                coreModel.setParameterValueById('ParamBodyAngleX', 0);
+                                coreModel.setParameterValueById('ParamBodyAngleY', 0);
+                                coreModel.setParameterValueById('ParamBodyAngleZ', 0);
+                                coreModel.setParameterValueById('ParamBreath', 0);
+                                // 重置眼球跟踪参数
+                                coreModel.setParameterValueById('ParamEyeBallX', 0);
+                                coreModel.setParameterValueById('ParamEyeBallY', 0);
+                            } catch (e) {
+                                // 忽略错误
+                            }
+                            
+                            // 禁用模型的 focus 方法（头部跟踪）
+                            try {
+                                if (model.focus) {
+                                    // 保存原始方法
+                                    if (!model._origFocus) {
+                                        model._origFocus = model.focus;
+                                    }
+                                    // 覆盖为空的函数，禁用头部跟踪
+                                    model.focus = function() {
+                                        // 不执行任何操作，禁用头部跟踪
+                                    };
+                                    console.log('已禁用模型头部跟踪（focus方法）');
+                                }
+                                
+                                // 保持模型的交互性以支持拖动，但禁用头部跟踪
+                                // model.interactive 应该保持为 true（由 setupDragAndDrop 设置）
+                                
+                                // 只移除 PIXI stage 上的 pointermove 监听器（这些可能触发头部跟踪）
+                                // 但不移除模型上的监听器（这些是拖动功能需要的）
+                                const manager = window.live2dManager;
+                                if (manager && manager.pixi_app && manager.pixi_app.stage) {
+                                    try {
+                                        // 移除可能触发头部跟踪的监听器
+                                        manager.pixi_app.stage.removeAllListeners('pointermove');
+                                        manager.pixi_app.stage.removeAllListeners('mousemove');
+                                        console.log('已移除 stage 上的鼠标移动监听器（保留拖动功能）');
+                                    } catch (e) {
+                                        // 忽略错误
+                                    }
+                                }
+                            } catch (e) {
+                                console.warn('禁用头部跟踪失败:', e);
+                            }
+                            
+                            console.log(`已重置 ${resetCount} 个物理参数，模型将保持静止`);
+                        }
+                        
+                        // 禁用模型的物理更新（通过覆盖 updateParameters 方法）
+                        try {
+                            if (model.internalModel.motionManager) {
+                                // 保存原始的 updateParameters 方法
+                                if (!model.internalModel.motionManager._origUpdateParameters) {
+                                    model.internalModel.motionManager._origUpdateParameters = 
+                                        model.internalModel.motionManager.updateParameters;
+                                }
+                                
+                                // 覆盖为空的更新方法，禁用物理效果
+                                model.internalModel.motionManager.updateParameters = function() {
+                                    // 不执行任何更新，保持模型静止
+                                };
+                                
+                                console.log('已禁用 motionManager 的物理更新');
+                            }
+                            
+                            // 同样禁用 expressionManager 的更新
+                            if (model.internalModel.motionManager && 
+                                model.internalModel.motionManager.expressionManager) {
+                                if (!model.internalModel.motionManager.expressionManager._origUpdateParameters) {
+                                    model.internalModel.motionManager.expressionManager._origUpdateParameters = 
+                                        model.internalModel.motionManager.expressionManager.updateParameters;
+                                }
+                                
+                                model.internalModel.motionManager.expressionManager.updateParameters = function() {
+                                    // 不执行任何更新
+                                };
+                                
+                                console.log('已禁用 expressionManager 的更新');
+                            }
+                        } catch (error) {
+                            console.warn('禁用物理更新失败:', error);
+                        }
+                    } catch (error) {
+                        console.warn('停止动作/表情失败:', error);
+                    }
+                }
+                
+                // 添加持续保护机制：定期重置物理参数，确保模型保持静止
+                let physicsProtectionInterval = null;
+                let headProtectionAnimationFrame = null;
+                
+                if (model && model.internalModel && model.internalModel.coreModel) {
+                    const coreModel = model.internalModel.coreModel;
+                    const physicsParamPatterns = [
+                        'Angle', 'Breath', 'Sway', 'Rotation', 'Movement',
+                        'Body', 'Hair', 'Robe', 'Pendant', 'Feather',
+                        'Ribbon', 'Brim', 'Flap', 'Streaks', 'Fluff'
+                    ];
+                    
+                    // 获取头部角度参数的索引（一次性获取，提高性能）
+                    const angleXIndex = coreModel.getParameterIndex('ParamAngleX');
+                    const angleYIndex = coreModel.getParameterIndex('ParamAngleY');
+                    const angleZIndex = coreModel.getParameterIndex('ParamAngleZ');
+                    const eyeBallXIndex = coreModel.getParameterIndex('ParamEyeBallX');
+                    const eyeBallYIndex = coreModel.getParameterIndex('ParamEyeBallY');
+                    
+                    // 使用 PIXI ticker 在模型更新之后立即重置头部参数（最可靠的方法）
+                    // 这样可以确保即使模型的内部更新机制修改了头部参数，也会立即被重置
+                    const manager = window.live2dManager;
+                    if (manager && manager.pixi_app && manager.pixi_app.ticker) {
+                        const headProtectionTicker = () => {
+                            try {
+                                // 在模型更新之后立即重置头部角度参数为0
+                                if (angleXIndex !== -1) {
+                                    coreModel.parameters.values[angleXIndex] = 0;
+                                    coreModel.setParameterValueByIndex(angleXIndex, 0);
+                                }
+                                if (angleYIndex !== -1) {
+                                    coreModel.parameters.values[angleYIndex] = 0;
+                                    coreModel.setParameterValueByIndex(angleYIndex, 0);
+                                }
+                                if (angleZIndex !== -1) {
+                                    coreModel.parameters.values[angleZIndex] = 0;
+                                    coreModel.setParameterValueByIndex(angleZIndex, 0);
+                                }
+                                if (eyeBallXIndex !== -1) {
+                                    coreModel.parameters.values[eyeBallXIndex] = 0;
+                                    coreModel.setParameterValueByIndex(eyeBallXIndex, 0);
+                                }
+                                if (eyeBallYIndex !== -1) {
+                                    coreModel.parameters.values[eyeBallYIndex] = 0;
+                                    coreModel.setParameterValueByIndex(eyeBallYIndex, 0);
+                                }
+                            } catch (e) {
+                                // 忽略错误
+                            }
+                        };
+                        
+                        // 添加到 ticker，优先级设置为最高，确保在模型更新之后执行
+                        manager.pixi_app.ticker.add(headProtectionTicker);
+                        console.log('已启动头部参数保护机制（ticker回调）');
+                        
+                        // 保存 ticker 回调引用，以便清理
+                        model._headProtectionTicker = headProtectionTicker;
+                    }
+                    
+                    // 同时使用 requestAnimationFrame 作为备用保护
+                    function resetHeadParameters() {
+                        try {
+                            // 每帧都强制重置头部角度参数为0
+                            if (angleXIndex !== -1) {
+                                coreModel.parameters.values[angleXIndex] = 0;
+                                coreModel.setParameterValueByIndex(angleXIndex, 0);
+                            }
+                            if (angleYIndex !== -1) {
+                                coreModel.parameters.values[angleYIndex] = 0;
+                                coreModel.setParameterValueByIndex(angleYIndex, 0);
+                            }
+                            if (angleZIndex !== -1) {
+                                coreModel.parameters.values[angleZIndex] = 0;
+                                coreModel.setParameterValueByIndex(angleZIndex, 0);
+                            }
+                            if (eyeBallXIndex !== -1) {
+                                coreModel.parameters.values[eyeBallXIndex] = 0;
+                                coreModel.setParameterValueByIndex(eyeBallXIndex, 0);
+                            }
+                            if (eyeBallYIndex !== -1) {
+                                coreModel.parameters.values[eyeBallYIndex] = 0;
+                                coreModel.setParameterValueByIndex(eyeBallYIndex, 0);
+                            }
+                        } catch (e) {
+                            // 忽略错误
+                        }
+                        
+                        // 继续下一帧
+                        headProtectionAnimationFrame = requestAnimationFrame(resetHeadParameters);
+                    }
+                    
+                    // 启动头部参数保护（每帧重置）
+                    headProtectionAnimationFrame = requestAnimationFrame(resetHeadParameters);
+                    console.log('已启动头部参数保护机制（requestAnimationFrame备用）');
+                    
+                    // 其他物理参数的保护（使用 setInterval，频率较低）
+                    physicsProtectionInterval = setInterval(() => {
+                        try {
+                            const paramCount = coreModel.getParameterCount();
+                            for (let i = 0; i < paramCount; i++) {
+                                try {
+                                    const paramId = coreModel.getParameterId(i);
+                                    const isPhysicsParam = physicsParamPatterns.some(pattern => 
+                                        paramId.includes(pattern)
+                                    );
+                                    
+                                    // 跳过嘴巴相关参数和用户正在编辑的参数
+                                    if (paramId === 'ParamMouthOpenY' || paramId === 'ParamO' || 
+                                        paramId === 'ParamA' || paramId === 'ParamI' || 
+                                        paramId === 'ParamU' || paramId === 'ParamE') {
+                                        continue;
+                                    }
+                                    
+                                    // 跳过头部角度参数（已经在 requestAnimationFrame 中处理了）
+                                    if (paramId === 'ParamAngleX' || paramId === 'ParamAngleY' || 
+                                        paramId === 'ParamAngleZ' || paramId === 'ParamEyeBallX' || 
+                                        paramId === 'ParamEyeBallY') {
+                                        continue;
+                                    }
+                                    
+                                    // 如果是物理参数，持续重置为默认值
+                                    if (isPhysicsParam) {
+                                        const defaultValue = coreModel.parameters.defaultValues[i];
+                                        const currentValue = coreModel.parameters.values[i];
+                                        // 如果当前值不是默认值，重置它
+                                        if (Math.abs(currentValue - defaultValue) > 0.01) {
+                                            coreModel.setParameterValueByIndex(i, defaultValue);
+                                        }
+                                    }
+                                } catch (e) {
+                                    // 忽略错误
+                                }
+                            }
+                        } catch (error) {
+                            // 忽略错误
+                        }
+                    }, 100); // 每100ms检查一次其他物理参数
+                    
+                    console.log('已启动物理参数保护机制');
+                }
+                
+                // 页面卸载时清理保护机制
+                window.addEventListener('beforeunload', () => {
+                    if (physicsProtectionInterval) {
+                        clearInterval(physicsProtectionInterval);
+                    }
+                    if (headProtectionAnimationFrame) {
+                        cancelAnimationFrame(headProtectionAnimationFrame);
+                    }
+                    // 移除 ticker 回调
+                    if (model && model._headProtectionTicker) {
+                        const manager = window.live2dManager;
+                        if (manager && manager.pixi_app && manager.pixi_app.ticker) {
+                            manager.pixi_app.ticker.remove(model._headProtectionTicker);
+                        }
+                    }
+                });
+
+                // 获取参数编辑器
+                parameterEditor = window.live2dManager.getParameterEditor();
+                if (!parameterEditor) {
+                    throw new Error(t('live2d.parameterEditor.cannotCreateEditor', '无法创建参数编辑器'));
+                }
+
+                // 加载参数定义
+                showStatus(t('live2d.parameterEditor.loadingParameterDefinitions', '正在加载参数定义...'), 'info');
+                const cdi3Path = currentModelPath.replace('.model3.json', '.cdi3.json');
+                await parameterEditor.loadParameterDefinitions(cdi3Path);
+
+                // 创建 UI
+                createParameterUI();
+
+                // 加载预设列表
+                await loadPresetList();
+
+                showStatus(t('live2d.parameterEditor.ready', '参数编辑器已就绪'), 'success');
+            } catch (error) {
+                console.error('初始化失败:', error);
+                let errorMsg = t('live2d.parameterEditor.initFailedWithMessage', '初始化失败: {message}', { message: error.message });
+                if (error.message.includes('getParameterEditor') || error.message.includes('未加载') || error.message.includes('not loaded')) {
+                    errorMsg += '<br><br>' + t('live2d.parameterEditor.tipFirstTime', '💡 提示：如果这是首次使用，请尝试：') + 
+                                '<br>' + t('live2d.parameterEditor.tip1', '1. 强制刷新页面（Ctrl+F5 或 Cmd+Shift+R）') + 
+                                '<br>' + t('live2d.parameterEditor.tip2', '2. 清除浏览器缓存后重新加载');
+                }
+                showStatus(errorMsg, 'error');
+            }
+        }
+
+        // 创建参数 UI
+        function createParameterUI() {
+            const container = document.getElementById('parameter-groups-container');
+            container.innerHTML = '';
+
+            const groups = parameterEditor.getParameterGroups();
+            parameterGroups = groups;
+
+            if (groups.length === 0) {
+                container.innerHTML = `<div class="loading">${t('live2d.parameterEditor.noParametersFound', '未找到参数定义')}</div>`;
+                return;
+            }
+
+            groups.forEach(group => {
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'parameter-group';
+                groupDiv.id = `group-${group.id}`;
+
+                const header = document.createElement('div');
+                header.className = 'parameter-group-header';
+                header.onclick = () => toggleGroup(group.id);
+                const translatedGroupName = translateGroupName(group.id, group.name);
+                header.innerHTML = `
+                    <h3>${translatedGroupName}</h3>
+                    <span class="parameter-group-toggle">▼</span>
+                `;
+
+                const itemsDiv = document.createElement('div');
+                itemsDiv.className = 'parameter-items';
+
+                group.parameters.forEach(param => {
+                    const paramDiv = createParameterItem(param);
+                    itemsDiv.appendChild(paramDiv);
+                });
+
+                groupDiv.appendChild(header);
+                groupDiv.appendChild(itemsDiv);
+                container.appendChild(groupDiv);
+            });
+        }
+
+        // 创建单个参数项
+        function createParameterItem(param) {
+            const paramDiv = document.createElement('div');
+            paramDiv.className = 'parameter-item';
+            paramDiv.id = `param-${param.id}`;
+
+            let currentValue = parameterEditor.getParameterValue(param.id);
+            // 如果获取失败，使用参数信息中保存的值或默认值
+            if (currentValue === null || currentValue === undefined) {
+                currentValue = param.current !== undefined ? param.current : param.default;
+            }
+
+            // 翻译参数名称
+            const translatedParamName = translateParameterName(param.name, param.id);
+
+            paramDiv.innerHTML = `
+                <div class="parameter-label-row">
+                    <span class="parameter-label">${translatedParamName}</span>
+                    <span class="parameter-value-display" id="value-${param.id}">${currentValue.toFixed(2)}</span>
+                </div>
+                <div class="parameter-slider-container">
+                    <input type="range" 
+                           class="parameter-slider" 
+                           id="slider-${param.id}"
+                           min="${param.min}" 
+                           max="${param.max}" 
+                           step="${(param.max - param.min) / 100}"
+                           value="${currentValue}"
+                           oninput="updateParameter('${param.id}', this.value)">
+                    <button class="parameter-reset-btn" onclick="resetParameter('${param.id}')" title="${t('live2d.parameterEditor.resetToDefault', '重置到默认值')}">↺</button>
+                </div>
+            `;
+
+            return paramDiv;
+        }
+
+        // 更新参数值
+        function updateParameter(paramId, value) {
+            if (!parameterEditor) return;
+
+            const numValue = parseFloat(value);
+            if (parameterEditor.setParameterValue(paramId, numValue)) {
+                // 更新显示值
+                const valueDisplay = document.getElementById(`value-${paramId}`);
+                if (valueDisplay) {
+                    valueDisplay.textContent = numValue.toFixed(2);
+                }
+            }
+        }
+
+        // 重置单个参数
+        function resetParameter(paramId) {
+            if (!parameterEditor) return;
+
+            if (parameterEditor.resetParameter(paramId)) {
+                // 更新滑块和显示值
+                const slider = document.getElementById(`slider-${paramId}`);
+                const valueDisplay = document.getElementById(`value-${paramId}`);
+                const paramInfo = parameterEditor.parameterInfo[paramId];
+
+                if (slider) {
+                    slider.value = paramInfo.default;
+                }
+                if (valueDisplay) {
+                    valueDisplay.textContent = paramInfo.default.toFixed(2);
+                }
+
+                // 使用翻译后的参数名称
+                const translatedName = translateParameterName(paramInfo.name, paramId);
+                showStatus(t('live2d.parameterEditor.parameterReset', '已重置参数: {name}', { name: translatedName }), 'success');
+            }
+        }
+
+        // 重置所有参数
+        function resetAllParameters() {
+            if (!parameterEditor) return;
+
+            if (confirm(t('live2d.parameterEditor.confirmResetAll', '确定要重置所有参数到默认值吗？'))) {
+                parameterEditor.resetAllParameters();
+
+                // 更新所有 UI
+                Object.keys(parameterEditor.parameterInfo).forEach(paramId => {
+                    const slider = document.getElementById(`slider-${paramId}`);
+                    const valueDisplay = document.getElementById(`value-${paramId}`);
+                    const paramInfo = parameterEditor.parameterInfo[paramId];
+
+                    if (slider) {
+                        slider.value = paramInfo.default;
+                    }
+                    if (valueDisplay) {
+                        valueDisplay.textContent = paramInfo.default.toFixed(2);
+                    }
+                });
+
+                showStatus(t('live2d.parameterEditor.allParametersReset', '所有参数已重置到默认值'), 'success');
+            }
+        }
+
+        // 切换参数组展开/折叠
+        function toggleGroup(groupId) {
+            const groupDiv = document.getElementById(`group-${groupId}`);
+            if (groupDiv) {
+                groupDiv.classList.toggle('collapsed');
+            }
+        }
+
+        // 保存预设（使用输入框中的名称）
+        async function savePresetWithName() {
+            const nameInput = document.getElementById('preset-name-input');
+            const presetName = nameInput.value.trim();
+
+            if (!presetName) {
+                showStatus(t('live2d.parameterEditor.enterPresetNameError', '请输入预设名称'), 'error');
+                nameInput.focus();
+                return;
+            }
+
+            await savePreset(presetName);
+            nameInput.value = '';
+        }
+
+        // 保存预设（使用服务器端 API）
+        async function savePreset(presetName = null) {
+            if (!parameterEditor) {
+                showStatus(t('live2d.parameterEditor.editorNotInitialized', '参数编辑器未初始化'), 'error');
+                return;
+            }
+
+            if (!presetName) {
+                presetName = prompt(t('live2d.parameterEditor.enterPresetName', '请输入预设名称:'));
+                if (!presetName || !presetName.trim()) {
+                    return;
+                }
+                presetName = presetName.trim();
+            }
+
+            try {
+                const values = parameterEditor.getAllParameterValues();
+                
+                const response = await fetch('/api/live2d/parameter_presets', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        name: presetName,
+                        model_path: currentModelPath,
+                        values: values
+                    })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    showStatus(t('live2d.parameterEditor.presetSavedWithName', '预设 "{name}" 已保存', { name: presetName }), 'success');
+                    await loadPresetList();
+                } else {
+                    showStatus(t('live2d.parameterEditor.presetSaveFailedWithError', '保存预设失败: {error}', { error: result.error || t('common.unknownError', '未知错误') }), 'error');
+                }
+            } catch (error) {
+                console.error('保存预设失败:', error);
+                showStatus(t('live2d.parameterEditor.presetSaveFailedWithMessage', '保存预设失败: {message}', { message: error.message }), 'error');
+            }
+        }
+
+        // 加载预设（使用服务器端 API）
+        async function loadPreset(presetName) {
+            if (!parameterEditor) {
+                showStatus(t('live2d.parameterEditor.editorNotInitialized', '参数编辑器未初始化'), 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/live2d/parameter_presets/${encodeURIComponent(presetName)}`);
+                const result = await response.json();
+
+                if (!result.success || !result.preset) {
+                    showStatus(t('live2d.parameterEditor.presetNotFound', '预设不存在'), 'error');
+                    return;
+                }
+
+                const preset = result.preset;
+
+                // 检查模型路径是否匹配
+                if (preset.model_path !== currentModelPath) {
+                    if (!confirm(t('live2d.parameterEditor.presetModelMismatch', '此预设是为模型 "{path}" 创建的，当前模型可能不匹配。是否继续加载？', { path: preset.model_path }))) {
+                        return;
+                    }
+                }
+
+                // 应用参数值
+                parameterEditor.applyParameterValues(preset.values);
+
+                // 更新所有 UI
+                Object.keys(preset.values).forEach(paramId => {
+                    const slider = document.getElementById(`slider-${paramId}`);
+                    const valueDisplay = document.getElementById(`value-${paramId}`);
+
+                    if (slider) {
+                        slider.value = preset.values[paramId];
+                    }
+                    if (valueDisplay) {
+                        valueDisplay.textContent = parseFloat(preset.values[paramId]).toFixed(2);
+                    }
+                });
+
+                showStatus(t('live2d.parameterEditor.presetLoadedWithName', '预设 "{name}" 已加载', { name: presetName }), 'success');
+            } catch (error) {
+                console.error('加载预设失败:', error);
+                showStatus(t('live2d.parameterEditor.presetLoadFailedWithMessage', '加载预设失败: {message}', { message: error.message }), 'error');
+            }
+        }
+
+        // 删除预设（使用服务器端 API）
+        async function deletePreset(presetName, event) {
+            event.stopPropagation();
+
+            if (!confirm(t('live2d.parameterEditor.confirmDeletePreset', '确定要删除预设 "{name}" 吗？', { name: presetName }))) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/live2d/parameter_presets/${encodeURIComponent(presetName)}`, {
+                    method: 'DELETE'
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showStatus(t('live2d.parameterEditor.presetDeletedWithName', '预设 "{name}" 已删除', { name: presetName }), 'success');
+                    await loadPresetList();
+                } else {
+                    showStatus(t('live2d.parameterEditor.presetDeleteFailedWithError', '删除预设失败: {error}', { error: result.error || t('common.unknownError', '未知错误') }), 'error');
+                }
+            } catch (error) {
+                console.error('删除预设失败:', error);
+                showStatus(t('live2d.parameterEditor.presetDeleteFailedWithMessage', '删除预设失败: {message}', { message: error.message }), 'error');
+            }
+        }
+
+        // 加载预设列表（使用服务器端 API）
+        async function loadPresetList() {
+            const presetList = document.getElementById('preset-list');
+            
+            try {
+                const response = await fetch(`/api/live2d/parameter_presets?model_path=${encodeURIComponent(currentModelPath)}`);
+                const result = await response.json();
+
+                if (!result.success) {
+                    throw new Error(result.error || t('live2d.parameterEditor.loadPresetsFailed', '获取预设列表失败'));
+                }
+
+                const presets = result.presets || {};
+                const presetNames = Object.keys(presets);
+
+                if (presetNames.length === 0) {
+                    presetList.innerHTML = `<div style="text-align: center; color: #999; padding: 10px; font-size: 12px;">${t('live2d.parameterEditor.noPresets', '暂无预设')}</div>`;
+                    return;
+                }
+
+                presetList.innerHTML = presetNames.map(name => {
+                    const preset = presets[name];
+                    const timestamp = preset.timestamp ? new Date(preset.timestamp).toLocaleString('zh-CN') : '';
+                    return `
+                        <div class="preset-item" onclick="loadPreset('${name.replace(/'/g, "\\'")}')">
+                            <div>
+                                <span class="preset-item-name">${name}</span>
+                                ${timestamp ? `<div style="font-size: 11px; color: #999; margin-top: 2px;">${timestamp}</div>` : ''}
+                            </div>
+                            <div class="preset-item-actions">
+                                <button class="preset-delete-btn" onclick="deletePreset('${name.replace(/'/g, "\\'")}', event)">${t('live2d.parameterEditor.delete', '删除')}</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (error) {
+                console.error('加载预设列表失败:', error);
+                presetList.innerHTML = `<div style="text-align: center; color: #c62828; padding: 10px; font-size: 12px;">${t('live2d.parameterEditor.loadPresetsFailed', '加载预设列表失败')}</div>`;
+            }
+        }
+
+        // 翻译所有 data-i18n 属性的元素
+        function translatePage() {
+            if (typeof window.t !== 'function') return;
+            
+            // 翻译所有带有 data-i18n 属性的元素
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (key) {
+                    const translated = window.t(key);
+                    if (translated && translated !== key) {
+                        if (el.tagName === 'INPUT' && el.type === 'text') {
+                            el.placeholder = translated;
+                        } else {
+                            el.textContent = translated;
+                        }
+                    }
+                }
+            });
+            
+            // 翻译所有带有 data-i18n-placeholder 属性的元素
+            document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+                const key = el.getAttribute('data-i18n-placeholder');
+                if (key && typeof window.t === 'function') {
+                    const translated = window.t(key);
+                    if (translated && translated !== key) {
+                        el.placeholder = translated;
+                    }
+                }
+            });
+        }
+
+        // 等待所有脚本加载完成后再初始化
+        window.addEventListener('DOMContentLoaded', () => {
+            // 延迟一下确保所有脚本都已加载
+            setTimeout(() => {
+                // 等待 i18next 初始化后翻译页面
+                if (typeof window.t === 'function') {
+                    translatePage();
+                } else {
+                    // 如果 i18next 还没初始化，等待一下
+                    let checkCount = 0;
+                    const checkInterval = setInterval(() => {
+                        checkCount++;
+                        if (typeof window.t === 'function') {
+                            clearInterval(checkInterval);
+                            translatePage();
+                        } else if (checkCount >= 30) {
+                            clearInterval(checkInterval);
+                        }
+                    }, 100);
+                }
+                
+                // 再次检查确保 live2d.js 已加载
+                if (!window.live2dManager) {
+                    console.error('live2dManager 未找到，等待脚本加载...');
+                    // 如果还没加载，再等一会儿
+                    setTimeout(() => {
+                        if (!window.live2dManager) {
+                            const errorMsg = typeof t !== 'undefined' ? 
+                                t('live2d.parameterEditor.managerNotLoaded', 'Live2D 管理器加载失败，请刷新页面') : 
+                                'Live2D 管理器加载失败，请刷新页面';
+                            showStatus(errorMsg, 'error');
+                            return;
+                        }
+                        initPage();
+                    }, 500);
+                } else {
+                    initPage();
+                }
+            }, 100);
+        });
+    </script>
+</body>
+</html>
+
