@@ -326,6 +326,7 @@
       "presetDeleteFailedWithMessage": "删除预设失败: {message}",
       "loadingPresets": "正在加载预设列表...",
       "loadPresetsFailed": "加载预设列表失败",
+      "backToManager": "← 返回模型管理",
       "parameterGroups": {
         "ParamGroupFace": "面部",
         "ParamGroupEyes": "眼睛",
@@ -478,6 +479,14 @@
         "Overall Color 1": "整体颜色1",
         "Overall Color 2": "整体颜色2"
       }
+    },
+    "presetSelector": {
+      "label": "🎭 应用预设",
+      "selectPlaceholder": "选择预设...",
+      "noPresets": "暂无预设",
+      "apply": "确认应用",
+      "applySuccess": "已应用预设 \"{name}\"（{count} 个参数）",
+      "applyFailed": "应用预设失败: {error}"
     }
   },
   "voice": {

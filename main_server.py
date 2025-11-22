@@ -2239,6 +2239,8 @@ async def get_parameter_presets(model_path: str = None):
     """获取 Live2D 参数预设列表"""
     try:
         presets = load_parameter_presets(model_path)
+        # 返回字典格式，保持与参数编辑器页面的兼容性
+        # 参数编辑器页面期望的是对象格式 {preset_name: {model_path, values, timestamp}}
         return {"success": True, "presets": presets}
     except Exception as e:
         logger.error(f"获取参数预设失败: {e}")
@@ -2292,6 +2294,30 @@ async def get_parameter_preset_api(preset_name: str):
             return JSONResponse(status_code=404, content={"success": False, "error": "预设不存在"})
     except Exception as e:
         logger.error(f"获取参数预设失败: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+@app.post('/api/live2d/apply_preset')
+async def apply_preset_api(request: Request):
+    """应用预设到当前模型（前端调用）"""
+    try:
+        data = await request.json()
+        preset_name = data.get('preset_name')
+        
+        if not preset_name:
+            return JSONResponse(status_code=400, content={"success": False, "error": "预设名称不能为空"})
+        
+        preset = get_parameter_preset(preset_name)
+        if not preset:
+            return JSONResponse(status_code=404, content={"success": False, "error": "预设不存在"})
+        
+        # 返回预设数据，由前端应用
+        return {
+            "success": True,
+            "preset": preset,
+            "values": preset.get('values', {})
+        }
+    except Exception as e:
+        logger.error(f"应用预设失败: {e}")
         return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
 @app.post('/api/live2d/emotion_mapping/{model_name}')

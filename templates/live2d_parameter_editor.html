@@ -400,7 +400,9 @@
     <!-- 参数编辑器面板 -->
     <div id="editor-panel">
         <div class="editor-header">
+            <button class="btn btn-secondary" onclick="goBackToManager()" style="padding: 6px 12px; font-size: 14px;" data-i18n="live2d.parameterEditor.backToManager">← 返回模型管理</button>
             <h2 data-i18n="live2d.parameterEditor.title">Live2D 参数编辑器</h2>
+            <div style="width: 120px;"></div> <!-- 占位，保持标题居中 -->
         </div>
 
         <div id="status-message" class="status-message info" style="display: none;"></div>
@@ -688,6 +690,9 @@
                 // 获取当前模型路径（从 URL 参数或默认模型）
                 const urlParams = new URLSearchParams(window.location.search);
                 currentModelPath = urlParams.get('model') || '/static/mao_pro/mao_pro.model3.json';
+                
+                // 保存返回URL（如果有）
+                window.returnUrl = urlParams.get('return') || '/l2d';
 
                 showStatus(t('live2d.parameterEditor.initializing', '正在初始化 Live2D...'), 'info');
 
@@ -696,6 +701,10 @@
 
                 // 加载模型
                 showStatus(t('live2d.parameterEditor.loadingModel', '正在加载模型...'), 'info');
+                
+                // 确保模型未锁定，以便支持拖拽
+                window.live2dManager.isLocked = false;
+                
                 await window.live2dManager.loadModel(currentModelPath, {
                     dragEnabled: true,
                     wheelEnabled: true,
@@ -708,6 +717,9 @@
                     window.live2dManager.persistentExpressionNames = [];
                     console.log('已禁用常驻表情，避免覆盖参数设置');
                 }
+                
+                // 确保模型未锁定，以便支持拖拽（再次确认）
+                window.live2dManager.isLocked = false;
                 
                 // 停止所有动作和表情，让模型完全静止
                 const model = window.live2dManager.getCurrentModel();
@@ -805,19 +817,10 @@
                                 // 保持模型的交互性以支持拖动，但禁用头部跟踪
                                 // model.interactive 应该保持为 true（由 setupDragAndDrop 设置）
                                 
-                                // 只移除 PIXI stage 上的 pointermove 监听器（这些可能触发头部跟踪）
-                                // 但不移除模型上的监听器（这些是拖动功能需要的）
-                                const manager = window.live2dManager;
-                                if (manager && manager.pixi_app && manager.pixi_app.stage) {
-                                    try {
-                                        // 移除可能触发头部跟踪的监听器
-                                        manager.pixi_app.stage.removeAllListeners('pointermove');
-                                        manager.pixi_app.stage.removeAllListeners('mousemove');
-                                        console.log('已移除 stage 上的鼠标移动监听器（保留拖动功能）');
-                                    } catch (e) {
-                                        // 忽略错误
-                                    }
-                                }
+                                // 注意：不要移除 stage 上的 pointermove 监听器！
+                                // setupDragAndDrop 在 stage 上设置了 pointermove 监听器来处理拖拽
+                                // 移除它会破坏拖拽功能
+                                // 头部跟踪已经通过 mouseTracking: false 和禁用 focus() 方法来禁用了
                             } catch (e) {
                                 console.warn('禁用头部跟踪失败:', e);
                             }
@@ -885,28 +888,33 @@
                     
                     // 使用 PIXI ticker 在模型更新之后立即重置头部参数（最可靠的方法）
                     // 这样可以确保即使模型的内部更新机制修改了头部参数，也会立即被重置
+                    // 但只保护用户未手动修改的参数
                     const manager = window.live2dManager;
                     if (manager && manager.pixi_app && manager.pixi_app.ticker) {
                         const headProtectionTicker = () => {
                             try {
-                                // 在模型更新之后立即重置头部角度参数为0
-                                if (angleXIndex !== -1) {
+                                // 获取参数编辑器，检查哪些参数是用户手动修改的
+                                const editor = window.live2dManager.getParameterEditor();
+                                if (!editor) return;
+                                
+                                // 只保护用户未手动修改的头部参数
+                                if (angleXIndex !== -1 && !editor.userModifiedParams.has('ParamAngleX')) {
                                     coreModel.parameters.values[angleXIndex] = 0;
                                     coreModel.setParameterValueByIndex(angleXIndex, 0);
                                 }
-                                if (angleYIndex !== -1) {
+                                if (angleYIndex !== -1 && !editor.userModifiedParams.has('ParamAngleY')) {
                                     coreModel.parameters.values[angleYIndex] = 0;
                                     coreModel.setParameterValueByIndex(angleYIndex, 0);
                                 }
-                                if (angleZIndex !== -1) {
+                                if (angleZIndex !== -1 && !editor.userModifiedParams.has('ParamAngleZ')) {
                                     coreModel.parameters.values[angleZIndex] = 0;
                                     coreModel.setParameterValueByIndex(angleZIndex, 0);
                                 }
-                                if (eyeBallXIndex !== -1) {
+                                if (eyeBallXIndex !== -1 && !editor.userModifiedParams.has('ParamEyeBallX')) {
                                     coreModel.parameters.values[eyeBallXIndex] = 0;
                                     coreModel.setParameterValueByIndex(eyeBallXIndex, 0);
                                 }
-                                if (eyeBallYIndex !== -1) {
+                                if (eyeBallYIndex !== -1 && !editor.userModifiedParams.has('ParamEyeBallY')) {
                                     coreModel.parameters.values[eyeBallYIndex] = 0;
                                     coreModel.setParameterValueByIndex(eyeBallYIndex, 0);
                                 }
@@ -926,24 +934,32 @@
                     // 同时使用 requestAnimationFrame 作为备用保护
                     function resetHeadParameters() {
                         try {
-                            // 每帧都强制重置头部角度参数为0
-                            if (angleXIndex !== -1) {
+                            // 获取参数编辑器，检查哪些参数是用户手动修改的
+                            const editor = window.live2dManager.getParameterEditor();
+                            if (!editor) {
+                                // 如果编辑器不存在，继续下一帧
+                                headProtectionAnimationFrame = requestAnimationFrame(resetHeadParameters);
+                                return;
+                            }
+                            
+                            // 只保护用户未手动修改的头部参数
+                            if (angleXIndex !== -1 && !editor.userModifiedParams.has('ParamAngleX')) {
                                 coreModel.parameters.values[angleXIndex] = 0;
                                 coreModel.setParameterValueByIndex(angleXIndex, 0);
                             }
-                            if (angleYIndex !== -1) {
+                            if (angleYIndex !== -1 && !editor.userModifiedParams.has('ParamAngleY')) {
                                 coreModel.parameters.values[angleYIndex] = 0;
                                 coreModel.setParameterValueByIndex(angleYIndex, 0);
                             }
-                            if (angleZIndex !== -1) {
+                            if (angleZIndex !== -1 && !editor.userModifiedParams.has('ParamAngleZ')) {
                                 coreModel.parameters.values[angleZIndex] = 0;
                                 coreModel.setParameterValueByIndex(angleZIndex, 0);
                             }
-                            if (eyeBallXIndex !== -1) {
+                            if (eyeBallXIndex !== -1 && !editor.userModifiedParams.has('ParamEyeBallX')) {
                                 coreModel.parameters.values[eyeBallXIndex] = 0;
                                 coreModel.setParameterValueByIndex(eyeBallXIndex, 0);
                             }
-                            if (eyeBallYIndex !== -1) {
+                            if (eyeBallYIndex !== -1 && !editor.userModifiedParams.has('ParamEyeBallY')) {
                                 coreModel.parameters.values[eyeBallYIndex] = 0;
                                 coreModel.setParameterValueByIndex(eyeBallYIndex, 0);
                             }
@@ -962,15 +978,25 @@
                     // 其他物理参数的保护（使用 setInterval，频率较低）
                     physicsProtectionInterval = setInterval(() => {
                         try {
+                            // 获取参数编辑器，检查哪些参数是用户手动修改的
+                            const editor = window.live2dManager.getParameterEditor();
+                            if (!editor) return;
+                            
                             const paramCount = coreModel.getParameterCount();
                             for (let i = 0; i < paramCount; i++) {
                                 try {
                                     const paramId = coreModel.getParameterId(i);
+                                    
+                                    // 跳过用户手动修改的参数
+                                    if (editor.userModifiedParams.has(paramId)) {
+                                        continue;
+                                    }
+                                    
                                     const isPhysicsParam = physicsParamPatterns.some(pattern => 
                                         paramId.includes(pattern)
                                     );
                                     
-                                    // 跳过嘴巴相关参数和用户正在编辑的参数
+                                    // 跳过嘴巴相关参数
                                     if (paramId === 'ParamMouthOpenY' || paramId === 'ParamO' || 
                                         paramId === 'ParamA' || paramId === 'ParamI' || 
                                         paramId === 'ParamU' || paramId === 'ParamE') {
@@ -1308,28 +1334,48 @@
 
         // 删除预设（使用服务器端 API）
         async function deletePreset(presetName, event) {
-            event.stopPropagation();
+            if (event) {
+                event.stopPropagation();
+                event.preventDefault();
+            }
+
+            if (!presetName) {
+                console.error('删除预设失败: 预设名称为空');
+                showStatus(t('live2d.parameterEditor.presetDeleteFailedWithMessage', '删除预设失败: {message}', { message: '预设名称为空' }), 'error');
+                return;
+            }
 
             if (!confirm(t('live2d.parameterEditor.confirmDeletePreset', '确定要删除预设 "{name}" 吗？', { name: presetName }))) {
                 return;
             }
 
             try {
+                console.log('正在删除预设:', presetName);
                 const response = await fetch(`/api/live2d/parameter_presets/${encodeURIComponent(presetName)}`, {
-                    method: 'DELETE'
+                    method: 'DELETE',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
                 });
 
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+                }
+
                 const result = await response.json();
+                console.log('删除预设响应:', result);
 
                 if (result.success) {
                     showStatus(t('live2d.parameterEditor.presetDeletedWithName', '预设 "{name}" 已删除', { name: presetName }), 'success');
+                    // 重新加载预设列表
                     await loadPresetList();
                 } else {
-                    showStatus(t('live2d.parameterEditor.presetDeleteFailedWithError', '删除预设失败: {error}', { error: result.error || t('common.unknownError', '未知错误') }), 'error');
+                    throw new Error(result.error || '删除失败');
                 }
             } catch (error) {
                 console.error('删除预设失败:', error);
-                showStatus(t('live2d.parameterEditor.presetDeleteFailedWithMessage', '删除预设失败: {message}', { message: error.message }), 'error');
+                showStatus(t('live2d.parameterEditor.presetDeleteFailedWithMessage', '删除预设失败: {message}', { message: error.message || String(error) }), 'error');
             }
         }
 
@@ -1345,8 +1391,20 @@
                     throw new Error(result.error || t('live2d.parameterEditor.loadPresetsFailed', '获取预设列表失败'));
                 }
 
-                const presets = result.presets || {};
-                const presetNames = Object.keys(presets);
+                // 处理预设列表（可能是数组或对象格式）
+                let presets = result.presets || [];
+                let presetNames = [];
+                
+                // 如果是数组格式，转换为对象格式以便处理
+                if (Array.isArray(presets)) {
+                    const presetsObj = {};
+                    presets.forEach(preset => {
+                        presetsObj[preset.name] = preset;
+                    });
+                    presets = presetsObj;
+                }
+                
+                presetNames = Object.keys(presets);
 
                 if (presetNames.length === 0) {
                     presetList.innerHTML = `<div style="text-align: center; color: #999; padding: 10px; font-size: 12px;">${t('live2d.parameterEditor.noPresets', '暂无预设')}</div>`;
@@ -1356,14 +1414,16 @@
                 presetList.innerHTML = presetNames.map(name => {
                     const preset = presets[name];
                     const timestamp = preset.timestamp ? new Date(preset.timestamp).toLocaleString('zh-CN') : '';
+                    // 转义特殊字符，防止XSS和语法错误
+                    const escapedName = name.replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                     return `
-                        <div class="preset-item" onclick="loadPreset('${name.replace(/'/g, "\\'")}')">
+                        <div class="preset-item" onclick="loadPreset('${escapedName}')">
                             <div>
                                 <span class="preset-item-name">${name}</span>
                                 ${timestamp ? `<div style="font-size: 11px; color: #999; margin-top: 2px;">${timestamp}</div>` : ''}
                             </div>
                             <div class="preset-item-actions">
-                                <button class="preset-delete-btn" onclick="deletePreset('${name.replace(/'/g, "\\'")}', event)">${t('live2d.parameterEditor.delete', '删除')}</button>
+                                <button class="preset-delete-btn" onclick="deletePreset('${escapedName}', event)">${t('live2d.parameterEditor.delete', '删除')}</button>
                             </div>
                         </div>
                     `;
@@ -1374,6 +1434,18 @@
             }
         }
 
+        // 返回模型管理页面
+        function goBackToManager() {
+            const returnUrl = window.returnUrl || '/l2d';
+            if (window.opener) {
+                // 如果是弹出窗口，关闭窗口
+                window.close();
+            } else {
+                // 如果是新标签页，跳转回去
+                window.location.href = returnUrl;
+            }
+        }
+        
         // 翻译所有 data-i18n 属性的元素
         function translatePage() {
             if (typeof window.t !== 'function') return;

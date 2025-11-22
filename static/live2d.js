@@ -57,6 +57,10 @@ class Live2DManager {
         this._origUpdateParameters = null;
         this._origExpressionUpdateParameters = null;
         this._mouthTicker = null;
+        
+        // 预设参数保护：跟踪已应用的预设参数，防止被其他系统覆盖
+        this.appliedPresetParams = {}; // { paramId: value }
+        this._presetProtectionTicker = null;
     }
 
     // 从 FileReferences 推导 EmotionMapping（用于兼容历史数据）
@@ -650,6 +654,8 @@ class Live2DManager {
         if (this.currentModel) {
             // 先清空常驻表情记录
             this.teardownPersistentExpressions();
+            // 停止预设参数保护
+            this.stopPresetProtection();
 
             // 尝试还原之前覆盖的 updateParameters，避免旧引用在新模型上报错
             try {
@@ -2625,6 +2631,180 @@ class Live2DManager {
         }
     }
 
+    /**
+     * 应用参数预设到当前模型（不需要创建参数编辑器）
+     * @param {Object} presetValues - 预设参数值对象 { paramId: value }
+     * @returns {number} 成功应用的参数数量
+     */
+    async applyParameterPreset(presetValues) {
+        if (!this.currentModel || !this.currentModel.internalModel || !this.currentModel.internalModel.coreModel) {
+            console.warn('无法应用预设：模型未加载');
+            return 0;
+        }
+
+        const coreModel = this.currentModel.internalModel.coreModel;
+        
+        // 停止可能覆盖参数的系统
+        try {
+            // 停止所有动作
+            if (this.currentModel.internalModel.motionManager && this.currentModel.internalModel.motionManager.stopAllMotions) {
+                this.currentModel.internalModel.motionManager.stopAllMotions();
+            }
+            // 停止所有表情
+            if (this.currentModel.internalModel.motionManager && this.currentModel.internalModel.motionManager.expressionManager) {
+                if (this.currentModel.internalModel.motionManager.expressionManager.stopAllExpressions) {
+                    this.currentModel.internalModel.motionManager.expressionManager.stopAllExpressions();
+                }
+                if (this.currentModel.internalModel.motionManager.expressionManager.resetExpression) {
+                    this.currentModel.internalModel.motionManager.expressionManager.resetExpression();
+                }
+            }
+        } catch (e) {
+            console.debug('停止动作/表情时出错:', e);
+        }
+        
+        // 等待 parameters 对象初始化（最多等待1秒）
+        let parameters = coreModel.parameters;
+        if (!parameters) {
+            console.log('等待 parameters 对象初始化...');
+            for (let i = 0; i < 10; i++) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+                parameters = coreModel.parameters;
+                if (parameters) break;
+            }
+        }
+        
+        if (!parameters) {
+            console.warn('parameters 对象未初始化，尝试直接设置参数值');
+        }
+        
+        // 保存预设参数值，用于持续保护
+        this.appliedPresetParams = {};
+        
+        let successCount = 0;
+        let failCount = 0;
+
+        Object.keys(presetValues).forEach(paramId => {
+            try {
+                const value = presetValues[paramId];
+                const paramIndex = coreModel.getParameterIndex(paramId);
+                
+                if (paramIndex === -1) {
+                    console.debug(`参数 ${paramId} 不存在于模型中`);
+                    failCount++;
+                    return;
+                }
+                
+                let clampedValue = value;
+                
+                // 如果 parameters 对象可用，使用它来限制值范围
+                if (parameters && parameters.minimumValues && parameters.maximumValues) {
+                    const minValue = parameters.minimumValues[paramIndex];
+                    const maxValue = parameters.maximumValues[paramIndex];
+                    clampedValue = Math.max(minValue, Math.min(maxValue, value));
+                } else {
+                    // 如果 parameters 不可用，使用默认范围（通常 Live2D 参数范围是 -1 到 1）
+                    clampedValue = Math.max(-1, Math.min(1, value));
+                }
+                
+                // 设置参数值
+                coreModel.setParameterValueByIndex(paramIndex, clampedValue);
+                coreModel.setParameterValueById(paramId, clampedValue);
+                
+                // 保存到保护列表
+                this.appliedPresetParams[paramId] = clampedValue;
+                
+                successCount++;
+            } catch (error) {
+                console.debug(`应用参数 ${paramId} 失败:`, error);
+                failCount++;
+            }
+        });
+
+        console.log(`预设应用完成：成功 ${successCount} 个，失败 ${failCount} 个`);
+        
+        // 启动参数保护机制，防止被其他系统覆盖
+        this.startPresetProtection();
+        
+        // 确保模型立即更新显示
+        if (successCount > 0 && this.pixi_app && this.pixi_app.ticker) {
+            // 确保 ticker 正在运行
+            if (!this.pixi_app.ticker.started) {
+                this.pixi_app.ticker.start();
+            }
+            
+            // 强制触发一次渲染
+            requestAnimationFrame(() => {
+                try {
+                    if (this.pixi_app && this.pixi_app.renderer && this.pixi_app.stage) {
+                        this.pixi_app.renderer.render(this.pixi_app.stage);
+                    }
+                } catch (renderError) {
+                    console.debug('强制渲染失败:', renderError);
+                }
+            });
+        }
+        
+        return successCount;
+    }
+    
+    // 启动预设参数保护机制
+    startPresetProtection() {
+        // 如果已经有保护机制在运行，先停止它
+        this.stopPresetProtection();
+        
+        // 如果没有预设参数需要保护，直接返回
+        if (Object.keys(this.appliedPresetParams).length === 0) {
+            return;
+        }
+        
+        if (!this.pixi_app || !this.pixi_app.ticker) {
+            console.warn('PIXI ticker 不可用，无法启动预设保护');
+            return;
+        }
+        
+        // 使用 PIXI ticker 持续保护预设参数
+        const protectionCallback = () => {
+            if (!this.currentModel || !this.currentModel.internalModel || !this.currentModel.internalModel.coreModel) {
+                this.stopPresetProtection();
+                return;
+            }
+            
+            const coreModel = this.currentModel.internalModel.coreModel;
+            
+            // 重新应用所有预设参数值
+            Object.keys(this.appliedPresetParams).forEach(paramId => {
+                try {
+                    const value = this.appliedPresetParams[paramId];
+                    const paramIndex = coreModel.getParameterIndex(paramId);
+                    if (paramIndex !== -1) {
+                        coreModel.setParameterValueByIndex(paramIndex, value);
+                        coreModel.setParameterValueById(paramId, value);
+                    }
+                } catch (e) {
+                    // 忽略错误
+                }
+            });
+        };
+        
+        this._presetProtectionTicker = protectionCallback;
+        this.pixi_app.ticker.add(protectionCallback);
+        console.log('预设参数保护已启动，保护参数数量:', Object.keys(this.appliedPresetParams).length);
+    }
+    
+    // 停止预设参数保护机制
+    stopPresetProtection() {
+        if (this._presetProtectionTicker && this.pixi_app && this.pixi_app.ticker) {
+            try {
+                this.pixi_app.ticker.remove(this._presetProtectionTicker);
+            } catch (e) {
+                console.debug('移除预设保护 ticker 时出错:', e);
+            }
+            this._presetProtectionTicker = null;
+        }
+        this.appliedPresetParams = {};
+    }
+
     // 获取 PIXI 应用
     getPIXIApp() {
         return this.pixi_app;
@@ -2772,6 +2952,7 @@ class Live2DParameterEditor {
         this.parameterGroups = {}; // 按组分类的参数 { groupId: [param1, param2, ...] }
         this.parameterInfo = {};   // 参数详细信息 { paramId: { name, groupId, min, max, default } }
         this.currentValues = {};   // 当前参数值缓存
+        this.userModifiedParams = new Set(); // 用户手动修改的参数集合
         this.isInitialized = false;
     }
 
@@ -2967,6 +3148,9 @@ class Live2DParameterEditor {
             info.current = clampedValue;
             this.currentValues[paramId] = clampedValue;
             
+            // 标记为用户手动修改的参数
+            this.userModifiedParams.add(paramId);
+            
             // 验证参数值是否设置成功
             const actualValue = this.coreModel.getParameterValueById(paramId);
             if (Math.abs(actualValue - clampedValue) > 0.001) {
@@ -2974,16 +3158,19 @@ class Live2DParameterEditor {
             }
             
             // 标记此参数已被手动设置，防止被其他系统覆盖
-            // 在参数编辑器中，我们需要持续保持参数值
-            // 使用 requestAnimationFrame 持续设置，确保不被覆盖
+            // 在参数编辑器中，我们需要持续保持用户设置的参数值
+            // 使用 setInterval 持续设置用户手动修改的参数，确保不被覆盖
             if (!this._parameterProtectionInterval) {
                 this._parameterProtectionInterval = setInterval(() => {
-                    // 每帧都重新应用用户设置的参数值，防止被覆盖
-                    Object.keys(this.currentValues).forEach(pid => {
+                    // 只重新应用用户手动设置的参数值，防止被覆盖
+                    this.userModifiedParams.forEach(pid => {
                         try {
-                            const idx = this.coreModel.getParameterIndex(pid);
-                            if (idx !== -1) {
-                                this.coreModel.setParameterValueByIndex(idx, this.currentValues[pid]);
+                            const value = this.currentValues[pid];
+                            if (value !== undefined) {
+                                const idx = this.coreModel.getParameterIndex(pid);
+                                if (idx !== -1) {
+                                    this.coreModel.setParameterValueByIndex(idx, value);
+                                }
                             }
                         } catch (e) {
                             // 忽略错误
@@ -3050,14 +3237,25 @@ class Live2DParameterEditor {
             return false;
         }
         
+        // 先移除用户修改标记
+        this.userModifiedParams.delete(paramId);
+        
         const defaultValue = this.parameterInfo[paramId].default;
-        return this.setParameterValue(paramId, defaultValue);
+        const result = this.setParameterValue(paramId, defaultValue);
+        
+        // 重置后，确保从用户修改集合中移除
+        this.userModifiedParams.delete(paramId);
+        
+        return result;
     }
 
     /**
      * 重置所有参数到默认值
      */
     resetAllParameters() {
+        // 清除所有用户修改标记
+        this.userModifiedParams.clear();
+        
         Object.keys(this.parameterInfo).forEach(paramId => {
             this.resetParameter(paramId);
         });

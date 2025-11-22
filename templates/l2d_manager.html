@@ -215,6 +215,16 @@
         </div>
     </div>
 
+    <div class="control-group" id="preset-selector-group">
+        <label class="control-label" data-i18n="live2d.presetSelector.label">🎭 应用预设</label>
+        <div class="action-group">
+            <select id="preset-select" class="control-select" disabled>
+                <option value="" data-i18n="live2d.presetSelector.selectPlaceholder">选择预设...</option>
+            </select>
+            <button id="apply-preset-btn" class="btn btn-primary" disabled data-i18n="live2d.presetSelector.apply">应用</button>
+        </div>
+    </div>
+
     <div class="control-group" id="persistent-box" style="display:none;">
         <label class="control-label" data-i18n="live2d.persistentExpression">常驻表情（仅expression）:</label>
         <div class="action-group">
@@ -568,6 +578,9 @@
                     wheelEnabled: true,
                     preferences: modelPreferences
                 });
+                
+                // 加载预设列表
+                await loadPresetListForModel(modelJsonUrl);
                 live2dModel = window.live2dManager.getCurrentModel();
                 
                 // 添加模型交互监听器，跟踪位置和缩放变化
@@ -657,9 +670,10 @@
                 showStatus(t('live2d.pleaseLoadModel', '请先加载模型'), 2000);
                 return;
             }
-            // 跳转到参数编辑器页面，传递当前模型路径
+            // 跳转到参数编辑器页面，传递当前模型路径和返回URL
             const modelPath = encodeURIComponent(currentModelInfo.path);
-            window.open(`/live2d_parameter_editor?model=${modelPath}`, '_blank');
+            const returnUrl = encodeURIComponent(window.location.href);
+            window.open(`/live2d_parameter_editor?model=${modelPath}&return=${returnUrl}`, '_blank');
         });
 
         savePositionBtn.addEventListener('click', async () => {
@@ -690,6 +704,217 @@
                 showStatus(t('live2d.modelSavedPositionFailed', '模型设置保存成功，位置保存失败!'), 2000);
             } else {
                 showStatus(t('live2d.saveFailedGeneral', '保存失败!'), 2000);
+            }
+        });
+        
+        // 加载预设列表
+        async function loadPresetListForModel(modelPath) {
+            try {
+                const presetSelectorGroup = document.getElementById('preset-selector-group');
+                const presetSelect = document.getElementById('preset-select');
+                const applyPresetBtn = document.getElementById('apply-preset-btn');
+                
+                console.log('加载预设列表，模型路径:', modelPath);
+                
+                const response = await fetch(`/api/live2d/parameter_presets?model_path=${encodeURIComponent(modelPath)}`);
+                if (!response.ok) {
+                    console.warn('获取预设列表失败，状态码:', response.status);
+                    presetSelect.disabled = true;
+                    applyPresetBtn.disabled = true;
+                    return;
+                }
+                
+                const data = await response.json();
+                console.log('预设列表响应:', data);
+                
+                // 处理预设列表（可能是数组或对象格式）
+                let presets = data.presets || {};
+                
+                // 如果是数组格式，转换为对象格式
+                if (Array.isArray(presets)) {
+                    const presetsObj = {};
+                    presets.forEach(preset => {
+                        presetsObj[preset.name] = preset;
+                    });
+                    presets = presetsObj;
+                }
+                
+                const presetNames = Object.keys(presets);
+                console.log('找到预设数量:', presetNames.length);
+                
+                // 清空现有选项（保留第一个"选择预设..."选项）
+                presetSelect.innerHTML = '<option value="" data-i18n="live2d.presetSelector.selectPlaceholder">选择预设...</option>';
+                
+                if (presetNames.length > 0) {
+                    // 有预设，添加到下拉框
+                    presetNames.forEach(presetName => {
+                        const option = document.createElement('option');
+                        option.value = presetName;
+                        option.textContent = presetName;
+                        presetSelect.appendChild(option);
+                    });
+                    presetSelect.disabled = false;
+                    applyPresetBtn.disabled = false;
+                    console.log('预设列表已更新，共', presetNames.length, '个预设');
+                } else {
+                    // 没有预设，显示提示
+                    presetSelect.innerHTML = '<option value="" data-i18n="live2d.presetSelector.noPresets">暂无预设</option>';
+                    presetSelect.disabled = true;
+                    applyPresetBtn.disabled = true;
+                    console.log('当前模型没有预设');
+                }
+            } catch (error) {
+                console.error('加载预设列表失败:', error);
+                presetSelect.disabled = true;
+                applyPresetBtn.disabled = true;
+            }
+        }
+        
+        // 当前预览的预设名称（用于跟踪是否已应用）
+        let currentPreviewPreset = null;
+        let currentPreviewValues = null;
+        
+        // 预览预设（选择时立即应用）
+        async function previewPreset(presetName) {
+            console.log('previewPreset 被调用，预设名称:', presetName);
+            
+            if (!presetName) {
+                // 如果选择的是空选项，清除预览
+                currentPreviewPreset = null;
+                currentPreviewValues = null;
+                console.log('清除预览状态');
+                return;
+            }
+            
+            // 检查模型是否已加载
+            if (!window.live2dManager || !window.live2dManager.getCurrentModel()) {
+                console.warn('预览预设失败：模型未加载');
+                showStatus('请先加载模型', 2000);
+                return;
+            }
+            
+            try {
+                console.log('正在获取预设数据:', presetName);
+                // 获取预设数据
+                const response = await fetch('/api/live2d/apply_preset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ preset_name: presetName })
+                });
+                
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('获取预设失败，响应状态:', response.status, '响应内容:', errorText);
+                    throw new Error(`获取预设失败: HTTP ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log('预设数据响应:', data);
+                
+                if (!data.success) {
+                    throw new Error(data.error || '获取预设失败');
+                }
+                
+                const presetValues = data.values || {};
+                console.log('预设参数值数量:', Object.keys(presetValues).length);
+                
+                // 立即应用预设到模型进行预览
+                if (window.live2dManager && typeof window.live2dManager.applyParameterPreset === 'function') {
+                    console.log('开始应用预设参数...');
+                    const successCount = await window.live2dManager.applyParameterPreset(presetValues);
+                    console.log('预设应用结果，成功:', successCount);
+                    
+                    if (successCount > 0) {
+                        // 保存当前预览的预设信息
+                        currentPreviewPreset = presetName;
+                        currentPreviewValues = presetValues;
+                        console.log(`✓ 预设 "${presetName}" 预览成功（${successCount} 个参数）`);
+                    } else {
+                        console.warn('预览预设失败：没有成功应用任何参数');
+                        showStatus('预览预设失败：没有成功应用任何参数', 2000);
+                    }
+                } else {
+                    console.error('Live2D 管理器未初始化或不支持预设功能');
+                    showStatus('Live2D 管理器未初始化', 2000);
+                }
+            } catch (error) {
+                console.error('预览预设失败:', error);
+                showStatus(`预览预设失败: ${error.message}`, 3000);
+            }
+        }
+        
+        // 应用预设到模型（确认应用）
+        async function applyPresetToModel() {
+            const presetSelect = document.getElementById('preset-select');
+            const presetName = presetSelect.value;
+            
+            if (!presetName) {
+                showStatus(t('live2d.presetSelector.selectPlaceholder', '请先选择一个预设'), 2000);
+                return;
+            }
+            
+            // 如果当前预览的就是这个预设，直接确认
+            if (currentPreviewPreset === presetName && currentPreviewValues) {
+                const successCount = Object.keys(currentPreviewValues).length;
+                showStatus(t('live2d.presetSelector.applySuccess', `已应用预设 "${presetName}"（${successCount} 个参数）`, {name: presetName, count: successCount}), 2000);
+                return;
+            }
+            
+            // 否则重新应用
+            try {
+                // 获取预设数据
+                const response = await fetch('/api/live2d/apply_preset', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ preset_name: presetName })
+                });
+                
+                if (!response.ok) {
+                    throw new Error('获取预设失败');
+                }
+                
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || '应用预设失败');
+                }
+                
+                const presetValues = data.values || {};
+                
+                // 应用预设到模型
+                if (window.live2dManager && typeof window.live2dManager.applyParameterPreset === 'function') {
+                    const successCount = await window.live2dManager.applyParameterPreset(presetValues);
+                    if (successCount > 0) {
+                        currentPreviewPreset = presetName;
+                        currentPreviewValues = presetValues;
+                        showStatus(t('live2d.presetSelector.applySuccess', `已应用预设 "${presetName}"（${successCount} 个参数）`, {name: presetName, count: successCount}), 2000);
+                    } else {
+                        throw new Error('没有成功应用任何参数');
+                    }
+                } else {
+                    throw new Error('Live2D 管理器未初始化或不支持预设功能');
+                }
+            } catch (error) {
+                console.error('应用预设失败:', error);
+                showStatus(t('live2d.presetSelector.applyFailed', `应用预设失败: ${error.message}`, {error: error.message}), 3000);
+            }
+        }
+        
+        // 预设选择变化事件（立即预览）- 使用事件委托，确保即使元素重新创建也能工作
+        document.addEventListener('change', async (e) => {
+            if (e.target && e.target.id === 'preset-select') {
+                const presetName = e.target.value;
+                console.log('预设选择变化:', presetName);
+                await previewPreset(presetName);
+            }
+        });
+        
+        // 应用预设按钮事件（确认应用）- 使用事件委托
+        document.addEventListener('click', async (e) => {
+            if (e.target && e.target.id === 'apply-preset-btn') {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('点击确认应用按钮');
+                await applyPresetToModel();
             }
         });
         

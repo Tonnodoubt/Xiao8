@@ -226,7 +226,6 @@
     "selectPersistentExpression": "Select Persistent Expression",
     "noMotionFiles": "This model has no motion files",
     "emotionConfig": "Emotion Configuration",
-    "parameterEditor": "Parameter Editor",
     "saveSettings": "Save Settings",
     "persistentExpression": "Persistent Expression (expression only):",
     "pleaseLoadModel": "Please load a model first",
@@ -327,7 +326,16 @@
       "presetDeletedWithName": "Preset \"{name}\" deleted successfully",
       "presetDeleteFailedWithMessage": "Failed to delete preset: {message}",
       "loadingPresets": "Loading preset list...",
-      "loadPresetsFailed": "Failed to load preset list"
+      "loadPresetsFailed": "Failed to load preset list",
+      "backToManager": "← Back to Model Manager"
+    },
+    "presetSelector": {
+      "label": "🎭 Apply Preset",
+      "selectPlaceholder": "Select preset...",
+      "noPresets": "No presets available",
+      "apply": "Confirm Apply",
+      "applySuccess": "Preset \"{name}\" applied ({count} parameters)",
+      "applyFailed": "Failed to apply preset: {error}"
     }
   },
   "voice": {

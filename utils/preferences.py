@@ -222,9 +222,19 @@ def load_parameter_presets(model_path: Optional[str] = None) -> Dict[str, Any]:
                 
                 if model_path:
                     # 只返回指定模型的预设
+                    # 统一路径格式：移除查询参数，标准化路径
+                    normalized_model_path = model_path.split('?')[0]  # 移除查询参数
                     filtered_presets = {}
                     for name, preset in all_presets.items():
-                        if preset.get('model_path') == model_path:
+                        preset_path = preset.get('model_path', '')
+                        # 标准化预设路径
+                        normalized_preset_path = preset_path.split('?')[0]
+                        # 精确匹配或文件名匹配
+                        if (normalized_preset_path == normalized_model_path or 
+                            normalized_preset_path.endswith(normalized_model_path) or
+                            normalized_model_path.endswith(normalized_preset_path) or
+                            # 提取文件名进行匹配
+                            normalized_preset_path.split('/')[-1] == normalized_model_path.split('/')[-1]):
                             filtered_presets[name] = preset
                     return filtered_presets
                 else:
