@@ -3157,28 +3157,6 @@ class Live2DParameterEditor {
                 console.warn(`参数 ${paramId} 设置值 ${clampedValue} 但实际值为 ${actualValue}，可能存在覆盖`);
             }
             
-            // 标记此参数已被手动设置，防止被其他系统覆盖
-            // 在参数编辑器中，我们需要持续保持用户设置的参数值
-            // 使用 setInterval 持续设置用户手动修改的参数，确保不被覆盖
-            if (!this._parameterProtectionInterval) {
-                this._parameterProtectionInterval = setInterval(() => {
-                    // 只重新应用用户手动设置的参数值，防止被覆盖
-                    this.userModifiedParams.forEach(pid => {
-                        try {
-                            const value = this.currentValues[pid];
-                            if (value !== undefined) {
-                                const idx = this.coreModel.getParameterIndex(pid);
-                                if (idx !== -1) {
-                                    this.coreModel.setParameterValueByIndex(idx, value);
-                                }
-                            }
-                        } catch (e) {
-                            // 忽略错误
-                        }
-                    });
-                }, 16); // 约 60fps
-            }
-            
             // 确保 PIXI ticker 正在运行，以便模型能够实时更新
             // pixi-live2d-display 的模型会在 PIXI ticker 中自动更新
             // 但我们需要确保 ticker 正在运行
@@ -3221,10 +3199,7 @@ class Live2DParameterEditor {
      * 清理参数保护机制（在编辑器关闭时调用）
      */
     cleanup() {
-        if (this._parameterProtectionInterval) {
-            clearInterval(this._parameterProtectionInterval);
-            this._parameterProtectionInterval = null;
-        }
+        // 清理逻辑已移除
     }
 
     /**
