@@ -1314,17 +1314,29 @@ class Live2DManager {
 
     // 设置浮动按钮系统（新的控制面板）
     setupFloatingButtons(model) {
-        const container = document.getElementById('live2d-canvas');
-        
         // 在 l2d_manager 等页面不显示
         if (!document.getElementById('chat-container')) {
             this.isLocked = false;
-            container.style.pointerEvents = 'auto';
+            const container = document.getElementById('live2d-canvas');
+            if (container) {
+                container.style.pointerEvents = 'auto';
+            }
+            return;
+        }
+
+        // 检查按钮容器是否已存在（避免重复创建）
+        let buttonsContainer = document.getElementById('live2d-floating-buttons');
+        if (buttonsContainer) {
+            // 按钮已存在，确保可见
+            buttonsContainer.style.display = 'flex';
+            buttonsContainer.style.visibility = 'visible';
+            buttonsContainer.style.opacity = '1';
+            this._floatingButtonsContainer = buttonsContainer;
             return;
         }
 
         // 创建按钮容器
-        const buttonsContainer = document.createElement('div');
+        buttonsContainer = document.createElement('div');
         buttonsContainer.id = 'live2d-floating-buttons';
         Object.assign(buttonsContainer.style, {
             position: 'fixed',

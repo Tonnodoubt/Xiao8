@@ -40,6 +40,15 @@ class VRMManager {
         this.auxClickHandler = null;
         this.mouseEnterHandler = null;
         this.resizeHandler = null;
+        
+        // 锁定功能
+        this.isLocked = true; // 默认锁定
+        this.lockIconElement = null;
+        this.lockIconShowHandler = null;
+        this.lockIconHideHandler = null;
+        this.lockIconMouseEnterHandler = null;
+        this.lockIconMouseLeaveHandler = null;
+        this.lockIconHideTimeout = null;
     }
 
     async init() {
@@ -147,18 +156,62 @@ class VRMManager {
                 throw new Error('加载的模型不是有效的 VRM 格式');
             }
 
-            // 调整模型位置和大小（居中显示）
-            this.vrm.scene.position.set(0, 0, 0);
-            // 旋转模型180度，确保正面显示（如果模型默认面向Z轴负方向）
+            // 计算模型的边界框，用于确定合适的初始大小
+            const box = new THREE.Box3().setFromObject(this.vrm.scene);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+            
+            // 调整模型位置（居中）
+            this.vrm.scene.position.set(-center.x, -center.y, -center.z);
+            // 旋转模型180度，确保正面显示
             this.vrm.scene.rotation.set(0, Math.PI, 0);
+            this.modelRotation = { x: 0, y: Math.PI };
+            
+            // 计算合适的初始缩放（参考Live2D的默认大小计算）
+            // Live2D: scale = Math.min(0.5, (window.innerHeight * 0.75) / 7000, (window.innerWidth * 0.6) / 7000)
+            const isMobile = window.innerWidth <= 768;
+            let targetScale;
+            
+            if (isMobile) {
+                // 移动端：较小
+                targetScale = Math.min(
+                    0.5,
+                    window.innerHeight * 1.3 / 4000,
+                    window.innerWidth * 1.2 / 2000
+                );
+            } else {
+                // 桌面端：参考Live2D的计算方式
+                targetScale = Math.min(
+                    0.5,
+                    (window.innerHeight * 0.75) / 7000,
+                    (window.innerWidth * 0.6) / 7000
+                );
+            }
+            
+            // 根据模型大小和屏幕大小计算合适的相机距离
+            // 使用模型的最大尺寸（通常是高度）来计算
+            const modelHeight = size.y;
+            const screenHeight = window.innerHeight;
+            const screenWidth = window.innerWidth;
+            
+            // 目标：让模型在屏幕上的高度约为屏幕高度的0.4-0.5倍（类似Live2D）
+            const targetScreenHeight = screenHeight * 0.45;
+            const fov = this.camera.fov * (Math.PI / 180);
+            const distance = (modelHeight / 2) / Math.tan(fov / 2) / targetScreenHeight * screenHeight;
+            
+            // 设置模型初始缩放
             this.vrm.scene.scale.set(1, 1, 1);
             this.modelScale = 1.0;
-            this.modelRotation = { x: 0, y: Math.PI }; // 初始旋转也要设置为180度
-            this.modelPosition = { x: 0, y: 0, z: 0 }; // 重置位置
             
-            // 调整相机位置，确保模型在视野内（从正面看）
-            this.camera.position.set(0, 1.2, 1.8);
-            this.camera.lookAt(0, 1, 0);
+            // 调整相机位置，使模型在屏幕中央合适的位置
+            // 相机位置：稍微偏上，类似Live2D的anchor (0.65, 0.75)
+            const cameraY = center.y + (isMobile ? modelHeight * 0.2 : modelHeight * 0.1);
+            const cameraZ = distance;
+            this.camera.position.set(0, cameraY, cameraZ);
+            this.camera.lookAt(0, center.y, 0);
+            
+            // 重置位置
+            this.modelPosition = { x: 0, y: 0, z: 0 };
 
             // 添加到场景
             this.scene.add(this.vrm.scene);
@@ -170,6 +223,9 @@ class VRMManager {
             if (this.renderer && !this.dragHandler) {
                 this.initDragAndZoom();
             }
+
+            // 初始化锁图标
+            this.setupLockIcon();
 
             console.log('VRM 模型加载成功');
             const availableExpressions = Object.keys(this.vrm.expressionManager?.expressions || {});
@@ -269,6 +325,266 @@ class VRMManager {
         return this.vrm;
     }
 
+    // 设置锁图标
+    setupLockIcon() {
+        // 在非主页面不显示
+        if (!document.getElementById('chat-container')) {
+            this.isLocked = false;
+            return;
+        }
+
+        // 如果锁图标已存在，先移除
+        if (this.lockIconElement && this.lockIconElement.parentNode) {
+            this.lockIconElement.parentNode.removeChild(this.lockIconElement);
+        }
+
+        const lockIcon = document.createElement('div');
+        lockIcon.id = 'vrm-lock-icon';
+        lockIcon.innerText = this.isLocked ? '🔒' : '🔓';
+        Object.assign(lockIcon.style, {
+            position: 'fixed',
+            zIndex: '9999', // 确保在最上层
+            fontSize: '24px',
+            cursor: 'pointer',
+            userSelect: 'none',
+            textShadow: '0 0 4px black',
+            pointerEvents: 'auto',
+            display: 'block', // 先显示，让用户能看到
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'rgba(0, 0, 0, 0.5)', // 添加背景以便看到
+            borderRadius: '8px',
+            padding: '8px 12px'
+        });
+
+        document.body.appendChild(lockIcon);
+        this.lockIconElement = lockIcon;
+
+        // 点击切换锁定状态
+        lockIcon.addEventListener('click', (e) => {
+            e.stopPropagation();
+            this.isLocked = !this.isLocked;
+            lockIcon.innerText = this.isLocked ? '🔒' : '🔓';
+            this.updateLockState();
+        });
+
+        // 初始状态
+        this.updateLockState();
+
+        // 鼠标跟踪显示/隐藏锁图标
+        this.setupLockIconVisibility();
+    }
+
+    // 更新锁定状态
+    updateLockState() {
+        if (!this.renderer || !this.container) return;
+        
+        const canvas = this.renderer.domElement;
+        
+        if (this.isLocked) {
+            // 锁定：禁用交互
+            canvas.style.pointerEvents = 'none';
+            canvas.style.cursor = 'default';
+            this.container.style.pointerEvents = 'none';
+            // 停止当前拖拽
+            this.isDragging = false;
+            this.dragMode = null;
+        } else {
+            // 解锁：启用交互
+            canvas.style.pointerEvents = 'auto';
+            canvas.style.cursor = 'grab';
+            this.container.style.pointerEvents = 'auto';
+        }
+    }
+
+    // 计算模型在屏幕上的投影位置
+    getModelScreenBounds() {
+        if (!this.vrm || !this.camera || !this.renderer) return null;
+        
+        const box = new THREE.Box3().setFromObject(this.vrm.scene);
+        const corners = [
+            new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+            new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+            new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+            new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+            new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+            new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+            new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+            new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+        ];
+        
+        const width = this.renderer.domElement.width || this.container.clientWidth;
+        const height = this.renderer.domElement.height || this.container.clientHeight;
+        
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+        
+        corners.forEach(corner => {
+            const vector = corner.clone();
+            vector.applyMatrix4(this.vrm.scene.matrixWorld);
+            vector.project(this.camera);
+            
+            const x = (vector.x * 0.5 + 0.5) * width;
+            const y = (-vector.y * 0.5 + 0.5) * height;
+            
+            minX = Math.min(minX, x);
+            maxX = Math.max(maxX, x);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+        });
+        
+        return {
+            left: minX,
+            right: maxX,
+            top: minY,
+            bottom: maxY,
+            width: maxX - minX,
+            height: maxY - minY
+        };
+    }
+
+    // 设置锁图标显示/隐藏逻辑（类似Live2D的鼠标跟踪）
+    setupLockIconVisibility() {
+        if (!this.renderer || !this.lockIconElement) return;
+
+        const canvas = this.renderer.domElement;
+        let hideButtonsTimer = null;
+        const threshold = 70; // 与Live2D相同的阈值
+
+        // 鼠标移动跟踪
+        const mouseMoveHandler = (e) => {
+            if (!this.vrm || !this.lockIconElement) return;
+            
+            // 如果正在拖拽，隐藏图标
+            if (this.isDragging) {
+                this.lockIconElement.style.display = 'none';
+                return;
+            }
+            
+            const bounds = this.getModelScreenBounds();
+            if (!bounds) {
+                // 如果无法获取边界，使用容器位置作为备选
+                const rect = this.container.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                    // 使用容器的中心位置
+                    const targetX = rect.left + rect.width * 0.7;
+                    const targetY = rect.top + rect.height * 0.7;
+                    this.lockIconElement.style.left = `${targetX}px`;
+                    this.lockIconElement.style.top = `${targetY}px`;
+                    this.lockIconElement.style.transform = 'none';
+                    this.lockIconElement.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+                    this.lockIconElement.style.display = 'block';
+                }
+                return;
+            }
+            
+            // 计算鼠标到模型边界的距离
+            const mouseX = e.clientX;
+            const mouseY = e.clientY;
+            
+            const dx = Math.max(
+                bounds.left - mouseX,
+                0,
+                mouseX - bounds.right
+            );
+            const dy = Math.max(
+                bounds.top - mouseY,
+                0,
+                mouseY - bounds.bottom
+            );
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // 更新锁图标位置（类似Live2D：bounds.right * 0.7 + bounds.left * 0.3）
+            const targetX = bounds.right * 0.7 + bounds.left * 0.3;
+            const targetY = bounds.top * 0.3 + bounds.bottom * 0.7;
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            
+            this.lockIconElement.style.left = `${Math.min(targetX, screenWidth - 40)}px`;
+            this.lockIconElement.style.top = `${Math.min(targetY, screenHeight - 40)}px`;
+            this.lockIconElement.style.transform = 'none';
+            this.lockIconElement.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+            
+            if (distance < threshold) {
+                // 鼠标靠近模型，显示锁图标
+                if (hideButtonsTimer) {
+                    clearTimeout(hideButtonsTimer);
+                    hideButtonsTimer = null;
+                }
+                
+                this.lockIconElement.style.display = 'block';
+            } else {
+                // 鼠标远离模型，延迟隐藏
+                if (!hideButtonsTimer) {
+                    hideButtonsTimer = setTimeout(() => {
+                        if (this.lockIconElement) {
+                            this.lockIconElement.style.display = 'none';
+                        }
+                        hideButtonsTimer = null;
+                    }, 1000);
+                }
+            }
+        };
+        
+        // 锁图标本身也要监听，防止鼠标移到图标上时隐藏
+        const lockIconMouseEnter = () => {
+            if (hideButtonsTimer) {
+                clearTimeout(hideButtonsTimer);
+                hideButtonsTimer = null;
+            }
+        };
+        
+        const lockIconMouseLeave = () => {
+            if (!hideButtonsTimer) {
+                hideButtonsTimer = setTimeout(() => {
+                    if (this.lockIconElement) {
+                        this.lockIconElement.style.display = 'none';
+                    }
+                    hideButtonsTimer = null;
+                }, 1000);
+            }
+        };
+        
+        // 保存处理器引用
+        this.lockIconShowHandler = mouseMoveHandler;
+        this.lockIconHideHandler = lockIconMouseLeave;
+        this.lockIconMouseEnterHandler = lockIconMouseEnter;
+        this.lockIconMouseLeaveHandler = lockIconMouseLeave;
+        
+        // 添加事件监听
+        canvas.addEventListener('mousemove', mouseMoveHandler);
+        if (this.lockIconElement) {
+            this.lockIconElement.addEventListener('mouseenter', lockIconMouseEnter);
+            this.lockIconElement.addEventListener('mouseleave', lockIconMouseLeave);
+        }
+    }
+
+    // 清理锁图标相关事件监听器
+    cleanupLockIcon() {
+        if (this.lockIconHideTimeout) {
+            clearTimeout(this.lockIconHideTimeout);
+            this.lockIconHideTimeout = null;
+        }
+
+        if (this.renderer && this.container) {
+            const canvas = this.renderer.domElement;
+            
+            if (this.lockIconShowHandler) {
+                canvas.removeEventListener('mousemove', this.lockIconShowHandler);
+                this.lockIconShowHandler = null;
+            }
+            if (this.lockIconHideHandler) {
+                this.lockIconElement?.removeEventListener('mouseleave', this.lockIconHideHandler);
+                this.lockIconHideHandler = null;
+            }
+            if (this.lockIconMouseEnterHandler && this.lockIconElement) {
+                this.lockIconElement.removeEventListener('mouseenter', this.lockIconMouseEnterHandler);
+                this.lockIconMouseEnterHandler = null;
+            }
+        }
+    }
+
     // 初始化拖拽和缩放功能
     initDragAndZoom() {
         if (!this.renderer) return;
@@ -278,12 +594,16 @@ class VRMManager {
         // 先清理旧的事件监听器（防止重复初始化）
         this.cleanupDragAndZoom();
         
-        // 确保 canvas 可以接收指针事件
-        canvas.style.pointerEvents = 'auto';
+        // 确保容器和 canvas 可以接收指针事件
+        this.container.style.pointerEvents = this.isLocked ? 'none' : 'auto';
+        canvas.style.pointerEvents = this.isLocked ? 'none' : 'auto';
         canvas.style.userSelect = 'none';
 
         // 鼠标按下事件
         this.mouseDownHandler = (e) => {
+            // 如果锁定，不允许拖拽
+            if (this.isLocked) return;
+            
             if (e.button === 0) { // 左键：旋转
                 e.preventDefault();
                 e.stopPropagation();
@@ -386,7 +706,8 @@ class VRMManager {
 
         // 鼠标滚轮缩放
         this.wheelHandler = (e) => {
-            if (!this.vrm) return;
+            // 如果锁定，不允许缩放
+            if (this.isLocked || !this.vrm) return;
 
             e.preventDefault();
             e.stopPropagation();
@@ -402,6 +723,28 @@ class VRMManager {
         canvas.addEventListener('wheel', this.wheelHandler, { passive: false });
     }
 
+    // 更新浮动按钮位置（类似Live2D）
+    updateFloatingButtonsPosition() {
+        const floatingButtons = document.getElementById('live2d-floating-buttons');
+        if (!floatingButtons || !this.vrm) return;
+        
+        const bounds = this.getModelScreenBounds();
+        if (!bounds) return;
+        
+        // 计算按钮位置（模型左侧，垂直居中）
+        const buttonX = bounds.left - 80; // 按钮在模型左侧80px
+        const buttonY = bounds.top + bounds.height / 2; // 垂直居中
+        
+        // 确保按钮不超出屏幕
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+        
+        floatingButtons.style.left = `${Math.max(10, Math.min(buttonX, screenWidth - 100))}px`;
+        floatingButtons.style.top = `${Math.max(10, Math.min(buttonY, screenHeight - 300))}px`;
+        floatingButtons.style.right = 'auto';
+        floatingButtons.style.bottom = 'auto';
+    }
+
     // 渲染循环
     animate() {
         this.animationId = requestAnimationFrame(() => this.animate());
@@ -412,6 +755,9 @@ class VRMManager {
         if (this.vrm?.springBoneManager) {
             this.vrm.springBoneManager.update(deltaTime);
         }
+
+        // 更新浮动按钮位置
+        this.updateFloatingButtonsPosition();
 
         // 渲染场景
         if (this.renderer && this.scene && this.camera) {
@@ -503,6 +849,13 @@ class VRMManager {
         if (this.resizeHandler) {
             window.removeEventListener('resize', this.resizeHandler);
             this.resizeHandler = null;
+        }
+
+        // 清理锁图标
+        this.cleanupLockIcon();
+        if (this.lockIconElement && this.lockIconElement.parentNode) {
+            this.lockIconElement.parentNode.removeChild(this.lockIconElement);
+            this.lockIconElement = null;
         }
 
         // 清理 VRM 资源

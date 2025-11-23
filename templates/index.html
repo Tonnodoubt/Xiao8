@@ -1506,6 +1506,9 @@
                 vrmContainer.style.display = 'block';
             }
 
+            // 确保浮动按钮存在（在 VRM 模式下也需要显示）
+            ensureFloatingButtonsExist();
+
             // 初始化 VRM 管理器（如果还未初始化）
             if (!vrmManager) {
                 try {
@@ -1562,6 +1565,39 @@
             console.warn('加载 VRM 模型失败:', error);
             console.log('提示: 请确保 VRM 模型文件存在于 static/models/vrm/ 目录下');
             // 不抛出错误，允许用户手动加载或使用测试页面
+        }
+    }
+
+    // 确保浮动按钮存在（用于 VRM 模式）
+    function ensureFloatingButtonsExist() {
+        // 检查浮动按钮是否已存在
+        let floatingButtons = document.getElementById('live2d-floating-buttons');
+        
+        if (!floatingButtons) {
+            // 如果不存在，尝试通过 Live2D 管理器创建
+            if (window.live2dManager && typeof window.live2dManager.setupFloatingButtons === 'function') {
+                const chatContainer = document.getElementById('chat-container');
+                if (chatContainer) {
+                    try {
+                        // 调用 setupFloatingButtons，现在它支持检查已存在的按钮
+                        window.live2dManager.setupFloatingButtons(null);
+                        floatingButtons = document.getElementById('live2d-floating-buttons');
+                        if (floatingButtons) {
+                            console.log('[VRM] 浮动按钮已创建');
+                        }
+                    } catch (error) {
+                        console.warn('[VRM] 创建浮动按钮失败:', error);
+                    }
+                }
+            } else {
+                console.warn('[VRM] Live2D 管理器未加载，无法创建浮动按钮');
+            }
+        } else {
+            // 确保按钮在 VRM 模式下可见
+            floatingButtons.style.display = 'flex';
+            floatingButtons.style.visibility = 'visible';
+            floatingButtons.style.opacity = '1';
+            console.log('[VRM] 浮动按钮已存在，确保可见');
         }
     }
 
