@@ -355,6 +355,59 @@
             -ms-user-select: none;
         }
 
+        /* 模型类型切换按钮 */
+        #model-type-toggle {
+            pointer-events: auto;
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid #667eea;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #667eea;
+            cursor: pointer;
+            z-index: 1000;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        #model-type-toggle:hover {
+            background: #667eea;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        #model-type-toggle .model-icon {
+            font-size: 18px;
+        }
+
+        #vrm-container {
+            position: fixed;
+            right: 0px;
+            bottom: 0px;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: auto; /* 改为 auto，允许接收事件 */
+            background: none;
+            opacity: 1;
+            overflow: hidden;
+            visibility: visible;
+            transition: all 1s ease-in-out, height 0ms 1s, width 0ms 1s, visibility 0ms 1s;
+        }
+
+        #vrm-container.hidden {
+            opacity: 0;
+            visibility: hidden;
+        }
+
         /* 对话区提示框 */
         #chat-tooltip {
             position: absolute;
@@ -1039,6 +1092,11 @@
 
 <!-- Status 气泡框 -->
 <div id="status-toast"></div>
+<!-- 模型类型切换按钮 -->
+<button id="model-type-toggle" title="切换模型类型">
+    <span class="model-icon">🎭</span>
+    <span id="model-type-text">Live2D</span>
+</button>
 <div id="chat-container">
     <div id="chat-header">
         <span id="chat-title" data-i18n="chat.title">💬 对话</span>
@@ -1070,6 +1128,8 @@
 <div id="live2d-container">
     <canvas id="live2d-canvas"></canvas>
 </div>
+<!-- VRM 模型容器 -->
+<div id="vrm-container" class="hidden"></div>
 
 <script>
     // 页面配置 - 从 URL 或 API 获取
@@ -1172,6 +1232,17 @@
     window.addEventListener('unload', sendBeacon);
 </script>
 <script src="/static/libs/live2dcubismcore.min.js"></script>  <!-- Cubism 4核心库（支持Cubism 3/4模型） -->
+<!-- Three.js 和 three-vrm 的 importmap（用于动态导入 ES 模块） -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "/static/libs/three.module.js",
+    "three/addons/": "/static/libs/three/addons/",
+    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js"
+  }
+}
+</script>
+<script type="module" src="/static/vrm.js?v=2"></script>
 <script>
     // 全局菜单跟踪机制 - 必须在所有其他脚本之前定义
     // 用于跟踪当前是否有活动的菜单（麦克风列表、Agent面板、侧边栏等）
@@ -1365,6 +1436,183 @@
     // 页面卸载时清理监听器
     window.addEventListener('beforeunload', () => {
         window.removeEventListener('storage', handlePageMessage);
+    });
+
+    // ========== 模型类型切换功能 ==========
+    let currentModelType = localStorage.getItem('modelType') || 'live2d'; // 'live2d' 或 'vrm'
+    let vrmManager = null;
+
+    // 初始化模型类型切换
+    async function initModelTypeToggle() {
+        const toggleBtn = document.getElementById('model-type-toggle');
+        
+        if (!toggleBtn) return;
+
+        // 更新按钮显示
+        updateModelTypeDisplay();
+
+        // 绑定点击事件
+        toggleBtn.addEventListener('click', async () => {
+            await switchModelType();
+        });
+
+        // 根据保存的类型初始化
+        await applyModelType(currentModelType);
+    }
+
+    // 切换模型类型
+    async function switchModelType() {
+        currentModelType = currentModelType === 'live2d' ? 'vrm' : 'live2d';
+        localStorage.setItem('modelType', currentModelType);
+        
+        await applyModelType(currentModelType);
+        updateModelTypeDisplay();
+        
+        console.log(`已切换到: ${currentModelType}`);
+    }
+
+    // 应用模型类型
+    async function applyModelType(type) {
+        const live2dContainer = document.getElementById('live2d-container');
+        const vrmContainer = document.getElementById('vrm-container');
+
+        if (type === 'live2d') {
+            // 显示 Live2D，隐藏 VRM
+            if (live2dContainer) {
+                live2dContainer.style.display = 'block';
+                live2dContainer.classList.remove('minimized');
+                live2dContainer.style.visibility = 'visible';
+                live2dContainer.style.opacity = '1';
+            }
+            if (vrmContainer) {
+                vrmContainer.classList.add('hidden');
+                vrmContainer.style.display = 'none';
+            }
+            
+            // 如果 VRM 管理器已初始化，停止它
+            if (vrmManager) {
+                vrmManager.enableMouseTracking(false);
+            }
+        } else {
+            // 显示 VRM，隐藏 Live2D
+            if (live2dContainer) {
+                live2dContainer.style.display = 'none';
+                live2dContainer.classList.add('minimized');
+                live2dContainer.style.visibility = 'hidden';
+                live2dContainer.style.opacity = '0';
+            }
+            if (vrmContainer) {
+                vrmContainer.classList.remove('hidden');
+                vrmContainer.style.display = 'block';
+            }
+
+            // 初始化 VRM 管理器（如果还未初始化）
+            if (!vrmManager) {
+                try {
+                    // 确保 VRMManager 类已加载
+                    if (typeof VRMManager === 'undefined') {
+                        console.warn('VRMManager 未定义，等待脚本加载...');
+                        // 等待一下再重试
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        if (typeof VRMManager === 'undefined') {
+                            console.error('VRMManager 仍未加载，请检查 vrm.js 是否正确引入');
+                            return;
+                        }
+                    }
+
+                    vrmManager = new VRMManager('vrm-container');
+                    await vrmManager.init();
+                    // 设置为全局变量，方便其他脚本访问
+                    window.vrmManager = vrmManager;
+                    console.log('VRM 管理器初始化成功');
+                    
+                    // 尝试加载 VRM 模型
+                    await loadVRMModel();
+                } catch (error) {
+                    console.error('VRM 管理器初始化失败:', error);
+                    // 显示用户友好的错误提示
+                    const statusToast = document.getElementById('status-toast');
+                    if (statusToast) {
+                        statusToast.textContent = 'VRM 模型加载失败，请检查控制台';
+                        statusToast.style.display = 'block';
+                        setTimeout(() => {
+                            statusToast.style.display = 'none';
+                        }, 3000);
+                    }
+                }
+            }
+        }
+    }
+
+    // 加载 VRM 模型
+    async function loadVRMModel() {
+        if (!vrmManager) {
+            console.warn('VRM 管理器未初始化');
+                    return;
+                }
+                
+        try {
+            // 尝试加载用户目录中的 VRM 模型
+            // 优先加载：f芙宁娜.vrm（如果存在）
+            const modelPath = '/static/models/vrm/f芙宁娜.vrm';
+            console.log('开始加载 VRM 模型:', modelPath);
+            await vrmManager.loadModel(modelPath);
+            console.log('VRM 模型加载成功');
+                    } catch (error) {
+            console.warn('加载 VRM 模型失败:', error);
+            console.log('提示: 请确保 VRM 模型文件存在于 static/models/vrm/ 目录下');
+            // 不抛出错误，允许用户手动加载或使用测试页面
+        }
+    }
+
+    // 更新按钮显示
+    function updateModelTypeDisplay() {
+        const modelTypeText = document.getElementById('model-type-text');
+        const toggleBtn = document.getElementById('model-type-toggle');
+        
+        if (modelTypeText) {
+            modelTypeText.textContent = currentModelType === 'live2d' ? 'Live2D' : 'VRM';
+        }
+        
+        if (toggleBtn) {
+            const icon = toggleBtn.querySelector('.model-icon');
+            if (icon) {
+                icon.textContent = currentModelType === 'live2d' ? '🎭' : '🎨';
+            }
+            toggleBtn.title = `当前: ${currentModelType === 'live2d' ? 'Live2D' : 'VRM'}，点击切换到${currentModelType === 'live2d' ? 'VRM' : 'Live2D'}`;
+        }
+    }
+
+    // 页面加载完成后初始化
+    window.addEventListener('DOMContentLoaded', () => {
+        // 延迟初始化，确保其他脚本已加载
+        // 如果当前类型是 VRM，需要等待 vrm.js 加载完成
+        if (currentModelType === 'vrm') {
+            // 等待 vrm.js 加载
+            const checkVRM = setInterval(() => {
+                if (typeof VRMManager !== 'undefined') {
+                    clearInterval(checkVRM);
+                    setTimeout(() => {
+                        initModelTypeToggle();
+                    }, 300);
+                }
+            }, 100);
+            
+            // 10秒超时
+            setTimeout(() => {
+                clearInterval(checkVRM);
+                if (typeof VRMManager === 'undefined') {
+                    console.warn('VRMManager 加载超时，切换到 Live2D 模式');
+                    currentModelType = 'live2d';
+                    localStorage.setItem('modelType', 'live2d');
+                }
+                initModelTypeToggle();
+            }, 10000);
+                        } else {
+            setTimeout(() => {
+                initModelTypeToggle();
+            }, 500);
+        }
     });
 </script>
 <script src="/static/libs/live2d.min.js"></script>  <!-- Cubism 2.1核心库（支持旧模型） -->

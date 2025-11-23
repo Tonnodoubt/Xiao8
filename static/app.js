@@ -1764,6 +1764,7 @@ function init_app(){
 
                 source.connect(globalAnalyser);
 
+                // 启动 Live2D 口型同步
                 if (!lipSyncActive && window.LanLan1 && window.LanLan1.live2dModel) {
                     startLipSync(window.LanLan1.live2dModel, globalAnalyser);
                     lipSyncActive = true;
@@ -1784,9 +1785,8 @@ function init_app(){
                     }
 
                     if (scheduledSources.length === 0 && audioBufferQueue.length === 0) {
-                        if (window.LanLan1 && window.LanLan1.live2dModel) {
-                            stopLipSync(window.LanLan1.live2dModel);
-                        }
+                        // 停止口型同步（会根据当前模型类型自动选择Live2D或VRM）
+                        stopLipSync(window.LanLan1?.live2dModel);
                         lipSyncActive = false;
                         isPlaying = false; // 新增：所有音频播放完毕，重置isPlaying
                     }
@@ -1888,6 +1888,7 @@ function init_app(){
     }
 
     function startLipSync(model, analyser) {
+        // Live2D 模式：使用原有的口型同步逻辑
         const dataArray = new Uint8Array(analyser.fftSize);
 
         function animate() {
@@ -1913,6 +1914,7 @@ function init_app(){
     }
 
     function stopLipSync(model) {
+        // Live2D 模式：使用原有的停止逻辑
         cancelAnimationFrame(animationFrameId);
         if (window.LanLan1 && typeof window.LanLan1.setMouth === 'function') {
             window.LanLan1.setMouth(0);
@@ -1925,6 +1927,14 @@ function init_app(){
     // 隐藏live2d函数
     function hideLive2d() {
         console.log('[App] hideLive2d函数被调用');
+        
+        // 检查当前模型类型，如果是VRM模式，不隐藏Live2D（因为可能根本没显示）
+        const currentModelType = localStorage.getItem('modelType') || 'live2d';
+        if (currentModelType === 'vrm') {
+            console.log('[App] hideLive2d: 当前为VRM模式，跳过Live2D隐藏逻辑');
+            return;
+        }
+        
         const container = document.getElementById('live2d-container');
         console.log('[App] hideLive2d调用前，容器类列表:', container.classList.toString());
         
@@ -1946,6 +1956,13 @@ function init_app(){
     // 显示live2d函数
     function showLive2d() {
         console.log('[App] showLive2d函数被调用');
+        
+        // 检查当前模型类型，如果是VRM模式，不显示Live2D
+        const currentModelType = localStorage.getItem('modelType') || 'live2d';
+        if (currentModelType === 'vrm') {
+            console.log('[App] showLive2d: 当前为VRM模式，跳过Live2D显示逻辑');
+            return;
+        }
         
         // 检查是否处于"请她离开"状态，如果是则直接返回，不执行显示逻辑
         if (window.live2dManager && window.live2dManager._goodbyeClicked) {
