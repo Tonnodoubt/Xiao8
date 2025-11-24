@@ -41,14 +41,21 @@ class VRMManager {
         this.mouseEnterHandler = null;
         this.resizeHandler = null;
         
-        // 锁定功能
-        this.isLocked = true; // 默认锁定
-        this.lockIconElement = null;
-        this.lockIconShowHandler = null;
-        this.lockIconHideHandler = null;
-        this.lockIconMouseEnterHandler = null;
-        this.lockIconMouseLeaveHandler = null;
-        this.lockIconHideTimeout = null;
+        // 口型同步相关
+        this.lipSyncActive = false;
+        this.lipSyncAnimationId = null;
+        this.analyser = null;
+        // 口型表情映射 - 在模型加载后根据实际表情名称更新
+        this.mouthExpressions = {
+            'aa': null,  // 将在模型加载后设置
+            'ih': null,
+            'ou': null,
+            'ee': null,
+            'oh': null
+        };
+        this.currentMouthExpression = null; // 当前激活的嘴巴表情 {index, weight}
+        this.targetMouthWeight = 0; // 目标权重（用于平滑过渡）
+        this.currentMouthWeight = 0; // 当前权重（实际应用的值）
     }
 
     async init() {
@@ -224,15 +231,28 @@ class VRMManager {
                 this.initDragAndZoom();
             }
 
-            // 初始化锁图标
-            this.setupLockIcon();
-
             console.log('VRM 模型加载成功');
             const availableExpressions = Object.keys(this.vrm.expressionManager?.expressions || {});
             console.log('模型信息:', {
                 expressions: availableExpressions,
                 springBones: this.vrm.springBoneManager?.springBoneGroups?.length || 0
             });
+            
+            // 检查口型同步支持
+            const lipSyncInfo = this.checkLipSyncSupport();
+            
+            // 检查动画支持
+            const animationInfo = this.checkAnimations();
+            
+            // 输出总结
+            console.log('\n=== 模型功能总结 ===');
+            console.log('口型支持:', lipSyncInfo ? 
+                (lipSyncInfo.hasMouthExpressions || lipSyncInfo.hasMouthBlendShapes || lipSyncInfo.hasJawBone ? '✓ 支持' : '✗ 不支持') : 
+                '未知');
+            console.log('动画支持:', animationInfo ? 
+                (animationInfo.hasAnimations ? `✓ 支持 (${animationInfo.count} 个动画)` : '✗ 不支持') : 
+                '未知');
+            console.log('==================\n');
 
             return this.vrm;
         } catch (error) {
@@ -248,14 +268,22 @@ class VRMManager {
             return false;
         }
 
+        const clampedWeight = Math.max(0, Math.min(1, weight));
+        
+        // 直接设置 expression.weight (主要方法)
         const expression = this.vrm.expressionManager.expressions[expressionName];
-        if (expression) {
-            expression.weight = Math.max(0, Math.min(1, weight));
-            return true;
-        } else {
-            console.warn(`表情 "${expressionName}" 不存在`);
+        if (!expression) {
+            console.warn(`表情 "${expressionName}" 不存在，可用表情:`, Object.keys(this.vrm.expressionManager.expressions));
             return false;
         }
+        
+        const oldWeight = expression.weight;
+        
+        // 直接设置权重
+        expression.weight = clampedWeight;
+        
+        
+        return true;
     }
 
     // 获取所有可用表情
@@ -275,474 +303,333 @@ class VRMManager {
         });
     }
 
-    // 启用/禁用鼠标跟踪
-    enableMouseTracking(enabled = true) {
-        this.mouseTrackingEnabled = enabled;
-
-        if (enabled) {
-            this.mouseMoveHandler = this.onMouseMove.bind(this);
-            document.addEventListener('mousemove', this.mouseMoveHandler);
-        } else {
-            if (this.mouseMoveHandler) {
-                document.removeEventListener('mousemove', this.mouseMoveHandler);
-                this.mouseMoveHandler = null;
-            }
-        }
-    }
-
-    onMouseMove(event) {
-        if (!this.vrm || !this.vrm.humanoid) return;
-
-        // 简单的鼠标跟踪实现
-        const x = (event.clientX / window.innerWidth) * 2 - 1;
-        const y = -(event.clientY / window.innerHeight) * 2 + 1;
-
-        // 调整头部朝向
-        const headBone = this.vrm.humanoid.getNormalizedBoneNode('head');
-        if (headBone) {
-            // 限制旋转角度
-            headBone.rotation.y = Math.max(-0.5, Math.min(0.5, x * 0.3));
-            headBone.rotation.x = Math.max(-0.3, Math.min(0.3, y * 0.2));
-        }
-    }
-
-    // 设置模型位置
-    setPosition(x, y, z) {
-        if (this.vrm) {
-            this.vrm.scene.position.set(x, y, z);
-        }
-    }
-
-    // 设置模型缩放
-    setScale(scale) {
-        if (this.vrm) {
-            this.vrm.scene.scale.set(scale, scale, scale);
-        }
-    }
-
-    // 获取当前模型
-    getCurrentModel() {
-        return this.vrm;
-    }
-
-    // 设置锁图标
-    setupLockIcon() {
-        // 在非主页面不显示
-        if (!document.getElementById('chat-container')) {
-            this.isLocked = false;
+    // 检查口型同步支持
+    checkLipSyncSupport() {
+        if (!this.vrm) {
+            console.warn('[VRM] 模型未加载');
             return;
         }
 
-        // 如果锁图标已存在，先移除
-        if (this.lockIconElement && this.lockIconElement.parentNode) {
-            this.lockIconElement.parentNode.removeChild(this.lockIconElement);
-        }
-
-        const lockIcon = document.createElement('div');
-        lockIcon.id = 'vrm-lock-icon';
-        lockIcon.innerText = this.isLocked ? '🔒' : '🔓';
-        Object.assign(lockIcon.style, {
-            position: 'fixed',
-            zIndex: '9999', // 确保在最上层
-            fontSize: '24px',
-            cursor: 'pointer',
-            userSelect: 'none',
-            textShadow: '0 0 4px black',
-            pointerEvents: 'auto',
-            display: 'block', // 先显示，让用户能看到
-            left: '50%',
-            top: '50%',
-            transform: 'translate(-50%, -50%)',
-            backgroundColor: 'rgba(0, 0, 0, 0.5)', // 添加背景以便看到
-            borderRadius: '8px',
-            padding: '8px 12px'
-        });
-
-        document.body.appendChild(lockIcon);
-        this.lockIconElement = lockIcon;
-
-        // 点击切换锁定状态
-        lockIcon.addEventListener('click', (e) => {
-            e.stopPropagation();
-            this.isLocked = !this.isLocked;
-            lockIcon.innerText = this.isLocked ? '🔒' : '🔓';
-            this.updateLockState();
-        });
-
-        // 初始状态
-        this.updateLockState();
-
-        // 鼠标跟踪显示/隐藏锁图标
-        this.setupLockIconVisibility();
-    }
-
-    // 更新锁定状态
-    updateLockState() {
-        if (!this.renderer || !this.container) return;
+        console.log('\n=== 口型同步支持检查 ===');
         
-        const canvas = this.renderer.domElement;
+        // 1. 检查表情（Expression）
+        const expressions = this.vrm.expressionManager?.expressions || {};
+        const expressionNames = Object.keys(expressions);
+        console.log(`表情数量: ${expressionNames.length}`);
         
-        if (this.isLocked) {
-            // 锁定：禁用交互
-            canvas.style.pointerEvents = 'none';
-            canvas.style.cursor = 'default';
-            this.container.style.pointerEvents = 'none';
-            // 停止当前拖拽
-            this.isDragging = false;
-            this.dragMode = null;
+        // 查找嘴巴相关的表情
+        const mouthKeywords = ['mouth', 'open', 'aa', 'ih', 'ou', 'ee', 'oh', 'あ', 'い', 'う', 'え', 'お', 'jaw', 'speak', 'talk', 'lip'];
+        const mouthExpressions = [];
+        
+        expressionNames.forEach(name => {
+            const expr = expressions[name];
+            const actualName = (expr?.name || name).toLowerCase();
+            if (mouthKeywords.some(keyword => actualName.includes(keyword))) {
+                mouthExpressions.push({
+                    index: name,
+                    name: expr?.name || name,
+                    weight: expr?.weight || 0
+                });
+            }
+        });
+        
+        if (mouthExpressions.length > 0) {
+            console.log('✓ 找到嘴巴相关表情:', mouthExpressions);
         } else {
-            // 解锁：启用交互
-            canvas.style.pointerEvents = 'auto';
-            canvas.style.cursor = 'grab';
-            this.container.style.pointerEvents = 'auto';
+            console.log('⚠ 未在表情中找到嘴巴相关项');
         }
-    }
 
-    // 计算模型在屏幕上的投影位置
-    getModelScreenBounds() {
-        if (!this.vrm || !this.camera || !this.renderer) return null;
-        
-        const box = new THREE.Box3().setFromObject(this.vrm.scene);
-        const corners = [
-            new THREE.Vector3(box.min.x, box.min.y, box.min.z),
-            new THREE.Vector3(box.max.x, box.min.y, box.min.z),
-            new THREE.Vector3(box.min.x, box.max.y, box.min.z),
-            new THREE.Vector3(box.max.x, box.max.y, box.min.z),
-            new THREE.Vector3(box.min.x, box.min.y, box.max.z),
-            new THREE.Vector3(box.max.x, box.min.y, box.max.z),
-            new THREE.Vector3(box.min.x, box.max.y, box.max.z),
-            new THREE.Vector3(box.max.x, box.max.y, box.max.z)
-        ];
-        
-        const width = this.renderer.domElement.width || this.container.clientWidth;
-        const height = this.renderer.domElement.height || this.container.clientHeight;
-        
-        let minX = Infinity, maxX = -Infinity;
-        let minY = Infinity, maxY = -Infinity;
-        
-        corners.forEach(corner => {
-            const vector = corner.clone();
-            vector.applyMatrix4(this.vrm.scene.matrixWorld);
-            vector.project(this.camera);
-            
-            const x = (vector.x * 0.5 + 0.5) * width;
-            const y = (-vector.y * 0.5 + 0.5) * height;
-            
-            minX = Math.min(minX, x);
-            maxX = Math.max(maxX, x);
-            minY = Math.min(minY, y);
-            maxY = Math.max(maxY, y);
+        // 2. 检查 BlendShape（如果有）
+        if (this.vrm.blendShapeProxy) {
+            console.log('✓ 模型有 BlendShapeProxy');
+        } else {
+            console.log('⚠ 模型没有 BlendShapeProxy');
+        }
+
+        // 3. 检查 Humanoid 骨骼（下巴）
+        if (this.vrm.humanoid?.normalizedHumanBones?.jaw) {
+            console.log('✓ 找到下巴骨骼');
+        } else {
+            console.log('⚠ 未找到下巴骨骼');
+        }
+
+        // 输出所有表情列表（用于调试）
+        console.log('\n所有表情列表:');
+        expressionNames.forEach((name, index) => {
+            const expr = expressions[name];
+            console.log(`  [${index}] ${name} -> "${expr?.name || name}"`);
         });
+
+        console.log('\n=== 检查总结 ===');
+        const hasMouthExpressions = mouthExpressions.length > 0;
+        const hasMouthBlendShapes = this.vrm.blendShapeProxy && 
+            this.vrm.blendShapeProxy.blendShapeGroups?.some(bs => {
+                const name = (bs.name || bs.preset || '').toLowerCase();
+                return mouthKeywords.some(keyword => name.includes(keyword));
+            });
+        const hasJawBone = !!this.vrm.humanoid?.normalizedHumanBones?.jaw;
         
+        if (hasMouthExpressions || hasMouthBlendShapes || hasJawBone) {
+            console.log('✓ 模型支持口型同步！');
+            console.log('   支持方式:');
+            if (hasMouthExpressions) console.log('     - 表情 (Expression)');
+            if (hasMouthBlendShapes) console.log('     - BlendShape');
+            if (hasJawBone) console.log('     - 骨骼 (Jaw Bone)');
+        } else {
+            console.log('⚠ 模型可能不支持口型同步');
+            console.log('提示: 请检查模型是否支持表情，或者表情名称可能不同');
+        }
+        console.log('==================\n');
+        
+        // 返回检查结果
         return {
-            left: minX,
-            right: maxX,
-            top: minY,
-            bottom: maxY,
-            width: maxX - minX,
-            height: maxY - minY
+            hasMouthExpressions,
+            hasMouthBlendShapes,
+            hasJawBone,
+            mouthExpressions,
+            allExpressions: expressionNames
         };
     }
 
-    // 设置锁图标显示/隐藏逻辑（类似Live2D的鼠标跟踪）
-    setupLockIconVisibility() {
-        if (!this.renderer || !this.lockIconElement) return;
+    // 检查模型是否包含动画
+    checkAnimations() {
+        if (!this.vrm) {
+            console.warn('[VRM] 模型未加载');
+            return null;
+        }
 
-        const canvas = this.renderer.domElement;
-        let hideButtonsTimer = null;
-        const threshold = 70; // 与Live2D相同的阈值
+        console.log('\n=== 动画检查 ===');
+        
+        // VRM 文件本身可能包含 GLTF 动画
+        // 尝试从 userData 中获取原始 GLTF 数据
+        let gltf = null;
+        
+        // 方法1: 从 vrm.userData 获取
+        if (this.vrm.userData && this.vrm.userData.gltf) {
+            gltf = this.vrm.userData.gltf;
+        }
+        
+        // 方法2: 从场景的 userData 获取
+        if (!gltf && this.vrm.scene && this.vrm.scene.userData && this.vrm.scene.userData.gltf) {
+            gltf = this.vrm.scene.userData.gltf;
+        }
 
-        // 鼠标移动跟踪
-        const mouseMoveHandler = (e) => {
-            if (!this.vrm || !this.lockIconElement) return;
+        if (gltf && gltf.animations && gltf.animations.length > 0) {
+            console.log(`✓ 找到 ${gltf.animations.length} 个内置动画`);
+            const animations = gltf.animations.map((clip, index) => {
+                console.log(`  [${index}] ${clip.name || `Animation_${index}`} - 时长: ${clip.duration.toFixed(2)}秒, 轨道数: ${clip.tracks.length}`);
+                return {
+                    index: index,
+                    name: clip.name || `Animation_${index}`,
+                    duration: clip.duration,
+                    tracks: clip.tracks.length
+                };
+            });
             
-            // 如果正在拖拽，隐藏图标
-            if (this.isDragging) {
-                this.lockIconElement.style.display = 'none';
-                return;
-            }
-            
-            const bounds = this.getModelScreenBounds();
-            if (!bounds) {
-                // 如果无法获取边界，使用容器位置作为备选
-                const rect = this.container.getBoundingClientRect();
-                if (rect.width > 0 && rect.height > 0) {
-                    // 使用容器的中心位置
-                    const targetX = rect.left + rect.width * 0.7;
-                    const targetY = rect.top + rect.height * 0.7;
-                    this.lockIconElement.style.left = `${targetX}px`;
-                    this.lockIconElement.style.top = `${targetY}px`;
-                    this.lockIconElement.style.transform = 'none';
-                    this.lockIconElement.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-                    this.lockIconElement.style.display = 'block';
-                }
-                return;
-            }
-            
-            // 计算鼠标到模型边界的距离
-            const mouseX = e.clientX;
-            const mouseY = e.clientY;
-            
-            const dx = Math.max(
-                bounds.left - mouseX,
-                0,
-                mouseX - bounds.right
-            );
-            const dy = Math.max(
-                bounds.top - mouseY,
-                0,
-                mouseY - bounds.bottom
-            );
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            // 更新锁图标位置（类似Live2D：bounds.right * 0.7 + bounds.left * 0.3）
-            const targetX = bounds.right * 0.7 + bounds.left * 0.3;
-            const targetY = bounds.top * 0.3 + bounds.bottom * 0.7;
-            const screenWidth = window.innerWidth;
-            const screenHeight = window.innerHeight;
-            
-            this.lockIconElement.style.left = `${Math.min(targetX, screenWidth - 40)}px`;
-            this.lockIconElement.style.top = `${Math.min(targetY, screenHeight - 40)}px`;
-            this.lockIconElement.style.transform = 'none';
-            this.lockIconElement.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-            
-            if (distance < threshold) {
-                // 鼠标靠近模型，显示锁图标
-                if (hideButtonsTimer) {
-                    clearTimeout(hideButtonsTimer);
-                    hideButtonsTimer = null;
-                }
+            console.log('==================\n');
+            return {
+                hasAnimations: true,
+                count: gltf.animations.length,
+                animations: animations
+            };
+        } else {
+            console.log('⚠ 模型文件中没有找到动画数据');
+            console.log('提示: VRM 模型文件本身通常不包含动画，动画通常是单独的文件（.vrma, .glb, .gltf）');
+            console.log('==================\n');
+            return {
+                hasAnimations: false,
+                message: '模型文件中没有找到动画数据'
+            };
+        }
+    }
+
+    // 更新口型表情映射（在模型加载后调用）
+    updateMouthExpressionMapping() {
+        if (!this.vrm || !this.vrm.expressionManager) {
+            return;
+        }
+
+        const expressions = this.vrm.expressionManager.expressions;
+        const expressionNames = Object.keys(expressions);
+        
+        // 扩展的匹配关键词（支持多种命名方式）
+        const mouthKeywordMap = {
+            'aa': ['aa', 'あ', 'ああ', 'open', 'mouthopen', 'jawopen'],
+            'ih': ['ih', 'い', 'いい', 'i', 'mouthi'],
+            'ou': ['ou', 'う', 'うう', 'u', 'mouthu', 'o'],
+            'ee': ['ee', 'え', 'ええ', 'e', 'mouthe'],
+            'oh': ['oh', 'お', 'おお', 'moutho']
+        };
+
+        // 为每个目标表情查找匹配
+        Object.keys(mouthKeywordMap).forEach(targetKey => {
+            const keywords = mouthKeywordMap[targetKey];
+            let found = false;
+
+            // 首先尝试精确匹配（通过索引）
+            for (let i = 0; i < expressionNames.length; i++) {
+                const name = expressionNames[i];
+                const expr = expressions[name];
+                const actualName = (expr?.name || name).toLowerCase();
                 
-                this.lockIconElement.style.display = 'block';
-            } else {
-                // 鼠标远离模型，延迟隐藏
-                if (!hideButtonsTimer) {
-                    hideButtonsTimer = setTimeout(() => {
-                        if (this.lockIconElement) {
-                            this.lockIconElement.style.display = 'none';
-                        }
-                        hideButtonsTimer = null;
-                    }, 1000);
+                if (keywords.some(keyword => actualName === keyword || actualName.includes(keyword))) {
+                    this.mouthExpressions[targetKey] = i;
+                    found = true;
+                    console.log(`[VRM] 映射口型 "${targetKey}" -> 表情索引 ${i} ("${actualName}")`);
+                    break;
                 }
             }
-        };
-        
-        // 锁图标本身也要监听，防止鼠标移到图标上时隐藏
-        const lockIconMouseEnter = () => {
-            if (hideButtonsTimer) {
-                clearTimeout(hideButtonsTimer);
-                hideButtonsTimer = null;
-            }
-        };
-        
-        const lockIconMouseLeave = () => {
-            if (!hideButtonsTimer) {
-                hideButtonsTimer = setTimeout(() => {
-                    if (this.lockIconElement) {
-                        this.lockIconElement.style.display = 'none';
+
+            // 如果没找到，尝试部分匹配
+            if (!found) {
+                for (let i = 0; i < expressionNames.length; i++) {
+                    const name = expressionNames[i];
+                    const expr = expressions[name];
+                    const actualName = (expr?.name || name).toLowerCase();
+                    
+                    if (keywords.some(keyword => actualName.includes(keyword) || keyword.includes(actualName))) {
+                        this.mouthExpressions[targetKey] = i;
+                        found = true;
+                        console.log(`[VRM] 映射口型 "${targetKey}" -> 表情索引 ${i} ("${actualName}") [部分匹配]`);
+                        break;
                     }
-                    hideButtonsTimer = null;
-                }, 1000);
+                }
             }
-        };
-        
-        // 保存处理器引用
-        this.lockIconShowHandler = mouseMoveHandler;
-        this.lockIconHideHandler = lockIconMouseLeave;
-        this.lockIconMouseEnterHandler = lockIconMouseEnter;
-        this.lockIconMouseLeaveHandler = lockIconMouseLeave;
-        
-        // 添加事件监听
-        canvas.addEventListener('mousemove', mouseMoveHandler);
-        if (this.lockIconElement) {
-            this.lockIconElement.addEventListener('mouseenter', lockIconMouseEnter);
-            this.lockIconElement.addEventListener('mouseleave', lockIconMouseLeave);
+
+            if (!found) {
+                console.warn(`[VRM] 未找到口型 "${targetKey}" 对应的表情`);
+            }
+        });
+
+        // 检查是否有任何映射成功
+        const hasAnyMapping = Object.values(this.mouthExpressions).some(v => v !== null);
+        if (!hasAnyMapping) {
+            console.warn('[VRM] ⚠️ 未找到任何口型表情映射，口型同步可能无法工作');
+            console.warn('[VRM] 可用表情:', expressionNames);
+        } else {
+            const mappedCount = Object.values(this.mouthExpressions).filter(v => v !== null).length;
+            console.log(`[VRM] ✓ 成功映射 ${mappedCount}/5 个口型表情`);
         }
     }
 
-    // 清理锁图标相关事件监听器
-    cleanupLockIcon() {
-        if (this.lockIconHideTimeout) {
-            clearTimeout(this.lockIconHideTimeout);
-            this.lockIconHideTimeout = null;
-        }
-
-        if (this.renderer && this.container) {
-            const canvas = this.renderer.domElement;
-            
-            if (this.lockIconShowHandler) {
-                canvas.removeEventListener('mousemove', this.lockIconShowHandler);
-                this.lockIconShowHandler = null;
-            }
-            if (this.lockIconHideHandler) {
-                this.lockIconElement?.removeEventListener('mouseleave', this.lockIconHideHandler);
-                this.lockIconHideHandler = null;
-            }
-            if (this.lockIconMouseEnterHandler && this.lockIconElement) {
-                this.lockIconElement.removeEventListener('mouseenter', this.lockIconMouseEnterHandler);
-                this.lockIconMouseEnterHandler = null;
-            }
-        }
-    }
-
-    // 初始化拖拽和缩放功能
     initDragAndZoom() {
         if (!this.renderer) return;
-
+        
         const canvas = this.renderer.domElement;
         
-        // 先清理旧的事件监听器（防止重复初始化）
-        this.cleanupDragAndZoom();
-        
-        // 确保容器和 canvas 可以接收指针事件
-        this.container.style.pointerEvents = this.isLocked ? 'none' : 'auto';
-        canvas.style.pointerEvents = this.isLocked ? 'none' : 'auto';
-        canvas.style.userSelect = 'none';
-
         // 鼠标按下事件
         this.mouseDownHandler = (e) => {
-            // 如果锁定，不允许拖拽
-            if (this.isLocked) return;
-            
             if (e.button === 0) { // 左键：旋转
-                e.preventDefault();
-                e.stopPropagation();
                 this.isDragging = true;
                 this.dragMode = 'rotate';
-                this.previousMousePosition = {
-                    x: e.clientX,
-                    y: e.clientY
-                };
+                this.previousMousePosition = { x: e.clientX, y: e.clientY };
                 canvas.style.cursor = 'grabbing';
-            } else if (e.button === 1) { // 中键：平移
                 e.preventDefault();
                 e.stopPropagation();
+            } else if (e.button === 1) { // 中键：平移
                 this.isDragging = true;
                 this.dragMode = 'pan';
-                this.previousMousePosition = {
-                    x: e.clientX,
-                    y: e.clientY
-                };
+                this.previousMousePosition = { x: e.clientX, y: e.clientY };
                 canvas.style.cursor = 'move';
+                e.preventDefault();
+                e.stopPropagation();
             }
         };
-        canvas.addEventListener('mousedown', this.mouseDownHandler);
 
         // 鼠标移动事件
         this.dragHandler = (e) => {
-            if (!this.isDragging || !this.dragMode) return;
-            if (!this.vrm) return;
-
-            e.preventDefault();
-            e.stopPropagation();
+            if (!this.isDragging || !this.vrm) return;
 
             const deltaX = e.clientX - this.previousMousePosition.x;
             const deltaY = e.clientY - this.previousMousePosition.y;
 
             if (this.dragMode === 'rotate') {
-                // 左键：旋转模型（Y轴水平旋转，X轴垂直旋转）
-                this.modelRotation.y += deltaX * 0.01;
-                this.modelRotation.x -= deltaY * 0.01;
-
-                // 限制垂直旋转角度
-                this.modelRotation.x = Math.max(-Math.PI / 3, Math.min(Math.PI / 3, this.modelRotation.x));
-
-                // 应用旋转
-                this.vrm.scene.rotation.y = this.modelRotation.y;
-                this.vrm.scene.rotation.x = this.modelRotation.x;
+                // 旋转模型
+                const rotationSpeed = 0.01;
+                this.modelRotation.y += deltaX * rotationSpeed;
+                this.modelRotation.x += deltaY * rotationSpeed;
+                
+                // 限制 X 轴旋转角度（避免翻转）
+                this.modelRotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.modelRotation.x));
+                
+                this.vrm.scene.rotation.set(this.modelRotation.x, this.modelRotation.y, 0);
             } else if (this.dragMode === 'pan') {
-                // 中键：平移模型（在屏幕空间中移动）
-                // 将屏幕坐标转换为世界坐标的移动
+                // 平移模型
                 const panSpeed = 0.01;
-                this.modelPosition.x += deltaX * panSpeed;
-                this.modelPosition.y -= deltaY * panSpeed; // Y轴反转
-
-                // 应用平移
-                this.vrm.scene.position.x = this.modelPosition.x;
-                this.vrm.scene.position.y = this.modelPosition.y;
+                const right = new THREE.Vector3(1, 0, 0).applyQuaternion(this.camera.quaternion);
+                const up = new THREE.Vector3(0, 1, 0).applyQuaternion(this.camera.quaternion);
+                
+                this.modelPosition.x += (right.x * deltaX - right.x * deltaY) * panSpeed;
+                this.modelPosition.y += (up.y * deltaY) * panSpeed;
+                this.modelPosition.z += (right.z * deltaX - right.z * deltaY) * panSpeed;
+                
+                this.vrm.scene.position.add(
+                    right.multiplyScalar(deltaX * panSpeed)
+                        .add(up.multiplyScalar(-deltaY * panSpeed))
+                );
             }
 
-            this.previousMousePosition = {
-                x: e.clientX,
-                y: e.clientY
-            };
+            this.previousMousePosition = { x: e.clientX, y: e.clientY };
+            e.preventDefault();
+            e.stopPropagation();
         };
-        document.addEventListener('mousemove', this.dragHandler);
 
         // 鼠标释放事件
         this.mouseUpHandler = (e) => {
-            if (e.button === 0 || e.button === 1) {
+            if (this.isDragging) {
+                this.isDragging = false;
+                this.dragMode = null;
+                canvas.style.cursor = 'grab';
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        };
+
+        // 鼠标离开画布
+        this.mouseLeaveHandler = () => {
+            if (this.isDragging) {
                 this.isDragging = false;
                 this.dragMode = null;
                 canvas.style.cursor = 'grab';
             }
         };
-        document.addEventListener('mouseup', this.mouseUpHandler);
 
-        // 鼠标离开画布时也释放
-        this.mouseLeaveHandler = () => {
-            this.isDragging = false;
-            this.dragMode = null;
+        // 鼠标进入画布
+        this.mouseEnterHandler = () => {
             canvas.style.cursor = 'grab';
         };
-        canvas.addEventListener('mouseleave', this.mouseLeaveHandler);
-        
-        // 阻止中键的默认行为（打开新标签页等）
+
+        // 滚轮缩放
+        this.wheelHandler = (e) => {
+            if (!this.vrm) return;
+            
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const zoomSpeed = 0.1;
+            const zoomDelta = e.deltaY > 0 ? -zoomSpeed : zoomSpeed;
+            
+            // 更新模型缩放
+            this.modelScale = Math.max(0.1, Math.min(3.0, this.modelScale + zoomDelta));
+            this.vrm.scene.scale.set(this.modelScale, this.modelScale, this.modelScale);
+        };
+
+        // 中键点击事件（防止默认行为）
         this.auxClickHandler = (e) => {
             if (e.button === 1) {
                 e.preventDefault();
                 e.stopPropagation();
             }
         };
-        canvas.addEventListener('auxclick', this.auxClickHandler);
 
-        // 鼠标进入画布时改变光标
-        this.mouseEnterHandler = () => {
-            if (!this.isDragging) {
-                canvas.style.cursor = 'grab';
-            }
-        };
+        // 绑定事件
+        canvas.addEventListener('mousedown', this.mouseDownHandler);
+        document.addEventListener('mousemove', this.dragHandler);
+        document.addEventListener('mouseup', this.mouseUpHandler);
+        canvas.addEventListener('mouseleave', this.mouseLeaveHandler);
         canvas.addEventListener('mouseenter', this.mouseEnterHandler);
-
-        // 鼠标滚轮缩放
-        this.wheelHandler = (e) => {
-            // 如果锁定，不允许缩放
-            if (this.isLocked || !this.vrm) return;
-
-            e.preventDefault();
-            e.stopPropagation();
-
-            // 计算缩放增量
-            const zoomSpeed = 0.1;
-            const delta = e.deltaY > 0 ? -zoomSpeed : zoomSpeed;
-            this.modelScale = Math.max(0.3, Math.min(3.0, this.modelScale + delta));
-
-            // 应用缩放
-            this.vrm.scene.scale.set(this.modelScale, this.modelScale, this.modelScale);
-        };
         canvas.addEventListener('wheel', this.wheelHandler, { passive: false });
-    }
-
-    // 更新浮动按钮位置（类似Live2D）
-    updateFloatingButtonsPosition() {
-        const floatingButtons = document.getElementById('live2d-floating-buttons');
-        if (!floatingButtons || !this.vrm) return;
-        
-        const bounds = this.getModelScreenBounds();
-        if (!bounds) return;
-        
-        // 计算按钮位置（模型左侧，垂直居中）
-        const buttonX = bounds.left - 80; // 按钮在模型左侧80px
-        const buttonY = bounds.top + bounds.height / 2; // 垂直居中
-        
-        // 确保按钮不超出屏幕
-        const screenWidth = window.innerWidth;
-        const screenHeight = window.innerHeight;
-        
-        floatingButtons.style.left = `${Math.max(10, Math.min(buttonX, screenWidth - 100))}px`;
-        floatingButtons.style.top = `${Math.max(10, Math.min(buttonY, screenHeight - 300))}px`;
-        floatingButtons.style.right = 'auto';
-        floatingButtons.style.bottom = 'auto';
+        canvas.addEventListener('auxclick', this.auxClickHandler);
     }
 
     // 渲染循环
@@ -756,13 +643,253 @@ class VRMManager {
             this.vrm.springBoneManager.update(deltaTime);
         }
 
-        // 更新浮动按钮位置
-        this.updateFloatingButtonsPosition();
+        // 在渲染循环中持续更新口型表情（防止被重置）
+        if (this.lipSyncActive && this.vrm?.expressionManager && this.currentMouthExpression) {
+            // 如果口型同步正在运行，确保当前表情的权重被保持
+            const expr = this.vrm.expressionManager.expressions[this.currentMouthExpression.index];
+            if (expr && this.currentMouthWeight > 0) {
+                // 每帧都重新设置权重，确保不被其他逻辑重置
+                expr.weight = this.currentMouthWeight;
+                
+                // 尝试调用 update 方法（如果存在）
+                if (typeof expr.update === 'function') {
+                    try {
+                        expr.update();
+                    } catch (e) {}
+                }
+                
+                // 尝试调用 expressionManager.update（如果存在）
+                if (typeof this.vrm.expressionManager.update === 'function') {
+                    try {
+                        this.vrm.expressionManager.update();
+                    } catch (e) {}
+                }
+            }
+        }
 
         // 渲染场景
         if (this.renderer && this.scene && this.camera) {
             this.renderer.render(this.scene, this.camera);
         }
+    }
+
+    // 启动口型同步
+    startLipSync(analyser) {
+        if (!this.vrm || !this.vrm.expressionManager) {
+            console.warn('[VRM] 模型未加载，无法启动口型同步');
+            return false;
+        }
+
+        if (!analyser) {
+            console.warn('[VRM] analyser 未提供，无法启动口型同步');
+            return false;
+        }
+
+        if (this.lipSyncActive) {
+            console.warn('[VRM] 口型同步已在运行');
+            return false;
+        }
+
+        // 更新口型表情映射
+        this.updateMouthExpressionMapping();
+
+        // 检查是否有可用的口型表情
+        const hasMouthExpressions = Object.values(this.mouthExpressions).some(v => v !== null);
+        if (!hasMouthExpressions) {
+            console.warn('[VRM] ⚠️ 未找到可用的口型表情，口型同步可能无法正常工作');
+            console.warn('[VRM] 可用表情:', Object.keys(this.vrm.expressionManager.expressions));
+        }
+
+        this.lipSyncActive = true;
+        this.analyser = analyser;
+
+        // 初始化缓冲区
+        const bufferLength = analyser.frequencyBinCount;
+        const dataArray = new Uint8Array(bufferLength);
+        const frequencyData = new Uint8Array(bufferLength);
+
+        // 平滑参数 - 调整为更明显、更直接的口型
+        const smoothingFactor = 0.4; // 权重平滑因子（增大，让变化更快更明显）
+        const volumeThreshold = 0.002; // 音量阈值（进一步降低，避免在音频块间隙时关闭）
+        const volumeSensitivity = 3.5; // 音量敏感度（提高，让嘴巴更容易张开）
+        const silenceDecayRate = 0.95; // 静音时的衰减率（降低衰减速度，保持嘴巴稍微张开）
+
+        const animate = () => {
+            if (!this.lipSyncActive) return;
+
+            // 获取音频数据
+            analyser.getByteFrequencyData(frequencyData);
+            analyser.getByteTimeDomainData(dataArray);
+
+            // 计算 RMS（均方根）音量
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                const normalized = (dataArray[i] - 128) / 128;
+                sum += normalized * normalized;
+            }
+            const rms = Math.sqrt(sum / dataArray.length);
+            const volume = Math.min(1, rms * volumeSensitivity);
+
+            // 如果音量太低，逐渐关闭嘴巴（但不要完全关闭，保持轻微张开）
+            if (volume < volumeThreshold) {
+                if (this.currentMouthExpression) {
+                    // 平滑关闭，但保持最小张开度
+                    this.targetMouthWeight = 0.1; // 保持最小张开度，而不是完全关闭
+                    this.currentMouthWeight += (this.targetMouthWeight - this.currentMouthWeight) * 0.1; // 缓慢衰减
+                    const expr = this.vrm.expressionManager.expressions[this.currentMouthExpression.index];
+                    if (expr) {
+                        expr.weight = Math.max(0.1, this.currentMouthWeight); // 保持最小权重
+                    }
+                }
+                this.lipSyncAnimationId = requestAnimationFrame(animate);
+                return;
+            }
+
+            // 分析频率，确定主要元音
+            const lowFreq = this.getFrequencyRange(frequencyData, 0, Math.floor(bufferLength * 0.1)); // 低频（0-10%）
+            const midFreq = this.getFrequencyRange(frequencyData, Math.floor(bufferLength * 0.1), Math.floor(bufferLength * 0.4)); // 中频（10-40%）
+            const highFreq = this.getFrequencyRange(frequencyData, Math.floor(bufferLength * 0.4), Math.floor(bufferLength * 0.7)); // 高频（40-70%）
+
+            // 根据频率特征判断元音
+            let primaryExpression = null;
+            let primaryWeight = 0;
+
+            // 'aa' (あ) - 低频为主
+            if (lowFreq > midFreq * 0.8 && lowFreq > highFreq * 0.8) {
+                primaryExpression = this.mouthExpressions['aa'];
+                primaryWeight = lowFreq;
+            }
+            // 'ih' (い) - 中高频
+            else if (midFreq > lowFreq * 1.2 && midFreq > highFreq * 0.9) {
+                primaryExpression = this.mouthExpressions['ih'];
+                primaryWeight = midFreq;
+            }
+            // 'ou' (う) - 中频为主
+            else if (midFreq > lowFreq && midFreq > highFreq) {
+                primaryExpression = this.mouthExpressions['ou'];
+                primaryWeight = midFreq;
+            }
+            // 'ee' (え) - 中高频
+            else if (highFreq > midFreq * 0.9 && highFreq > lowFreq * 1.1) {
+                primaryExpression = this.mouthExpressions['ee'];
+                primaryWeight = highFreq;
+            }
+            // 'oh' (お) - 中低频
+            else if (midFreq > lowFreq * 0.8 && midFreq > highFreq * 0.9) {
+                primaryExpression = this.mouthExpressions['oh'];
+                primaryWeight = midFreq;
+            }
+
+            // 如果找到了主要表情
+            if (primaryExpression !== null && primaryExpression !== undefined) {
+                // 计算最终权重（结合音量和频率强度）- 调整为更明显的口型
+                const finalWeight = Math.max(0.5, Math.min(1.2, primaryWeight * 1.2)); // 提高最小值和最大值
+                this.targetMouthWeight = finalWeight * volume * 1.2; // 增加音量影响
+
+                // 平滑过渡到新权重
+                this.currentMouthWeight += (this.targetMouthWeight - this.currentMouthWeight) * smoothingFactor;
+
+                // 如果切换到新的表情，平滑关闭其他表情
+                if (!this.currentMouthExpression || this.currentMouthExpression.index !== primaryExpression) {
+                    // 关闭之前的表情
+                    if (this.currentMouthExpression) {
+                        const oldExpr = this.vrm.expressionManager.expressions[this.currentMouthExpression.index];
+                        if (oldExpr) {
+                            oldExpr.weight *= 0.9; // 逐渐衰减
+                            if (oldExpr.weight < 0.01) {
+                                oldExpr.weight = 0;
+                            }
+                        }
+                    }
+
+                    // 设置新表情
+                    this.currentMouthExpression = {
+                        index: primaryExpression,
+                        weight: this.currentMouthWeight
+                    };
+                }
+
+                // 应用权重到当前表情
+                const expr = this.vrm.expressionManager.expressions[primaryExpression];
+                if (expr) {
+                    expr.weight = this.currentMouthWeight;
+                }
+
+                // 平滑关闭其他表情
+                Object.keys(this.mouthExpressions).forEach(key => {
+                    const exprIndex = this.mouthExpressions[key];
+                    if (exprIndex !== null && exprIndex !== primaryExpression) {
+                        const expr = this.vrm.expressionManager.expressions[exprIndex];
+                        if (expr) {
+                            expr.weight *= 0.9;
+                            if (expr.weight < 0.01) {
+                                expr.weight = 0;
+                            }
+                        }
+                    }
+                });
+            } else {
+                // 如果没有找到匹配的表情，保持当前表情但降低权重（不完全关闭）
+                if (this.currentMouthExpression) {
+                    // 保持最小张开度，而不是完全关闭
+                    this.targetMouthWeight = Math.max(0.15, this.currentMouthWeight * 0.95); // 缓慢衰减，保持最小张开
+                    this.currentMouthWeight += (this.targetMouthWeight - this.currentMouthWeight) * 0.1;
+                    const expr = this.vrm.expressionManager.expressions[this.currentMouthExpression.index];
+                    if (expr) {
+                        expr.weight = Math.max(0.15, this.currentMouthWeight); // 保持最小权重
+                    }
+                }
+            }
+
+            this.lipSyncAnimationId = requestAnimationFrame(animate);
+        };
+
+        animate();
+    }
+
+    // 停止口型同步
+    stopLipSync() {
+        if (!this.lipSyncActive) {
+            return;
+        }
+
+        this.lipSyncActive = false;
+        if (this.lipSyncAnimationId) {
+            cancelAnimationFrame(this.lipSyncAnimationId);
+            this.lipSyncAnimationId = null;
+        }
+
+        this.resetMouthExpressions();
+        this.currentMouthExpression = null; // 清除当前表情
+        this.targetMouthWeight = 0;
+        this.currentMouthWeight = 0;
+        this.analyser = null;
+    }
+
+    // 重置所有嘴巴表情
+    resetMouthExpressions() {
+        if (!this.vrm || !this.vrm.expressionManager) return;
+        
+        // 直接设置权重为0，不使用 setExpression（避免触发日志）
+        Object.values(this.mouthExpressions).forEach(index => {
+            if (index !== null && index !== undefined) {
+                const expr = this.vrm.expressionManager.expressions[index];
+                if (expr) {
+                    expr.weight = 0;
+                }
+            }
+        });
+    }
+
+    // 获取频率范围的平均值
+    getFrequencyRange(frequencyData, start, end) {
+        let sum = 0;
+        let count = 0;
+        for (let i = start; i < Math.min(end, frequencyData.length); i++) {
+            sum += frequencyData[i];
+            count++;
+        }
+        return count > 0 ? (sum / count) / 255 : 0; // 归一化到 0-1
     }
 
     // 处理窗口大小变化
@@ -851,13 +978,6 @@ class VRMManager {
             this.resizeHandler = null;
         }
 
-        // 清理锁图标
-        this.cleanupLockIcon();
-        if (this.lockIconElement && this.lockIconElement.parentNode) {
-            this.lockIconElement.parentNode.removeChild(this.lockIconElement);
-            this.lockIconElement = null;
-        }
-
         // 清理 VRM 资源
         if (this.vrm) {
             this.scene.remove(this.vrm.scene);
@@ -881,6 +1001,37 @@ class VRMManager {
         // 移除事件监听
         window.removeEventListener('resize', this.onWindowResize);
     }
+
+    // 启用/禁用鼠标跟踪
+    enableMouseTracking(enabled) {
+        this.mouseTrackingEnabled = enabled;
+        
+        if (enabled && !this.mouseMoveHandler) {
+            this.mouseMoveHandler = (e) => {
+                if (!this.vrm || !this.vrm.scene) return;
+                
+                // 计算鼠标在画布上的归一化坐标 (-1 到 1)
+                const rect = this.renderer.domElement.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                const y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                
+                // 简单的头部跟随（可以扩展）
+                if (this.vrm.humanoid?.normalizedHumanBones?.head) {
+                    const headBone = this.vrm.humanoid.normalizedHumanBones.head.node;
+                    if (headBone) {
+                        // 轻微的头部旋转（可以根据需要调整）
+                        headBone.rotation.y = x * 0.1;
+                        headBone.rotation.x = y * 0.1;
+                    }
+                }
+            };
+            
+            this.renderer.domElement.addEventListener('mousemove', this.mouseMoveHandler);
+        } else if (!enabled && this.mouseMoveHandler) {
+            this.renderer.domElement.removeEventListener('mousemove', this.mouseMoveHandler);
+            this.mouseMoveHandler = null;
+        }
+    }
 }
 
 // 导出到全局
@@ -891,4 +1042,3 @@ if (typeof window !== 'undefined') {
 // ES 模块导出
 export default VRMManager;
 export { VRMManager };
-

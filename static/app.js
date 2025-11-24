@@ -1749,25 +1749,37 @@ function init_app(){
 
                 const source = audioPlayerContext.createBufferSource();
                 source.buffer = nextBuffer;
-                // source.connect(audioPlayerContext.destination);
+                
+                // 确保 globalAnalyser 已初始化
+                initializeGlobalAnalyser();
+                
+                if (!globalAnalyser) {
+                    console.warn('[App] globalAnalyser 未初始化，无法进行口型同步');
+                    source.connect(audioPlayerContext.destination);
+                } else {
+                    source.connect(globalAnalyser);
 
-
-                // 创建analyser节点用于lipSync
-                // const analyser = audioPlayerContext.createAnalyser();
-                // analyser.fftSize = 2048;
-                // source.connect(analyser);
-                // analyser.connect(audioPlayerContext.destination);
-                // if (window.LanLan1 && window.LanLan1.live2dModel) {
-                //     startLipSync(window.LanLan1.live2dModel, analyser);
-                // }
-
-
-                source.connect(globalAnalyser);
-
-                // 启动 Live2D 口型同步
-                if (!lipSyncActive && window.LanLan1 && window.LanLan1.live2dModel) {
-                    startLipSync(window.LanLan1.live2dModel, globalAnalyser);
-                    lipSyncActive = true;
+                    // 启动口型同步（根据当前模型类型）
+                    const currentModelType = localStorage.getItem('modelType') || 'live2d';
+                    if (!lipSyncActive) {
+                        if (currentModelType === 'vrm' && window.vrmManager && window.vrmManager.vrm) {
+                            // VRM 模式
+                            console.log('[App] 启动 VRM 口型同步');
+                            window.vrmManager.startLipSync(globalAnalyser);
+                            lipSyncActive = true;
+                        } else if (window.LanLan1 && window.LanLan1.live2dModel) {
+                            // Live2D 模式
+                            startLipSync(window.LanLan1.live2dModel, globalAnalyser);
+                            lipSyncActive = true;
+                        } else {
+                            console.warn('[App] 无法启动口型同步:', {
+                                modelType: currentModelType,
+                                hasVRMManager: !!window.vrmManager,
+                                hasVRM: !!(window.vrmManager && window.vrmManager.vrm),
+                                hasLive2D: !!(window.LanLan1 && window.LanLan1.live2dModel)
+                            });
+                        }
+                    }
                 }
 
                 // 精确时间调度
@@ -1784,12 +1796,15 @@ function init_app(){
                         scheduledSources.splice(index, 1);
                     }
 
-                    if (scheduledSources.length === 0 && audioBufferQueue.length === 0) {
-                        // 停止口型同步（会根据当前模型类型自动选择Live2D或VRM）
-                        stopLipSync(window.LanLan1?.live2dModel);
-                        lipSyncActive = false;
-                        isPlaying = false; // 新增：所有音频播放完毕，重置isPlaying
-                    }
+                    // 延迟停止口型同步，避免在音频块间隙时停止
+                    setTimeout(() => {
+                        if (scheduledSources.length === 0 && audioBufferQueue.length === 0) {
+                            // 停止口型同步（会根据当前模型类型自动选择Live2D或VRM）
+                            stopLipSync(window.LanLan1?.live2dModel);
+                            lipSyncActive = false;
+                            isPlaying = false; // 新增：所有音频播放完毕，重置isPlaying
+                        }
+                    }, 200); // 延迟200ms，避免在音频块间隙时误停止
                 };
 
                 // // 更新下一个chunk的时间
@@ -1914,13 +1929,20 @@ function init_app(){
     }
 
     function stopLipSync(model) {
-        // Live2D 模式：使用原有的停止逻辑
-        cancelAnimationFrame(animationFrameId);
-        if (window.LanLan1 && typeof window.LanLan1.setMouth === 'function') {
-            window.LanLan1.setMouth(0);
-        } else if (model && model.internalModel && model.internalModel.coreModel) {
-            // 兜底
-            try { model.internalModel.coreModel.setParameterValueById("ParamMouthOpenY", 0); } catch (_) {}
+        const currentModelType = localStorage.getItem('modelType') || 'live2d';
+        
+        if (currentModelType === 'vrm' && window.vrmManager) {
+            // VRM 模式
+            window.vrmManager.stopLipSync();
+        } else {
+            // Live2D 模式：使用原有的停止逻辑
+            cancelAnimationFrame(animationFrameId);
+            if (window.LanLan1 && typeof window.LanLan1.setMouth === 'function') {
+                window.LanLan1.setMouth(0);
+            } else if (model && model.internalModel && model.internalModel.coreModel) {
+                // 兜底
+                try { model.internalModel.coreModel.setParameterValueById("ParamMouthOpenY", 0); } catch (_) {}
+            }
         }
     }
 

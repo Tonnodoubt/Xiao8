@@ -1551,17 +1551,16 @@
     async function loadVRMModel() {
         if (!vrmManager) {
             console.warn('VRM 管理器未初始化');
-                    return;
-                }
+            return;
+        }
                 
         try {
-            // 尝试加载用户目录中的 VRM 模型
-            // 优先加载：f芙宁娜.vrm（如果存在）
-            const modelPath = '/static/models/vrm/f芙宁娜.vrm';
+            // 加载 HatsuneMikuNT VRM 模型
+            const modelPath = '/static/models/vrm/HatsuneMikuNT.vrm';
             console.log('开始加载 VRM 模型:', modelPath);
             await vrmManager.loadModel(modelPath);
             console.log('VRM 模型加载成功');
-                    } catch (error) {
+        } catch (error) {
             console.warn('加载 VRM 模型失败:', error);
             console.log('提示: 请确保 VRM 模型文件存在于 static/models/vrm/ 目录下');
             // 不抛出错误，允许用户手动加载或使用测试页面
