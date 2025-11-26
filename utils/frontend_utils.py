@@ -65,24 +65,6 @@ def remove_bracket(text):
     return text
 
 
-# spell Arabic numerals
-def spell_out_number(text: str, inflect_parser):
-    new_text = []
-    st = None
-    for i, c in enumerate(text):
-        if not c.isdigit():
-            if st is not None:
-                num_str = inflect_parser.number_to_words(text[st: i])
-                new_text.append(num_str)
-                st = None
-            new_text.append(c)
-        else:
-            if st is None:
-                st = i
-    if st is not None and st < len(text):
-        num_str = inflect_parser.number_to_words(text[st:])
-        new_text.append(num_str)
-    return ''.join(new_text)
 
 
 # split paragrah logic：
@@ -289,3 +271,64 @@ def find_model_config_file(model_name: str) -> str:
     
     # 如果没找到，返回默认路径
     return f"{url_prefix}/{model_name}/{model_name}.model3.json"
+
+
+def find_vrm_models():
+    """
+    递归扫描 'static/models/vrm' 文件夹和用户文档下的 'vrm' 文件夹，查找所有 .vrm 文件。
+    """
+    from utils.config_manager import get_config_manager
+    
+    found_models = []
+    search_dirs = []
+    
+    # 添加static目录下的vrm文件夹
+    static_vrm_dir = os.path.join('static', 'models', 'vrm')
+    if os.path.exists(static_vrm_dir):
+        search_dirs.append(('static', static_vrm_dir, '/static/models/vrm'))
+    else:
+        logging.warning(f"警告：static/models/vrm文件夹路径不存在: {static_vrm_dir}")
+    
+    # 添加用户文档目录下的vrm文件夹（如果存在）
+    try:
+        config_mgr = get_config_manager()
+        # 尝试在用户文档目录下查找vrm文件夹
+        user_docs_dir = config_mgr.config_dir.parent if hasattr(config_mgr, 'config_dir') else None
+        if user_docs_dir:
+            user_vrm_dir = user_docs_dir / 'vrm'
+            if user_vrm_dir.exists():
+                search_dirs.append(('documents', str(user_vrm_dir), '/user_vrm'))
+    except Exception as e:
+        logging.warning(f"无法访问用户文档vrm目录: {e}")
+    
+    # 遍历所有搜索目录
+    for source, search_root_dir, url_prefix in search_dirs:
+        try:
+            # os.walk会遍历指定的根目录下的所有文件夹和文件
+            for root, dirs, files in os.walk(search_root_dir):
+                for file in files:
+                    if file.endswith('.vrm'):
+                        # 获取模型名称（去掉.vrm扩展名）
+                        model_name = file.replace('.vrm', '')
+                        
+                        # 构建可被浏览器访问的URL路径
+                        # 1. 计算文件相对于 search_root_dir 的路径
+                        relative_path = os.path.relpath(os.path.join(root, file), search_root_dir)
+                        # 2. 将本地路径分隔符 (如'\') 替换为URL分隔符 ('/')
+                        model_path = relative_path.replace(os.path.sep, '/')
+                        
+                        # 如果模型名称已存在，添加来源后缀以区分
+                        existing_names = [m["name"] for m in found_models]
+                        display_name = model_name
+                        if model_name in existing_names:
+                            display_name = f"{model_name}_{source}"
+                        
+                        found_models.append({
+                            "name": display_name,
+                            "path": f"{url_prefix}/{model_path}",
+                            "source": source
+                        })
+        except Exception as e:
+            logging.error(f"搜索目录 {search_root_dir} 时出错: {e}")
+                
+    return found_models

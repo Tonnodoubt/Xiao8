@@ -80,3 +80,5 @@ backup/
 build*
 launcher.py
 *spec
+metadata.package.json
+version_info.txt

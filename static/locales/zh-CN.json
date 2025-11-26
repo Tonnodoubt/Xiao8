@@ -516,7 +516,7 @@
     },
     "toggles": {
       "allowInterrupt": "允许打断",
-      "proactiveChat": "💬 主动搭话",
+      "proactiveChat": "主动搭话",
       "agentMaster": "Agent总开关",
       "keyboardControl": "键鼠控制",
       "mcpTools": "MCP工具",

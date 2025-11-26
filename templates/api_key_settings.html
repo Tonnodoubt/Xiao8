@@ -352,6 +352,64 @@
     </style>
 </head>
 <body>
+<!-- 加载遮罩层 - 模仿主界面"正在启动麦克风"样式 -->
+<div id="loading-overlay" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.9); display: flex; justify-content: center; align-items: center; z-index: 9999;">
+    <div id="voice-preparing-toast" style="
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background-image: url('/static/icons/reminder_blue.png');
+        background-size: 100% 100%;
+        background-position: center;
+        background-repeat: no-repeat;
+        background-color: transparent;
+        color: white;
+        padding: 20px 32px;
+        border-radius: 16px;
+        font-size: 16px;
+        font-weight: 600;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        animation: voiceToastFadeIn 0.3s ease;
+        pointer-events: none;
+        width: 320px;
+        box-sizing: border-box;
+        justify-content: center;
+    ">
+        <div style="
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        "></div>
+        <span>📋 正在加载配置...</span>
+    </div>
+</div>
+
+<style>
+    @keyframes voiceToastFadeIn {
+        from {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.8);
+        }
+        to {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1);
+        }
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+<!-- 主内容容器 - 直接显示原有UI，通过遮罩层半透明覆盖 -->
+<div id="main-content">
 <div class="container">
     <h2 data-i18n="api.settings">API Key 设置</h2>
     
@@ -1680,108 +1738,167 @@ function initTooltips() {
     });
 }
 
-// 页面加载时尝试获取当前API Key
-window.addEventListener('load', async function() {
-    // 初始化tooltips
-    initTooltips();
+// 页面初始化函数 - 先加载配置再显示UI
+async function initializePage() {
+    // 防止重复初始化
+    if (window.apiKeySettingsInitialized) {
+        console.log('API Key设置页面已初始化，跳过重复执行');
+        return;
+    }
     
-    // 先加载API服务商选项，然后再加载当前配置
-    const providersLoaded = await loadApiProviders();
-    
-    // 只有在API服务商选项加载成功后才加载当前配置
-    if (providersLoaded) {
-        loadCurrentApiKey().then(() => {
-        // 添加额外的配置检测，确保API输入框状态正确
-        setTimeout(() => {
-            const coreApiSelect = document.getElementById('coreApiSelect');
-            const apiKeyInput = document.getElementById('apiKeyInput');
-            const freeVersionHint = document.getElementById('freeVersionHint');
-            
-            if (coreApiSelect && apiKeyInput && freeVersionHint) {
-                const selectedCoreApi = coreApiSelect.value;
-                
-                // 重新确认API输入框状态是否与当前配置一致
-                if (selectedCoreApi === 'free') {
-                    // 如果是免费版，确保输入框被禁用
-                    apiKeyInput.disabled = true;
-                    apiKeyInput.placeholder = window.t ? window.t('api.freeVersionNoApiKey') : '免费版无需API Key';
-                    apiKeyInput.required = false;
-                    apiKeyInput.value = 'free-access';
-                    freeVersionHint.style.display = 'inline';
-                } else {
-                    // 如果不是免费版，确保输入框可用
-                    apiKeyInput.disabled = false;
-                    apiKeyInput.placeholder = window.t ? window.t('api.pleaseEnterApiKey') : '请输入您的API Key';
-                    apiKeyInput.required = true;
-                    if (apiKeyInput.value === 'free-access') {
-                        apiKeyInput.value = '';
-                    }
-                    freeVersionHint.style.display = 'none';
-                }
-                
-                // 强制更新辅助API推荐和锁定状态
-                updateAssistApiRecommendation();
-                
-                // 页面加载完成后立即尝试自动填充核心API Key
-                autoFillCoreApiKey();
-            }
-        }, 300); // 短暂延迟确保所有DOM元素和初始配置都已加载完成
-    });
-    } else {
-        // API服务商选项加载失败，显示错误信息并确保输入框和下拉框为空
-        showStatus(window.t ? window.t('api.loadProvidersFailed') : '加载API服务商选项失败，请刷新页面重试', 'error');
-        const apiKeyInput = document.getElementById('apiKeyInput');
+    try {
+        // 显示加载遮罩（半透明覆盖在原有UI上）
+        const loadingOverlay = document.getElementById('loading-overlay');
+        
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'flex';
+        }
+        
+        // 第一步：加载API服务商选项
+        const providersLoaded = await loadApiProviders();
+        
+        if (!providersLoaded) {
+            throw new Error('加载API服务商选项失败');
+        }
+        
+        // 第二步：加载当前API配置
+        await loadCurrentApiKey();
+        
+        // 第三步：等待所有配置加载完成，然后初始化UI状态
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        // 初始化tooltips
+        initTooltips();
+        
+        // 确保API输入框状态与当前配置一致
         const coreApiSelect = document.getElementById('coreApiSelect');
-        const assistApiSelect = document.getElementById('assistApiSelect');
-        if (apiKeyInput) {
-            apiKeyInput.value = '';
+        const apiKeyInput = document.getElementById('apiKeyInput');
+        const freeVersionHint = document.getElementById('freeVersionHint');
+        
+        if (coreApiSelect && apiKeyInput && freeVersionHint) {
+            const selectedCoreApi = coreApiSelect.value;
+            
+            // 重新确认API输入框状态是否与当前配置一致
+            if (selectedCoreApi === 'free') {
+                // 如果是免费版，确保输入框被禁用
+                apiKeyInput.disabled = true;
+                apiKeyInput.placeholder = window.t ? window.t('api.freeVersionNoApiKey') : '免费版无需API Key';
+                apiKeyInput.required = false;
+                apiKeyInput.value = 'free-access';
+                freeVersionHint.style.display = 'inline';
+            } else {
+                // 如果不是免费版，确保输入框可用
+                apiKeyInput.disabled = false;
+                apiKeyInput.placeholder = window.t ? window.t('api.pleaseEnterApiKey') : '请输入您的API Key';
+                apiKeyInput.required = true;
+                if (apiKeyInput.value === 'free-access') {
+                    apiKeyInput.value = '';
+                }
+                freeVersionHint.style.display = 'none';
+            }
+            
+            // 强制更新辅助API推荐和锁定状态
+            updateAssistApiRecommendation();
+            
+            // 页面加载完成后立即尝试自动填充核心API Key
+            autoFillCoreApiKey();
         }
+        
+        // 添加核心API和辅助API选择变化的事件监听器
         if (coreApiSelect) {
-            coreApiSelect.value = '';
+            coreApiSelect.addEventListener('change', function() {
+                updateAssistApiRecommendation();
+                autoFillCoreApiKey();
+            });
         }
+        
+        const assistApiSelect = document.getElementById('assistApiSelect');
         if (assistApiSelect) {
-            assistApiSelect.value = '';
+            assistApiSelect.addEventListener('change', function() {
+                updateAssistApiRecommendation();
+                autoFillCoreApiKey();
+            });
         }
-    }
-    
-    // 添加核心API和辅助API选择变化的事件监听器
-    const coreApiSelect = document.getElementById('coreApiSelect');
-    const assistApiSelect = document.getElementById('assistApiSelect');
-    
-    if (coreApiSelect) {
-        coreApiSelect.addEventListener('change', function() {
-            updateAssistApiRecommendation();
-            autoFillCoreApiKey();
-        });
-    }
-    if (assistApiSelect) {
-        assistApiSelect.addEventListener('change', function() {
-            updateAssistApiRecommendation();
-            autoFillCoreApiKey();
-        });
-    }
-    
-    // 初始化时也更新一次建议
-    updateAssistApiRecommendation();
-    
-    // 监听语言切换事件，更新下拉选项
-    window.addEventListener('localechange', async () => {
-        // 保存当前选中的值
-        const selectedCoreApi = coreApiSelect ? coreApiSelect.value : '';
-        const selectedAssistApi = assistApiSelect ? assistApiSelect.value : '';
         
-        // 重新加载下拉选项（会使用新的语言）
-        await loadApiProviders();
+        // 初始化时也更新一次建议
+        updateAssistApiRecommendation();
         
-        // 恢复之前选中的值
-        if (coreApiSelect && selectedCoreApi) {
-            coreApiSelect.value = selectedCoreApi;
+        // 监听语言切换事件，更新下拉选项
+        window.addEventListener('localechange', async () => {
+            // 保存当前选中的值
+            const selectedCoreApi = coreApiSelect ? coreApiSelect.value : '';
+            const selectedAssistApi = assistApiSelect ? assistApiSelect.value : '';
+            
+            // 重新加载下拉选项（会使用新的语言）
+            await loadApiProviders();
+            
+            // 恢复之前选中的值
+            if (coreApiSelect && selectedCoreApi) {
+                coreApiSelect.value = selectedCoreApi;
+            }
+            if (assistApiSelect && selectedAssistApi) {
+                assistApiSelect.value = selectedAssistApi;
+            }
+        });
+        
+        // 所有配置加载完成，隐藏加载遮罩
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
         }
-        if (assistApiSelect && selectedAssistApi) {
-            assistApiSelect.value = selectedAssistApi;
+        
+        console.log('API Key设置页面初始化完成');
+        
+        // 标记页面已初始化完成，防止重复执行
+        window.apiKeySettingsInitialized = true;
+        
+    } catch (error) {
+        console.error('页面初始化失败:', error);
+        
+        // 显示错误信息
+        showStatus(window.t ? window.t('api.loadConfigFailed') : '加载配置失败，请刷新页面重试', 'error');
+        
+        // 隐藏加载遮罩（即使有错误也要显示UI）
+        const loadingOverlay = document.getElementById('loading-overlay');
+        
+        if (loadingOverlay) {
+            loadingOverlay.style.display = 'none';
         }
-    });
+    }
+}
+
+// 页面加载完成后开始初始化
+document.addEventListener('DOMContentLoaded', initializePage);
+
+// 兼容性：防止在某些情况下DOMContentLoaded不触发（如样式表阻塞），添加load作为后备
+window.addEventListener('load', () => {
+    if (!window.apiKeySettingsInitialized) {
+        initializePage();
+    }
+    // Electron白屏修复：强制重绘
+    if (document.body) {
+        void document.body.offsetHeight;
+    }
 });
+
+// 立即执行一次白屏修复（针对Electron）
+(function() {
+    const fixWhiteScreen = () => {
+        if (document.body) {
+            void document.body.offsetHeight;
+            // 微小透明度变化触发重绘
+            const currentOpacity = document.body.style.opacity || '1';
+            document.body.style.opacity = '0.99';
+            requestAnimationFrame(() => {
+                document.body.style.opacity = currentOpacity;
+            });
+        }
+    };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', fixWhiteScreen);
+    } else {
+        fixWhiteScreen();
+    }
+})();
 
 // 关闭API Key设置页面
 function closeApiKeySettings() {
@@ -1795,5 +1912,6 @@ function closeApiKeySettings() {
     }
 }
 </script>
+</div> <!-- 关闭 main-content -->
 </body>
 </html>

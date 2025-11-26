@@ -17,7 +17,7 @@ from config import MONITOR_SERVER_PORT, MEMORY_SERVER_PORT, COMMENTER_SERVER_POR
 from datetime import datetime
 import json
 import re
-from utils.frontend_utils import contains_chinese, replace_blank, replace_corner_mark, remove_bracket, spell_out_number, \
+from utils.frontend_utils import contains_chinese, replace_blank, replace_corner_mark, remove_bracket, \
     is_only_punctuation, split_paragraph
 
 # Setup logger for this module

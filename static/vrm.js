@@ -56,6 +56,9 @@ class VRMManager {
         this.currentMouthExpression = null; // 当前激活的嘴巴表情 {index, weight}
         this.targetMouthWeight = 0; // 目标权重（用于平滑过渡）
         this.currentMouthWeight = 0; // 当前权重（实际应用的值）
+        
+        // VMD 动画相关
+        this.vmdAnimationManager = null;
     }
 
     async init() {
@@ -643,6 +646,11 @@ class VRMManager {
             this.vrm.springBoneManager.update(deltaTime);
         }
 
+        // 更新 VMD 动画
+        if (this.vmdAnimationManager) {
+            this.vmdAnimationManager.update(deltaTime);
+        }
+
         // 在渲染循环中持续更新口型表情（防止被重置）
         if (this.lipSyncActive && this.vrm?.expressionManager && this.currentMouthExpression) {
             // 如果口型同步正在运行，确保当前表情的权重被保持
@@ -904,9 +912,52 @@ class VRMManager {
         this.renderer.setSize(width, height);
     }
 
+    /**
+     * 加载并播放 VMD 动画
+     * @param {string} vmdPath - VMD 文件路径
+     * @param {Object} options - 播放选项 { loop, timeScale }
+     */
+    async playVMDAnimation(vmdPath, options = {}) {
+        if (!this.vmdAnimationManager) {
+            try {
+                const { VMDAnimationManager } = await import('./vmd-loader.js');
+                this.vmdAnimationManager = new VMDAnimationManager(this);
+            } catch (error) {
+                console.error('[VRM] 无法加载 VMD 动画管理器:', error);
+                throw error;
+            }
+        }
+        
+        return await this.vmdAnimationManager.loadAndPlay(vmdPath, options);
+    }
+
+    /**
+     * 停止 VMD 动画
+     */
+    stopVMDAnimation() {
+        if (this.vmdAnimationManager) {
+            this.vmdAnimationManager.stop();
+        }
+    }
+
+    /**
+     * 暂停/恢复 VMD 动画
+     */
+    pauseVMDAnimation() {
+        if (this.vmdAnimationManager) {
+            this.vmdAnimationManager.pause();
+        }
+    }
+
     // 清理 VRM 资源
     disposeVRM() {
         if (!this.vrm) return;
+        
+        // 清理 VMD 动画
+        if (this.vmdAnimationManager) {
+            this.vmdAnimationManager.dispose();
+            this.vmdAnimationManager = null;
+        }
 
         if (this.vrm.scene) {
             this.vrm.scene.traverse((object) => {
