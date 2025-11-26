@@ -2318,6 +2318,91 @@ async def upload_live2d_model(files: list[UploadFile] = File(...)):
         logger.error(f"上传Live2D模型失败: {e}")
         return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
 
+@app.post('/api/vrm/upload_model')
+async def upload_vrm_model(files: list[UploadFile] = File(...)):
+    """上传VRM模型到用户文档目录或static/models/vrm目录"""
+    import shutil
+    import tempfile
+    
+    try:
+        if not files:
+            return JSONResponse(status_code=400, content={"success": False, "error": "没有上传文件"})
+        
+        # 创建临时目录来处理上传的文件
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_path = pathlib.Path(temp_dir)
+            
+            # 保存所有上传的文件到临时目录，保持目录结构
+            for file in files:
+                # 从文件的相对路径中提取目录结构
+                file_path = file.filename
+                # 确保路径安全，移除可能的危险路径字符
+                file_path = file_path.replace('\\', '/').lstrip('/')
+                
+                target_file_path = temp_path / file_path
+                target_file_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                # 保存文件
+                with open(target_file_path, 'wb') as f:
+                    content = await file.read()
+                    f.write(content)
+            
+            # 在临时目录中递归查找.vrm文件
+            vrm_files = list(temp_path.rglob('*.vrm'))
+            
+            if not vrm_files:
+                return JSONResponse(status_code=400, content={"success": False, "error": "未找到.vrm文件"})
+            
+            if len(vrm_files) > 1:
+                return JSONResponse(status_code=400, content={"success": False, "error": "上传的文件中包含多个.vrm文件，请一次只上传一个VRM模型"})
+            
+            vrm_file = vrm_files[0]
+            
+            # 确定模型名称（.vrm文件的文件名，去掉扩展名）
+            model_name = vrm_file.stem
+            
+            # 获取目标目录（优先使用static/models/vrm，如果不存在则使用用户文档目录）
+            static_vrm_dir = pathlib.Path('static/models/vrm')
+            static_vrm_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 目标目录：在static/models/vrm下创建以模型名命名的文件夹
+            target_model_dir = static_vrm_dir / model_name
+            
+            # 如果目标目录已存在，返回错误
+            if target_model_dir.exists():
+                return JSONResponse(status_code=400, content={
+                    "success": False, 
+                    "error": f"VRM模型 {model_name} 已存在，请先删除或重命名现有模型"
+                })
+            
+            # 创建目标目录
+            target_model_dir.mkdir(parents=True, exist_ok=True)
+            
+            # 复制.vrm文件到目标目录
+            target_vrm_file = target_model_dir / vrm_file.name
+            shutil.copy2(vrm_file, target_vrm_file)
+            
+            # 如果上传的文件中有其他文件（如纹理、材质等），也一并复制
+            for file_path in temp_path.rglob('*'):
+                if file_path.is_file() and file_path != vrm_file:
+                    relative_path = file_path.relative_to(temp_path)
+                    target_file = target_model_dir / relative_path.name
+                    if not target_file.exists():
+                        shutil.copy2(file_path, target_file)
+            
+            logger.info(f"成功上传VRM模型: {model_name} -> {target_model_dir}")
+            
+            return JSONResponse(content={
+                "success": True,
+                "message": f"VRM模型 {model_name} 上传成功",
+                "model_name": model_name,
+                "model_path": f"/static/models/vrm/{model_name}/{vrm_file.name}"
+            })
+            
+    except Exception as e:
+        logger.error(f"上传VRM模型失败: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
 @app.post('/api/live2d/emotion_mapping/{model_name}')
 async def update_emotion_mapping(model_name: str, request: Request):
     """更新情绪映射配置"""

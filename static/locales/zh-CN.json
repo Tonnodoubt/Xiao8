@@ -282,6 +282,8 @@
     "persistentExpressionSaved": "常驻表情保存成功",
     "persistentExpressionSaveFailed": "保存常驻表情失败",
     "modelType": "模型类型:",
+    "selectLive2DModel": "选择Live2D模型:",
+    "selectVRMModel": "选择VRM模型:",
     "vrmModelListLoaded": "VRM 模型列表加载成功",
     "noVRMModelsFound": "未找到可用 VRM 模型",
     "vrmModelListLoadFailed": "加载 VRM 模型列表失败",

@@ -182,14 +182,14 @@
     </div>
 
     <div class="control-group" id="live2d-model-group">
-        <label for="model-select" class="control-label" data-i18n="live2d.selectModel">选择模型:</label>
+        <label for="model-select" class="control-label" id="live2d-model-label" data-i18n="live2d.selectLive2DModel">选择Live2D模型:</label>
         <select id="model-select" class="control-select">
             <option data-i18n="common.loading">加载中...</option>
         </select>
     </div>
 
     <div class="control-group" id="vrm-model-group" style="display:none;">
-        <label for="vrm-model-select" class="control-label" data-i18n="live2d.selectModel">选择VRM模型:</label>
+        <label for="vrm-model-select" class="control-label" id="vrm-model-label" data-i18n="live2d.selectVRMModel">选择VRM模型:</label>
         <select id="vrm-model-select" class="control-select">
             <option data-i18n="common.loading">加载中...</option>
         </select>
@@ -954,6 +954,9 @@
             const files = Array.from(e.target.files);
             if (files.length === 0) return;
 
+            // 根据当前模型类型选择不同的上传API
+            const uploadApi = currentModelType === 'vrm' ? '/api/vrm/upload_model' : '/api/live2d/upload_model';
+            
             uploadStatus.textContent = t('live2d.uploadingModel', '正在上传模型...');
             uploadStatus.style.color = '#4f8cff';
             uploadBtn.disabled = true;
@@ -967,7 +970,7 @@
                     formData.append('files', file, file.webkitRelativePath || file.name);
                 }
 
-                const response = await fetch('/api/live2d/upload_model', {
+                const response = await fetch(uploadApi, {
                     method: 'POST',
                     body: formData
                 });
@@ -978,23 +981,35 @@
                     uploadStatus.textContent = t('live2d.uploadSuccess', `✓ ${result.message}`, {message: result.message});
                     uploadStatus.style.color = '#28a745';
                     
-                    // 重新加载模型列表
+                    // 根据模型类型重新加载对应的模型列表
                     setTimeout(async () => {
                         try {
-                            const modelsResponse = await fetch('/api/live2d/models');
-                            availableModels = await modelsResponse.json();
-                            modelSelect.innerHTML = `<option value="">${t('live2d.pleaseSelectModel', '请选择一个模型')}</option>`;
-                            availableModels.forEach(model => {
-                                const option = document.createElement('option');
-                                option.value = model.name;
-                                option.textContent = model.name;
-                                modelSelect.appendChild(option);
-                            });
-                            
-                            // 自动选择新上传的模型
-                            if (result.model_name) {
-                                modelSelect.value = result.model_name;
-                                modelSelect.dispatchEvent(new Event('change'));
+                            if (currentModelType === 'vrm') {
+                                // 重新加载VRM模型列表
+                                await loadVRMModels();
+                                
+                                // 自动选择新上传的模型
+                                if (result.model_path && vrmModelSelect) {
+                                    vrmModelSelect.value = result.model_path;
+                                    vrmModelSelect.dispatchEvent(new Event('change'));
+                                }
+                            } else {
+                                // 重新加载Live2D模型列表
+                                const modelsResponse = await fetch('/api/live2d/models');
+                                availableModels = await modelsResponse.json();
+                                modelSelect.innerHTML = `<option value="">${t('live2d.pleaseSelectModel', '请选择一个模型')}</option>`;
+                                availableModels.forEach(model => {
+                                    const option = document.createElement('option');
+                                    option.value = model.name;
+                                    option.textContent = model.name;
+                                    modelSelect.appendChild(option);
+                                });
+                                
+                                // 自动选择新上传的模型
+                                if (result.model_name) {
+                                    modelSelect.value = result.model_name;
+                                    modelSelect.dispatchEvent(new Event('change'));
+                                }
                             }
                             
                             uploadStatus.textContent = '';

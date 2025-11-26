@@ -283,6 +283,8 @@
     "persistentExpressionSaved": "Persistent expression saved successfully",
     "persistentExpressionSaveFailed": "Failed to save persistent expression",
     "modelType": "Model Type:",
+    "selectLive2DModel": "Select Live2D Model:",
+    "selectVRMModel": "Select VRM Model:",
     "vrmModelListLoaded": "VRM model list loaded successfully",
     "noVRMModelsFound": "No available VRM models found",
     "vrmModelListLoadFailed": "Failed to load VRM model list",
