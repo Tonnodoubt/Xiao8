@@ -743,7 +743,22 @@
         // VRM 模型选择事件
         vrmModelSelect.addEventListener('change', async (e) => {
             const modelPath = e.target.value;
-            if (!modelPath || !vrmManager) return;
+            if (!modelPath) return;
+            
+            // 等待VRM管理器初始化（如果还未初始化）
+            if (!vrmManager) {
+                showStatus(t('live2d.waitingVRMLoader', '等待 VRM 管理器初始化...'));
+                let retryCount = 0;
+                while (!vrmManager && retryCount < 10) {
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    retryCount++;
+                }
+                
+                if (!vrmManager) {
+                    showStatus(t('live2d.vrmLoaderFailed', 'VRM 管理器未初始化，请刷新页面'));
+                    return;
+                }
+            }
 
             try {
                 showStatus(t('live2d.loadingVRMModel', `正在加载 VRM 模型...`));
@@ -756,12 +771,13 @@
                 const saveSuccess = await saveModelToCharacter(modelPath, 'vrm');
                 if (!saveSuccess) {
                     window.hasUnsavedChanges = true;
+                    showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelName} 加载成功，但保存失败`, {model: modelName}), 2000);
                 } else {
                     showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelName} 加载成功`, {model: modelName}), 2000);
                 }
             } catch (error) {
                 console.error('加载 VRM 模型失败:', error);
-                showStatus(t('live2d.vrmModelLoadFailed', '加载 VRM 模型失败'), 3000);
+                showStatus(t('live2d.vrmModelLoadFailed', `加载 VRM 模型失败: ${error.message}`), 3000);
             }
         });
 
@@ -1013,10 +1029,45 @@
                                 // 重新加载VRM模型列表
                                 await loadVRMModels();
                                 
-                                // 自动选择新上传的模型
+                                // 自动选择新上传的模型并加载
                                 if (result.model_path && vrmModelSelect) {
-                                    vrmModelSelect.value = result.model_path;
-                                    vrmModelSelect.dispatchEvent(new Event('change'));
+                                    // 确保在VRM模式
+                                    if (currentModelType !== 'vrm') {
+                                        await switchModelDisplay('vrm');
+                                        await new Promise(resolve => setTimeout(resolve, 500));
+                                    }
+                                    
+                                    // 等待VRM管理器初始化
+                                    let retryCount = 0;
+                                    while (!vrmManager && retryCount < 10) {
+                                        await new Promise(resolve => setTimeout(resolve, 200));
+                                        retryCount++;
+                                    }
+                                    
+                                    if (vrmManager && result.model_path) {
+                                        // 设置下拉框值
+                                        vrmModelSelect.value = result.model_path;
+                                        
+                                        // 自动保存到角色配置
+                                        await saveModelToCharacter(result.model_path, 'vrm');
+                                        
+                                        // 直接加载模型（不通过change事件，避免重复保存）
+                                        try {
+                                            showStatus(t('live2d.loadingVRMModel', '正在加载 VRM 模型...'));
+                                            await vrmManager.loadModel(result.model_path);
+                                            
+                                            // 从路径中提取模型名称
+                                            const modelName = result.model_path.split('/').pop().replace('.vrm', '');
+                                            showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelName} 加载成功`, {model: modelName}), 2000);
+                                        } catch (error) {
+                                            console.error('加载 VRM 模型失败:', error);
+                                            showStatus(t('live2d.vrmModelLoadFailed', '加载 VRM 模型失败'), 3000);
+                                        }
+                                    } else {
+                                        // 如果管理器未初始化，使用change事件触发
+                                        vrmModelSelect.value = result.model_path;
+                                        vrmModelSelect.dispatchEvent(new Event('change'));
+                                    }
                                 }
                             } else {
                                 // 重新加载Live2D模型列表
@@ -1282,13 +1333,27 @@
                     await switchModelDisplay('vrm');
                     
                     // 等待 VRM 管理器初始化
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    let retryCount = 0;
+                    while (!vrmManager && retryCount < 10) {
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                        retryCount++;
+                    }
                     
                     // 设置并加载 VRM 模型
                     if (vrmManager && vrmModelData.model_info.path) {
                         vrmModelSelect.value = vrmModelData.model_info.path;
-                        await vrmManager.loadModel(vrmModelData.model_info.path);
-                        showStatus(t('live2d.vrmModelLoaded', `已加载角色 ${vrmModelData.catgirl_name} 的VRM模型: ${vrmModelData.model_name}`, {name: vrmModelData.catgirl_name, model: vrmModelData.model_name}));
+                        try {
+                            showStatus(t('live2d.loadingVRMModel', `正在加载角色 ${vrmModelData.catgirl_name} 的VRM模型: ${vrmModelData.model_name}...`, {name: vrmModelData.catgirl_name, model: vrmModelData.model_name}));
+                            await vrmManager.loadModel(vrmModelData.model_info.path);
+                            showStatus(t('live2d.vrmModelLoaded', `已加载角色 ${vrmModelData.catgirl_name} 的VRM模型: ${vrmModelData.model_name}`, {name: vrmModelData.catgirl_name, model: vrmModelData.model_name}));
+                        } catch (error) {
+                            console.error('加载 VRM 模型失败:', error);
+                            showStatus(t('live2d.vrmModelLoadFailed', `加载 VRM 模型失败: ${error.message}`), 3000);
+                        }
+                    } else if (vrmModelData.model_info.path) {
+                        // 如果管理器未初始化，设置下拉框值，等待后续初始化
+                        vrmModelSelect.value = vrmModelData.model_info.path;
+                        showStatus(t('live2d.waitingVRMLoader', '等待 VRM 管理器初始化...'));
                     }
                     return;
                 }
