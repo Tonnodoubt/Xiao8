@@ -281,7 +281,18 @@
     "appliedPersistentExpression": "Persistent expression applied",
     "savingPersistentExpression": "Saving persistent expression...",
     "persistentExpressionSaved": "Persistent expression saved successfully",
-    "persistentExpressionSaveFailed": "Failed to save persistent expression"
+    "persistentExpressionSaveFailed": "Failed to save persistent expression",
+    "modelType": "Model Type:",
+    "vrmModelListLoaded": "VRM model list loaded successfully",
+    "noVRMModelsFound": "No available VRM models found",
+    "vrmModelListLoadFailed": "Failed to load VRM model list",
+    "loadingVRMModel": "Loading VRM model...",
+    "vrmModelLoaded": "VRM model {{model}} loaded successfully",
+    "vrmModelLoadFailed": "Failed to load VRM model",
+    "waitingVRMLoader": "Waiting for VRM loader...",
+    "vrmLoaderFailed": "VRM loader not loaded, please refresh the page",
+    "vrmInitialized": "VRM manager initialized successfully",
+    "vrmInitFailed": "Failed to initialize VRM manager"
   },
   "voice": {
     "title": "Voice Registration",

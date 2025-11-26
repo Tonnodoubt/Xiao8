@@ -280,7 +280,18 @@
     "appliedPersistentExpression": "常驻表情已应用",
     "savingPersistentExpression": "正在保存常驻表情...",
     "persistentExpressionSaved": "常驻表情保存成功",
-    "persistentExpressionSaveFailed": "保存常驻表情失败"
+    "persistentExpressionSaveFailed": "保存常驻表情失败",
+    "modelType": "模型类型:",
+    "vrmModelListLoaded": "VRM 模型列表加载成功",
+    "noVRMModelsFound": "未找到可用 VRM 模型",
+    "vrmModelListLoadFailed": "加载 VRM 模型列表失败",
+    "loadingVRMModel": "正在加载 VRM 模型...",
+    "vrmModelLoaded": "VRM 模型 {{model}} 加载成功",
+    "vrmModelLoadFailed": "加载 VRM 模型失败",
+    "waitingVRMLoader": "等待 VRM 加载器...",
+    "vrmLoaderFailed": "VRM 加载器未加载，请刷新页面",
+    "vrmInitialized": "VRM 管理器初始化成功",
+    "vrmInitFailed": "VRM 管理器初始化失败"
   },
   "voice": {
     "title": "音色注册",

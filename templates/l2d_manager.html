@@ -27,6 +27,14 @@
         }
         #live2d-canvas:active { cursor: grabbing; }
 
+        #vrm-container {
+            position: fixed; right: 0px; bottom: 0px; width: 100%; height: 100%;
+            z-index: 10; pointer-events: auto;
+        }
+        .hidden {
+            display: none !important;
+        }
+
         #sidebar {
             position: fixed;
             left: 20px;
@@ -465,6 +473,7 @@
                 live2dModelGroup.style.display = 'flex';
                 vrmModelGroup.style.display = 'none';
                 live2dContainer.style.display = 'block';
+                vrmContainer.classList.add('hidden');
                 vrmContainer.style.display = 'none';
                 // 显示 Live2D 特有的控件
                 document.querySelectorAll('.control-group').forEach(group => {
@@ -486,6 +495,7 @@
                 live2dModelGroup.style.display = 'none';
                 vrmModelGroup.style.display = 'flex';
                 live2dContainer.style.display = 'none';
+                vrmContainer.classList.remove('hidden');
                 vrmContainer.style.display = 'block';
                 // 隐藏 Live2D 特有的控件
                 const live2dOnlyControls = ['motion-select', 'expression-select', 'play-motion-btn', 
@@ -566,8 +576,23 @@
         // 加载 VRM 模型列表的函数
         async function loadVRMModels() {
             try {
+                showStatus(t('live2d.loadingVRMModel', '正在加载 VRM 模型列表...'));
                 const response = await fetch('/api/vrm/models');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                
                 const vrmModels = await response.json();
+                
+                // 检查返回的数据格式
+                if (!Array.isArray(vrmModels)) {
+                    console.error('VRM 模型列表格式错误:', vrmModels);
+                    vrmModelSelect.innerHTML = `<option value="">${t('live2d.vrmModelListLoadFailed', '加载失败')}</option>`;
+                    showStatus(t('live2d.vrmModelListLoadFailed', '加载 VRM 模型列表失败：数据格式错误'));
+                    return;
+                }
+                
                 if (vrmModels.length > 0) {
                     vrmModelSelect.innerHTML = `<option value="">${t('live2d.pleaseSelectModel', '请选择一个模型')}</option>`;
                     vrmModels.forEach(model => {
@@ -579,11 +604,13 @@
 
                     showStatus(t('live2d.vrmModelListLoaded', 'VRM 模型列表加载成功'));
                 } else {
+                    vrmModelSelect.innerHTML = `<option value="">${t('live2d.noVRMModelsFound', '未找到可用 VRM 模型')}</option>`;
                     showStatus(t('live2d.noVRMModelsFound', '未找到可用 VRM 模型'));
                 }
             } catch (e) {
                 console.error('加载 VRM 模型列表失败:', e);
-                showStatus(t('live2d.vrmModelListLoadFailed', '加载 VRM 模型列表失败'));
+                vrmModelSelect.innerHTML = `<option value="">${t('live2d.vrmModelListLoadFailed', '加载失败')}</option>`;
+                showStatus(t('live2d.vrmModelListLoadFailed', `加载 VRM 模型列表失败: ${e.message || e}`));
             }
         }
 
