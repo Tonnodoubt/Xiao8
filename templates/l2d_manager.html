@@ -765,17 +765,43 @@
             const modelPath = e.target.value;
             if (!modelPath) return;
             
-            // 等待VRM管理器初始化（如果还未初始化）
+            // 确保切换到VRM模式
+            if (currentModelType !== 'vrm') {
+                await switchModelDisplay('vrm');
+            }
+            
+            // 确保vrm-container可见
+            const vrmContainer = document.getElementById('vrm-container');
+            if (vrmContainer) {
+                vrmContainer.classList.remove('hidden');
+                vrmContainer.style.display = 'block';
+            }
+            
+            // 如果vrmManager未初始化，尝试初始化
             if (!vrmManager) {
-                showStatus(t('live2d.waitingVRMLoader', '等待 VRM 管理器初始化...'));
+                showStatus(t('live2d.waitingVRMLoader', '等待 VRM 加载器...'));
+                
+                // 等待 VRMManager 类加载
                 let retryCount = 0;
-                while (!vrmManager && retryCount < 10) {
-                    await new Promise(resolve => setTimeout(resolve, 200));
+                while (typeof VRMManager === 'undefined' && retryCount < 50) {
+                    await new Promise(resolve => setTimeout(resolve, 100));
                     retryCount++;
                 }
                 
-                if (!vrmManager) {
-                    showStatus(t('live2d.vrmLoaderFailed', 'VRM 管理器未初始化，请刷新页面'));
+                if (typeof VRMManager === 'undefined') {
+                    showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请刷新页面'));
+                    return;
+                }
+                
+                try {
+                    showStatus(t('live2d.waitingVRMLoader', '正在初始化 VRM 管理器...'));
+                    vrmManager = new VRMManager('vrm-container');
+                    await vrmManager.init();
+                    window.vrmManager = vrmManager;
+                    showStatus(t('live2d.vrmInitialized', 'VRM 管理器初始化成功'));
+                } catch (error) {
+                    console.error('VRM 管理器初始化失败:', error);
+                    showStatus(t('live2d.vrmInitFailed', `VRM 管理器初始化失败: ${error.message}`));
                     return;
                 }
             }
