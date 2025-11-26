@@ -273,34 +273,34 @@
   }
 }
 </script>
-<script type="module" src="/static/vrm.js?v=2"></script>
+<script type="module">
+    // 动态导入 vrm.js 模块并确保导出到全局
+    import('/static/vrm.js?v=2').then((module) => {
+        // 从模块中获取 VRMManager
+        const VRMManager = module.default || module.VRMManager;
+        if (VRMManager) {
+            // 导出到全局作用域
+            window.VRMManager = VRMManager;
+            console.log('✓ VRMManager 已成功加载并导出到全局作用域');
+            // 触发自定义事件，通知其他脚本
+            window.dispatchEvent(new CustomEvent('VRMManagerLoaded'));
+        } else {
+            console.error('✗ VRMManager 未在模块中找到');
+        }
+    }).catch((error) => {
+        console.error('✗ 加载 vrm.js 模块失败:', error);
+        window.dispatchEvent(new CustomEvent('VRMManagerLoadError', { detail: error }));
+    });
+</script>
 <script>
-    // 监听 vrm.js 加载错误
-    window.addEventListener('error', (event) => {
-        if (event.filename && event.filename.includes('vrm.js')) {
-            console.error('vrm.js 加载失败:', event.message, event.filename, event.lineno);
-        }
-    }, true);
-    
-    // 监听模块加载错误
-    window.addEventListener('error', (event) => {
-        if (event.message && (event.message.includes('vrm') || event.message.includes('VRM'))) {
-            console.error('VRM 相关错误:', event.message);
-        }
+    // 监听 VRMManager 加载事件
+    window.addEventListener('VRMManagerLoaded', () => {
+        console.log('VRMManager 加载事件已触发');
     });
     
-    // 定期检查 VRMManager 是否已加载（用于调试）
-    let checkCount = 0;
-    const checkVRMManager = setInterval(() => {
-        checkCount++;
-        if (typeof VRMManager !== 'undefined') {
-            console.log('✓ VRMManager 已加载到全局作用域');
-            clearInterval(checkVRMManager);
-        } else if (checkCount > 100) {
-            console.warn('⚠ VRMManager 在10秒后仍未加载');
-            clearInterval(checkVRMManager);
-        }
-    }, 100);
+    window.addEventListener('VRMManagerLoadError', (event) => {
+        console.error('VRMManager 加载错误事件:', event.detail);
+    });
 </script>
 <script>
     // 用于页面间通信的事件处理
@@ -551,27 +551,55 @@
                 if (!vrmManager) {
                     try {
                         showStatus(t('live2d.waitingVRMLoader', '等待 VRM 加载器...'));
-                        // 等待 VRMManager 类加载，最多等待10秒
+                        
+                        // 方法1: 等待 VRMManager 加载事件或直接检查
                         let retryCount = 0;
-                        while (typeof VRMManager === 'undefined' && retryCount < 100) {
-                            await new Promise(resolve => setTimeout(resolve, 100));
-                            retryCount++;
-                            // 每2秒输出一次调试信息
-                            if (retryCount % 20 === 0) {
-                                console.log(`等待 VRMManager 加载... (${retryCount * 100}ms)`);
+                        const maxRetries = 100; // 10秒
+                        
+                        // 先检查是否已经加载
+                        if (typeof VRMManager !== 'undefined') {
+                            console.log('VRMManager 已可用');
+                        } else {
+                            // 等待加载事件或轮询检查
+                            const loadPromise = new Promise((resolve, reject) => {
+                                const timeout = setTimeout(() => {
+                                    reject(new Error('VRMManager 加载超时'));
+                                }, 10000);
+                                
+                                const checkInterval = setInterval(() => {
+                                    if (typeof VRMManager !== 'undefined') {
+                                        clearInterval(checkInterval);
+                                        clearTimeout(timeout);
+                                        resolve();
+                                    }
+                                }, 100);
+                                
+                                // 监听加载事件
+                                window.addEventListener('VRMManagerLoaded', () => {
+                                    clearInterval(checkInterval);
+                                    clearTimeout(timeout);
+                                    resolve();
+                                }, { once: true });
+                            });
+                            
+                            try {
+                                await loadPromise;
+                                console.log('VRMManager 已加载');
+                            } catch (error) {
+                                console.error('等待 VRMManager 加载失败:', error);
+                                console.error('可能的原因：');
+                                console.error('1. vrm.js 文件未正确加载');
+                                console.error('2. ES模块导入失败');
+                                console.error('3. importmap 配置错误');
+                                console.error('4. 浏览器不支持 ES 模块');
+                                showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请检查控制台并刷新页面'));
+                                await loadVRMModels();
+                                return;
                             }
                         }
                         
                         if (typeof VRMManager === 'undefined') {
-                            console.error('VRMManager 未加载。可能的原因：');
-                            console.error('1. vrm.js 文件未正确加载');
-                            console.error('2. ES模块导入失败');
-                            console.error('3. importmap 配置错误');
-                            console.error('4. 浏览器不支持 ES 模块');
-                            showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请检查控制台并刷新页面'));
-                            // 即使VRM加载失败，也继续加载模型列表，让用户知道有哪些模型
-                            await loadVRMModels();
-                            return;
+                            throw new Error('VRMManager 仍未定义');
                         }
                         
                         console.log('VRMManager 类已加载，开始初始化管理器...');
@@ -819,25 +847,42 @@
             if (!vrmManager) {
                 showStatus(t('live2d.waitingVRMLoader', '等待 VRM 加载器...'));
                 
-                // 等待 VRMManager 类加载，最多等待10秒
-                let retryCount = 0;
-                while (typeof VRMManager === 'undefined' && retryCount < 100) {
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                    retryCount++;
-                    // 每2秒输出一次调试信息
-                    if (retryCount % 20 === 0) {
-                        console.log(`等待 VRMManager 加载... (${retryCount * 100}ms)`);
+                // 等待 VRMManager 加载
+                if (typeof VRMManager === 'undefined') {
+                    // 等待加载事件或轮询检查
+                    const loadPromise = new Promise((resolve, reject) => {
+                        const timeout = setTimeout(() => {
+                            reject(new Error('VRMManager 加载超时'));
+                        }, 10000);
+                        
+                        const checkInterval = setInterval(() => {
+                            if (typeof VRMManager !== 'undefined') {
+                                clearInterval(checkInterval);
+                                clearTimeout(timeout);
+                                resolve();
+                            }
+                        }, 100);
+                        
+                        // 监听加载事件
+                        window.addEventListener('VRMManagerLoaded', () => {
+                            clearInterval(checkInterval);
+                            clearTimeout(timeout);
+                            resolve();
+                        }, { once: true });
+                    });
+                    
+                    try {
+                        await loadPromise;
+                        console.log('VRMManager 已加载');
+                    } catch (error) {
+                        console.error('等待 VRMManager 加载失败:', error);
+                        showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请检查控制台并刷新页面'));
+                        return;
                     }
                 }
                 
                 if (typeof VRMManager === 'undefined') {
-                    console.error('VRMManager 未加载。可能的原因：');
-                    console.error('1. vrm.js 文件未正确加载');
-                    console.error('2. ES模块导入失败');
-                    console.error('3. importmap 配置错误');
-                    console.error('4. 浏览器不支持 ES 模块');
-                    showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请检查控制台并刷新页面'));
-                    return;
+                    throw new Error('VRMManager 仍未定义');
                 }
                 
                 console.log('VRMManager 类已加载，开始初始化管理器...');
