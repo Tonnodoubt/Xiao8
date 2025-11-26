@@ -977,13 +977,37 @@
                 // 从路径中提取模型名称
                 const modelName = modelPath.split('/').pop().replace('.vrm', '');
                 
+                // 尝试自动加载并播放 VMD 动画（如果存在）
+                const modelDir = modelPath.substring(0, modelPath.lastIndexOf('/'));
+                const vmdPath = `${modelDir}/${modelName}.vmd`;
+                let vmdLoaded = false;
+                
+                try {
+                    const vmdCheck = await fetch(vmdPath, { method: 'HEAD' });
+                    if (vmdCheck.ok) {
+                        console.log('[VMD] 发现动画文件，开始播放:', vmdPath);
+                        await vrmManager.playVMDAnimation(vmdPath, {
+                            loop: true,
+                            timeScale: 1.0
+                        });
+                        vmdLoaded = true;
+                    }
+                } catch (vmdError) {
+                    // VMD 文件不存在，不影响模型显示
+                    console.log('[VMD] 动画文件不存在:', vmdPath);
+                }
+                
                 // 自动保存模型设置到角色
                 const saveSuccess = await saveModelToCharacter(modelPath, 'vrm');
                 if (!saveSuccess) {
                     window.hasUnsavedChanges = true;
                     showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelName} 加载成功，但保存失败`, {model: modelName}), 2000);
                 } else {
-                    showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelName} 加载成功`, {model: modelName}), 2000);
+                    if (vmdLoaded) {
+                        showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelName} 加载成功，动画已播放`, {model: modelName}), 2000);
+                    } else {
+                        showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelName} 加载成功`, {model: modelName}), 2000);
+                    }
                 }
             } catch (error) {
                 console.error('加载 VRM 模型失败:', error);
