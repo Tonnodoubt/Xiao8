@@ -1212,9 +1212,7 @@
                 
                 if (vrmModelData.success && vrmModelData.model_name && vrmModelData.model_info) {
                     // 如果有 VRM 模型，切换到 VRM 模式
-                    currentModelType = 'vrm';
-                    modelTypeSelect.value = 'vrm';
-                    modelTypeSelect.dispatchEvent(new Event('change'));
+                    await switchModelDisplay('vrm');
                     
                     // 等待 VRM 管理器初始化
                     await new Promise(resolve => setTimeout(resolve, 500));
@@ -1251,9 +1249,7 @@
                     
                     // 确保在 Live2D 模式
                     if (currentModelType !== 'live2d') {
-                        currentModelType = 'live2d';
-                        modelTypeSelect.value = 'live2d';
-                        modelTypeSelect.dispatchEvent(new Event('change'));
+                        await switchModelDisplay('live2d');
                         await new Promise(resolve => setTimeout(resolve, 300));
                     }
                     
