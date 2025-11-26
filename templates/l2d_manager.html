@@ -523,21 +523,31 @@
 
                 if (!vrmManager) {
                     try {
-                        if (typeof VRMManager === 'undefined') {
-                            showStatus(t('live2d.waitingVRMLoader', '等待 VRM 加载器...'));
-                            await new Promise(resolve => setTimeout(resolve, 500));
+                        showStatus(t('live2d.waitingVRMLoader', '等待 VRM 加载器...'));
+                        // 等待 VRMManager 类加载，最多等待5秒
+                        let retryCount = 0;
+                        while (typeof VRMManager === 'undefined' && retryCount < 50) {
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            retryCount++;
                         }
+                        
                         if (typeof VRMManager === 'undefined') {
                             showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请刷新页面'));
+                            // 即使VRM加载失败，也继续加载模型列表，让用户知道有哪些模型
+                            await loadVRMModels();
                             return;
                         }
+                        
+                        showStatus(t('live2d.waitingVRMLoader', '正在初始化 VRM 管理器...'));
                         vrmManager = new VRMManager('vrm-container');
                         await vrmManager.init();
                         window.vrmManager = vrmManager;
                         showStatus(t('live2d.vrmInitialized', 'VRM 管理器初始化成功'));
                     } catch (error) {
                         console.error('VRM 管理器初始化失败:', error);
-                        showStatus(t('live2d.vrmInitFailed', 'VRM 管理器初始化失败'));
+                        showStatus(t('live2d.vrmInitFailed', `VRM 管理器初始化失败: ${error.message}`));
+                        // 即使初始化失败，也继续加载模型列表
+                        await loadVRMModels();
                         return;
                     }
                 }
@@ -573,7 +583,18 @@
         }
         
         // 根据保存的类型或默认类型初始化显示
-        await switchModelDisplay(currentModelType);
+        try {
+            await switchModelDisplay(currentModelType);
+        } catch (error) {
+            console.error('初始化模型显示失败:', error);
+            showStatus(`初始化失败: ${error.message}`);
+            // 即使失败，也尝试加载模型列表
+            if (currentModelType === 'live2d') {
+                await loadLive2DModels();
+            } else {
+                await loadVRMModels();
+            }
+        }
 
         // 加载 Live2D 模型列表的函数
         async function loadLive2DModels() {
@@ -601,7 +622,6 @@
         // 加载 VRM 模型列表的函数
         async function loadVRMModels() {
             try {
-                showStatus(t('live2d.loadingVRMModel', '正在加载 VRM 模型列表...'));
                 const response = await fetch('/api/vrm/models');
                 
                 if (!response.ok) {
@@ -1330,11 +1350,13 @@
                 
                 if (vrmModelData.success && vrmModelData.model_name && vrmModelData.model_info) {
                     // 如果有 VRM 模型，切换到 VRM 模式
-                    await switchModelDisplay('vrm');
+                    if (currentModelType !== 'vrm') {
+                        await switchModelDisplay('vrm');
+                    }
                     
-                    // 等待 VRM 管理器初始化
+                    // 等待 VRM 管理器初始化（最多等待3秒）
                     let retryCount = 0;
-                    while (!vrmManager && retryCount < 10) {
+                    while (!vrmManager && retryCount < 15) {
                         await new Promise(resolve => setTimeout(resolve, 200));
                         retryCount++;
                     }
@@ -1351,9 +1373,11 @@
                             showStatus(t('live2d.vrmModelLoadFailed', `加载 VRM 模型失败: ${error.message}`), 3000);
                         }
                     } else if (vrmModelData.model_info.path) {
-                        // 如果管理器未初始化，设置下拉框值，等待后续初始化
+                        // 如果管理器未初始化，设置下拉框值
                         vrmModelSelect.value = vrmModelData.model_info.path;
-                        showStatus(t('live2d.waitingVRMLoader', '等待 VRM 管理器初始化...'));
+                        showStatus(t('live2d.waitingVRMLoader', '等待 VRM 管理器初始化，请稍候...'));
+                    } else {
+                        showStatus(t('live2d.vrmModelListLoaded', 'VRM 模型列表已加载，请选择模型'));
                     }
                     return;
                 }
