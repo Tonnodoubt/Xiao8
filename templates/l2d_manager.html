@@ -274,7 +274,34 @@
 }
 </script>
 <script type="module" src="/static/vrm.js?v=2"></script>
-
+<script>
+    // 监听 vrm.js 加载错误
+    window.addEventListener('error', (event) => {
+        if (event.filename && event.filename.includes('vrm.js')) {
+            console.error('vrm.js 加载失败:', event.message, event.filename, event.lineno);
+        }
+    }, true);
+    
+    // 监听模块加载错误
+    window.addEventListener('error', (event) => {
+        if (event.message && (event.message.includes('vrm') || event.message.includes('VRM'))) {
+            console.error('VRM 相关错误:', event.message);
+        }
+    });
+    
+    // 定期检查 VRMManager 是否已加载（用于调试）
+    let checkCount = 0;
+    const checkVRMManager = setInterval(() => {
+        checkCount++;
+        if (typeof VRMManager !== 'undefined') {
+            console.log('✓ VRMManager 已加载到全局作用域');
+            clearInterval(checkVRMManager);
+        } else if (checkCount > 100) {
+            console.warn('⚠ VRMManager 在10秒后仍未加载');
+            clearInterval(checkVRMManager);
+        }
+    }, 100);
+</script>
 <script>
     // 用于页面间通信的事件处理
         function sendMessageToMainPage(action) {
