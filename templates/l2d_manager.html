@@ -275,9 +275,17 @@
 </script>
 <script type="module">
     // 动态导入 vrm.js 模块并确保导出到全局
+    console.log('开始加载 vrm.js 模块...');
     import('/static/vrm.js?v=2').then((module) => {
+        console.log('vrm.js 模块加载成功，模块内容:', Object.keys(module));
         // 从模块中获取 VRMManager
         const VRMManager = module.default || module.VRMManager;
+        console.log('尝试获取 VRMManager:', {
+            hasDefault: !!module.default,
+            hasVRMManager: !!module.VRMManager,
+            VRMManager: VRMManager
+        });
+        
         if (VRMManager) {
             // 导出到全局作用域
             window.VRMManager = VRMManager;
@@ -286,12 +294,28 @@
             window.dispatchEvent(new CustomEvent('VRMManagerLoaded'));
         } else {
             console.error('✗ VRMManager 未在模块中找到');
+            console.error('模块内容:', module);
+            // 尝试直接从全局获取（如果vrm.js已经执行了window.VRMManager = ...）
+            if (typeof window.VRMManager !== 'undefined') {
+                console.log('从全局作用域找到 VRMManager');
+                window.dispatchEvent(new CustomEvent('VRMManagerLoaded'));
+            } else {
+                window.dispatchEvent(new CustomEvent('VRMManagerLoadError', { 
+                    detail: new Error('VRMManager 未在模块中找到') 
+                }));
+            }
         }
     }).catch((error) => {
         console.error('✗ 加载 vrm.js 模块失败:', error);
+        console.error('错误详情:', {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        });
         window.dispatchEvent(new CustomEvent('VRMManagerLoadError', { detail: error }));
     });
 </script>
+<script type="module" src="/static/vrm.js?v=2"></script>
 <script>
     // 监听 VRMManager 加载事件
     window.addEventListener('VRMManagerLoaded', () => {
@@ -552,34 +576,71 @@
                     try {
                         showStatus(t('live2d.waitingVRMLoader', '等待 VRM 加载器...'));
                         
-                        // 方法1: 等待 VRMManager 加载事件或直接检查
-                        let retryCount = 0;
-                        const maxRetries = 100; // 10秒
-                        
                         // 先检查是否已经加载
                         if (typeof VRMManager !== 'undefined') {
                             console.log('VRMManager 已可用');
                         } else {
+                            console.log('等待 VRMManager 加载...');
                             // 等待加载事件或轮询检查
                             const loadPromise = new Promise((resolve, reject) => {
+                                let checkCount = 0;
+                                const maxChecks = 100; // 10秒
+                                
                                 const timeout = setTimeout(() => {
-                                    reject(new Error('VRMManager 加载超时'));
+                                    clearInterval(checkInterval);
+                                    clearEventListener();
+                                    reject(new Error('VRMManager 加载超时（10秒）'));
                                 }, 10000);
                                 
                                 const checkInterval = setInterval(() => {
+                                    checkCount++;
                                     if (typeof VRMManager !== 'undefined') {
                                         clearInterval(checkInterval);
                                         clearTimeout(timeout);
+                                        clearEventListener();
+                                        console.log(`VRMManager 在 ${checkCount * 100}ms 后可用`);
                                         resolve();
+                                    } else if (checkCount % 20 === 0) {
+                                        console.log(`等待 VRMManager... (${checkCount * 100}ms)`);
                                     }
                                 }, 100);
                                 
-                                // 监听加载事件
-                                window.addEventListener('VRMManagerLoaded', () => {
+                                const eventHandler = () => {
                                     clearInterval(checkInterval);
                                     clearTimeout(timeout);
-                                    resolve();
-                                }, { once: true });
+                                    clearEventListener();
+                                    // 再检查一次，确保真的加载了
+                                    if (typeof VRMManager !== 'undefined') {
+                                        console.log('VRMManager 加载事件触发，类已可用');
+                                        resolve();
+                                    } else {
+                                        console.warn('VRMManager 加载事件触发，但类仍未定义');
+                                        // 再等待一下
+                                        setTimeout(() => {
+                                            if (typeof VRMManager !== 'undefined') {
+                                                resolve();
+                                            } else {
+                                                reject(new Error('VRMManager 加载事件触发但类未定义'));
+                                            }
+                                        }, 500);
+                                    }
+                                };
+                                
+                                const errorHandler = (event) => {
+                                    clearInterval(checkInterval);
+                                    clearTimeout(timeout);
+                                    clearEventListener();
+                                    reject(event.detail || new Error('VRMManager 加载错误'));
+                                };
+                                
+                                const clearEventListener = () => {
+                                    window.removeEventListener('VRMManagerLoaded', eventHandler);
+                                    window.removeEventListener('VRMManagerLoadError', errorHandler);
+                                };
+                                
+                                // 监听加载事件
+                                window.addEventListener('VRMManagerLoaded', eventHandler, { once: true });
+                                window.addEventListener('VRMManagerLoadError', errorHandler, { once: true });
                             });
                             
                             try {
@@ -588,13 +649,21 @@
                             } catch (error) {
                                 console.error('等待 VRMManager 加载失败:', error);
                                 console.error('可能的原因：');
-                                console.error('1. vrm.js 文件未正确加载');
-                                console.error('2. ES模块导入失败');
-                                console.error('3. importmap 配置错误');
+                                console.error('1. vrm.js 文件未正确加载 - 请检查网络标签页');
+                                console.error('2. ES模块导入失败 - 请检查控制台错误');
+                                console.error('3. importmap 配置错误 - 请检查 Three.js 路径');
                                 console.error('4. 浏览器不支持 ES 模块');
-                                showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请检查控制台并刷新页面'));
-                                await loadVRMModels();
-                                return;
+                                console.error('5. 模块导出格式问题');
+                                
+                                // 最后尝试：直接检查全局
+                                if (typeof window.VRMManager !== 'undefined') {
+                                    console.log('从 window.VRMManager 找到类');
+                                    window.VRMManager = window.VRMManager;
+                                } else {
+                                    showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请检查控制台并刷新页面'));
+                                    await loadVRMModels();
+                                    return;
+                                }
                             }
                         }
                         
