@@ -524,20 +524,30 @@
                 if (!vrmManager) {
                     try {
                         showStatus(t('live2d.waitingVRMLoader', '等待 VRM 加载器...'));
-                        // 等待 VRMManager 类加载，最多等待5秒
+                        // 等待 VRMManager 类加载，最多等待10秒
                         let retryCount = 0;
-                        while (typeof VRMManager === 'undefined' && retryCount < 50) {
+                        while (typeof VRMManager === 'undefined' && retryCount < 100) {
                             await new Promise(resolve => setTimeout(resolve, 100));
                             retryCount++;
+                            // 每2秒输出一次调试信息
+                            if (retryCount % 20 === 0) {
+                                console.log(`等待 VRMManager 加载... (${retryCount * 100}ms)`);
+                            }
                         }
                         
                         if (typeof VRMManager === 'undefined') {
-                            showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请刷新页面'));
+                            console.error('VRMManager 未加载。可能的原因：');
+                            console.error('1. vrm.js 文件未正确加载');
+                            console.error('2. ES模块导入失败');
+                            console.error('3. importmap 配置错误');
+                            console.error('4. 浏览器不支持 ES 模块');
+                            showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请检查控制台并刷新页面'));
                             // 即使VRM加载失败，也继续加载模型列表，让用户知道有哪些模型
                             await loadVRMModels();
                             return;
                         }
                         
+                        console.log('VRMManager 类已加载，开始初始化管理器...');
                         showStatus(t('live2d.waitingVRMLoader', '正在初始化 VRM 管理器...'));
                         vrmManager = new VRMManager('vrm-container');
                         await vrmManager.init();
@@ -545,6 +555,7 @@
                         showStatus(t('live2d.vrmInitialized', 'VRM 管理器初始化成功'));
                     } catch (error) {
                         console.error('VRM 管理器初始化失败:', error);
+                        console.error('错误堆栈:', error.stack);
                         showStatus(t('live2d.vrmInitFailed', `VRM 管理器初始化失败: ${error.message}`));
                         // 即使初始化失败，也继续加载模型列表
                         await loadVRMModels();
@@ -781,18 +792,28 @@
             if (!vrmManager) {
                 showStatus(t('live2d.waitingVRMLoader', '等待 VRM 加载器...'));
                 
-                // 等待 VRMManager 类加载
+                // 等待 VRMManager 类加载，最多等待10秒
                 let retryCount = 0;
-                while (typeof VRMManager === 'undefined' && retryCount < 50) {
+                while (typeof VRMManager === 'undefined' && retryCount < 100) {
                     await new Promise(resolve => setTimeout(resolve, 100));
                     retryCount++;
+                    // 每2秒输出一次调试信息
+                    if (retryCount % 20 === 0) {
+                        console.log(`等待 VRMManager 加载... (${retryCount * 100}ms)`);
+                    }
                 }
                 
                 if (typeof VRMManager === 'undefined') {
-                    showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请刷新页面'));
+                    console.error('VRMManager 未加载。可能的原因：');
+                    console.error('1. vrm.js 文件未正确加载');
+                    console.error('2. ES模块导入失败');
+                    console.error('3. importmap 配置错误');
+                    console.error('4. 浏览器不支持 ES 模块');
+                    showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请检查控制台并刷新页面'));
                     return;
                 }
                 
+                console.log('VRMManager 类已加载，开始初始化管理器...');
                 try {
                     showStatus(t('live2d.waitingVRMLoader', '正在初始化 VRM 管理器...'));
                     vrmManager = new VRMManager('vrm-container');
@@ -801,6 +822,7 @@
                     showStatus(t('live2d.vrmInitialized', 'VRM 管理器初始化成功'));
                 } catch (error) {
                     console.error('VRM 管理器初始化失败:', error);
+                    console.error('错误堆栈:', error.stack);
                     showStatus(t('live2d.vrmInitFailed', `VRM 管理器初始化失败: ${error.message}`));
                     return;
                 }
