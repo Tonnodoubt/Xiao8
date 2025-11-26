@@ -273,49 +273,50 @@
   }
 }
 </script>
-<script type="module">
-    // 动态导入 vrm.js 模块并确保导出到全局
-    console.log('开始加载 vrm.js 模块...');
-    import('/static/vrm.js?v=2').then((module) => {
-        console.log('vrm.js 模块加载成功，模块内容:', Object.keys(module));
-        // 从模块中获取 VRMManager
-        const VRMManager = module.default || module.VRMManager;
-        console.log('尝试获取 VRMManager:', {
-            hasDefault: !!module.default,
-            hasVRMManager: !!module.VRMManager,
-            VRMManager: VRMManager
-        });
-        
-        if (VRMManager) {
-            // 导出到全局作用域
-            window.VRMManager = VRMManager;
-            console.log('✓ VRMManager 已成功加载并导出到全局作用域');
-            // 触发自定义事件，通知其他脚本
-            window.dispatchEvent(new CustomEvent('VRMManagerLoaded'));
-        } else {
-            console.error('✗ VRMManager 未在模块中找到');
-            console.error('模块内容:', module);
-            // 尝试直接从全局获取（如果vrm.js已经执行了window.VRMManager = ...）
-            if (typeof window.VRMManager !== 'undefined') {
-                console.log('从全局作用域找到 VRMManager');
-                window.dispatchEvent(new CustomEvent('VRMManagerLoaded'));
-            } else {
-                window.dispatchEvent(new CustomEvent('VRMManagerLoadError', { 
-                    detail: new Error('VRMManager 未在模块中找到') 
-                }));
-            }
-        }
-    }).catch((error) => {
-        console.error('✗ 加载 vrm.js 模块失败:', error);
-        console.error('错误详情:', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-        });
-        window.dispatchEvent(new CustomEvent('VRMManagerLoadError', { detail: error }));
-    });
-</script>
 <script type="module" src="/static/vrm.js?v=2"></script>
+<script type="module">
+    // 等待 vrm.js 模块加载并确保导出到全局
+    console.log('[VRM Loader] 开始等待 vrm.js 模块加载...');
+    
+    // 方法1: 直接检查 window.VRMManager（如果静态加载成功）
+    let checkCount = 0;
+    const maxChecks = 150; // 15秒
+    
+    const checkVRMManager = setInterval(() => {
+        checkCount++;
+        
+        if (typeof window.VRMManager !== 'undefined') {
+            console.log(`[VRM Loader] ✓ VRMManager 在 ${checkCount * 100}ms 后已加载到全局作用域`);
+            clearInterval(checkVRMManager);
+            window.dispatchEvent(new CustomEvent('VRMManagerLoaded'));
+        } else if (checkCount >= maxChecks) {
+            console.error('[VRM Loader] ✗ VRMManager 在15秒后仍未加载');
+            clearInterval(checkVRMManager);
+            
+            // 尝试动态导入作为备用方案
+            console.log('[VRM Loader] 尝试动态导入作为备用方案...');
+            import('/static/vrm.js?v=2').then((module) => {
+                console.log('[VRM Loader] 动态导入成功，模块内容:', Object.keys(module));
+                const VRMManager = module.default || module.VRMManager;
+                if (VRMManager) {
+                    window.VRMManager = VRMManager;
+                    console.log('[VRM Loader] ✓ VRMManager 通过动态导入成功加载');
+                    window.dispatchEvent(new CustomEvent('VRMManagerLoaded'));
+                } else {
+                    console.error('[VRM Loader] ✗ VRMManager 未在动态导入的模块中找到');
+                    window.dispatchEvent(new CustomEvent('VRMManagerLoadError', { 
+                        detail: new Error('VRMManager 未在模块中找到') 
+                    }));
+                }
+            }).catch((error) => {
+                console.error('[VRM Loader] ✗ 动态导入也失败:', error);
+                window.dispatchEvent(new CustomEvent('VRMManagerLoadError', { detail: error }));
+            });
+        } else if (checkCount % 20 === 0) {
+            console.log(`[VRM Loader] 等待中... (${checkCount * 100}ms)`);
+        }
+    }, 100);
+</script>
 <script>
     // 监听 VRMManager 加载事件
     window.addEventListener('VRMManagerLoaded', () => {
