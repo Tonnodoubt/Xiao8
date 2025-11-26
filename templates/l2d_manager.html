@@ -330,6 +330,7 @@
         };
 
         document.addEventListener('DOMContentLoaded', async () => {
+        try {
         // Electron白屏修复
         if (document.body) {
             void document.body.offsetHeight;
@@ -363,6 +364,12 @@
         const modelUpload = document.getElementById('model-upload');
         const uploadStatus = document.getElementById('upload-status');
         const backToMainBtn = document.getElementById('backToMainBtn');
+        
+        // 检查必要的元素是否存在
+        if (!statusDiv || !modelTypeSelect || !modelSelect || !vrmModelSelect || !uploadBtn || !backToMainBtn) {
+            console.error('必要的DOM元素未找到，请检查页面结构');
+            return;
+        }
         
         let vrmManager = null;
         let currentModelType = localStorage.getItem('modelType') || 'live2d'; // 'live2d' 或 'vrm'
@@ -543,9 +550,27 @@
             await switchModelDisplay(e.target.value);
         });
 
+        // 等待 Live2D 管理器初始化
+        let retryCount = 0;
+        while (!window.live2dManager && retryCount < 10) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+            retryCount++;
+        }
+        
+        if (!window.live2dManager) {
+            console.error('Live2D 管理器未初始化，请检查脚本加载顺序');
+            showStatus('错误：Live2D 管理器未初始化');
+            return;
+        }
+        
         // 初始化 Live2D（默认模式）
-        await window.live2dManager.initPIXI('live2d-canvas', 'live2d-container');
-        showStatus(t('live2d.pixiInitialized', 'PIXI 初始化完成'));
+        try {
+            await window.live2dManager.initPIXI('live2d-canvas', 'live2d-container');
+            showStatus(t('live2d.pixiInitialized', 'PIXI 初始化完成'));
+        } catch (error) {
+            console.error('初始化 PIXI 失败:', error);
+            showStatus('错误：初始化 PIXI 失败');
+        }
         
         // 根据保存的类型或默认类型初始化显示
         await switchModelDisplay(currentModelType);
@@ -1313,9 +1338,8 @@
                 showStatus(t('live2d.loadCurrentModelFailed', '加载当前角色模型失败'));
             }
         }
-    });
-    
-    // 监听页面卸载事件，确保返回时主界面可见
+        
+        // 监听页面卸载事件，确保返回时主界面可见
         window.addEventListener('beforeunload', (e) => {
             // 尝试退出全屏
             if (isFullscreen()) {
@@ -1346,6 +1370,16 @@
         window.addEventListener('unload', () => {
             // 页面卸载时不需要再次发送消息
         });
+        
+        } catch (error) {
+            console.error('页面初始化失败:', error);
+            const statusDiv = document.getElementById('status');
+            if (statusDiv) {
+                statusDiv.textContent = `错误：${error.message}`;
+                statusDiv.style.color = '#dc3545';
+            }
+        }
+    });
         </script>
 
 </body>
