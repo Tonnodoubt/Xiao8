@@ -59,6 +59,11 @@ class VRMManager {
         
         // VMD 动画相关
         this.vmdAnimationManager = null;
+        
+        // VRMA 动画相关
+        this.vrmaMixer = null;
+        this.vrmaAction = null;
+        this.vrmaIsPlaying = false;
     }
 
     async init() {
@@ -632,6 +637,11 @@ class VRMManager {
             this.vmdAnimationManager.update(deltaTime);
         }
 
+        // 更新 VRMA 动画
+        if (this.vrmaMixer && this.vrmaIsPlaying) {
+            this.vrmaMixer.update(deltaTime);
+        }
+
         // 在渲染循环中持续更新口型表情（防止被重置）
         if (this.lipSyncActive && this.vrm?.expressionManager && this.currentMouthExpression) {
             // 如果口型同步正在运行，确保当前表情的权重被保持
@@ -925,6 +935,137 @@ class VRMManager {
         }
     }
 
+    /**
+     * 加载并播放 VRMA 动画
+     * @param {string} vrmaPath - VRMA 文件路径
+     * @param {Object} options - 播放选项 { loop, timeScale }
+     */
+    async playVRMAAnimation(vrmaPath, options = {}) {
+        if (!this.vrm || !this.vrm.scene) {
+            throw new Error('VRM 模型未加载');
+        }
+
+        try {
+            // 停止当前动画
+            this.stopVRMAAnimation();
+
+            // 动态导入 GLTFLoader
+            const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+            const loader = new GLTFLoader();
+
+            const isAnimFile = vrmaPath.toLowerCase().endsWith('.anim');
+            console.log(`[VRMA] 开始加载 ${isAnimFile ? 'ANIM' : 'VRMA'} 文件:`, vrmaPath);
+
+            // 如果是.anim文件，先尝试检查是否为Unity格式
+            if (isAnimFile) {
+                try {
+                    // 尝试加载，如果是Unity格式会失败
+                    const response = await fetch(vrmaPath);
+                    const arrayBuffer = await response.arrayBuffer();
+                    const header = new Uint8Array(arrayBuffer.slice(0, 20));
+                    const headerText = new TextDecoder().decode(header);
+                    
+                    if (headerText.startsWith('%YAML')) {
+                        throw new Error('这是Unity的.anim格式文件，无法直接播放。请使用VRMA格式文件，或使用Unity工具将.anim文件转换为VRMA格式。');
+                    }
+                } catch (error) {
+                    if (error.message.includes('Unity')) {
+                        throw error;
+                    }
+                    // 其他错误继续尝试加载
+                }
+            }
+
+            // 加载 VRMA/GLB 文件
+            const gltf = await new Promise((resolve, reject) => {
+                loader.load(
+                    vrmaPath,
+                    (gltf) => resolve(gltf),
+                    (progress) => {
+                        if (progress.lengthComputable) {
+                            const percent = (progress.loaded / progress.total) * 100;
+                            console.log(`[VRMA] 加载进度: ${percent.toFixed(1)}%`);
+                        }
+                    },
+                    (error) => reject(error)
+                );
+            });
+
+            console.log('[VRMA] VRMA 文件加载成功');
+            console.log('[VRMA] 动画数量:', gltf.animations.length);
+
+            if (!gltf.animations || gltf.animations.length === 0) {
+                throw new Error('VRMA 文件中没有找到动画数据');
+            }
+
+            // 使用第一个动画（通常VRMA文件只有一个动画）
+            // VRMA是官方格式，可以直接使用，不需要重新映射
+            const clip = gltf.animations[0];
+            console.log('[VRMA] 动画名称:', clip.name);
+            console.log('[VRMA] 动画时长:', clip.duration, '秒');
+            console.log('[VRMA] 动画轨道数:', clip.tracks.length);
+
+            // 创建 AnimationMixer
+            if (!this.vrmaMixer) {
+                this.vrmaMixer = new THREE.AnimationMixer(this.vrm.scene);
+            }
+
+            // 创建动画动作（直接使用VRMA文件中的动画）
+            this.vrmaAction = this.vrmaMixer.clipAction(clip);
+
+            // 设置播放选项
+            const loop = options.loop !== undefined ? options.loop : true;
+            this.vrmaAction.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce);
+
+            const timeScale = options.timeScale !== undefined ? options.timeScale : 1.0;
+            this.vrmaAction.timeScale = timeScale;
+
+            // 播放动画
+            this.vrmaAction.play();
+            this.vrmaIsPlaying = true;
+
+            console.log('[VRMA] 动画开始播放:', {
+                名称: clip.name,
+                时长: clip.duration,
+                循环: loop,
+                速度: timeScale
+            });
+
+        } catch (error) {
+            console.error('[VRMA] 加载动画失败:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * 停止 VRMA 动画
+     */
+    stopVRMAAnimation() {
+        if (this.vrmaAction) {
+            this.vrmaAction.stop();
+            this.vrmaAction = null;
+        }
+        this.vrmaIsPlaying = false;
+        console.log('[VRMA] 动画已停止');
+    }
+
+    /**
+     * 暂停/恢复 VRMA 动画
+     */
+    pauseVRMAAnimation() {
+        if (this.vrmaAction) {
+            if (this.vrmaIsPlaying) {
+                this.vrmaAction.paused = true;
+                this.vrmaIsPlaying = false;
+                console.log('[VRMA] 动画已暂停');
+            } else {
+                this.vrmaAction.paused = false;
+                this.vrmaIsPlaying = true;
+                console.log('[VRMA] 动画已恢复');
+            }
+        }
+    }
+
     // 清理 VRM 资源
     disposeVRM() {
         if (!this.vrm) return;
@@ -933,6 +1074,13 @@ class VRMManager {
         if (this.vmdAnimationManager) {
             this.vmdAnimationManager.dispose();
             this.vmdAnimationManager = null;
+        }
+
+        // 清理 VRMA 动画
+        this.stopVRMAAnimation();
+        if (this.vrmaMixer) {
+            this.vrmaMixer.uncacheRoot(this.vrm.scene);
+            this.vrmaMixer = null;
         }
 
         if (this.vrm.scene) {

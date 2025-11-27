@@ -1507,28 +1507,6 @@
             await vrmManager.loadModel(modelPath);
             console.log('VRM 模型加载成功');
             
-            // 尝试自动加载并播放 VMD 动画（如果存在）
-            // 从模型路径推断 VMD 文件路径
-            const modelDir = modelPath.substring(0, modelPath.lastIndexOf('/'));
-            const modelName = modelPath.substring(modelPath.lastIndexOf('/') + 1, modelPath.lastIndexOf('.'));
-            const vmdPath = `${modelDir}/${modelName}.vmd`;
-            
-            // 检查 VMD 文件是否存在
-            try {
-                const vmdCheck = await fetch(vmdPath, { method: 'HEAD' });
-                if (vmdCheck.ok) {
-                    console.log('发现 VMD 动画文件，开始播放:', vmdPath);
-                    await vrmManager.playVMDAnimation(vmdPath, {
-                        loop: true,
-                        timeScale: 1.0
-                    });
-                } else {
-                    console.log('未找到 VMD 动画文件:', vmdPath);
-                }
-            } catch (vmdError) {
-                // VMD 文件不存在或加载失败，不影响模型显示
-                console.log('VMD 动画文件不存在或无法加载:', vmdPath);
-            }
         } catch (error) {
             console.error('加载 VRM 模型失败:', error);
         }

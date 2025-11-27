@@ -285,10 +285,10 @@ def find_vrm_models():
                 
     return found_models
 
-def find_vmd_animations():
+def find_vrma_animations():
     """
-    递归扫描 'static/models/vrm/animations' 文件夹，查找所有 .vmd 文件。
-    正确处理 Windows 上的 Shift-JIS 编码文件名。
+    递归扫描 'static/models/vrm/animations' 文件夹，查找所有 .vrma 和 .anim 文件。
+    正确处理 Windows 上的文件名编码。
     """
     import sys
     import urllib.parse
@@ -301,30 +301,12 @@ def find_vmd_animations():
         return found_animations
     
     try:
-        # 递归遍历目录查找所有 .vmd 文件
+        # 递归遍历目录查找所有 .vrma 和 .anim 文件
         for root, dirs, files in os.walk(animations_dir):
             for file in files:
-                if file.endswith('.vmd'):
-                    # 在 Windows 上，文件名可能是 Shift-JIS 编码的
-                    # 需要正确转换为 UTF-8 用于显示
-                    file_name_display = file.replace('.vmd', '')
-                    
-                    if sys.platform == 'win32':
-                        try:
-                            # 方法：将文件名从系统编码（可能是 Shift-JIS）转换为 UTF-8
-                            # 先获取文件名的原始字节表示
-                            file_bytes = file.encode(sys.getfilesystemencoding(), errors='surrogateescape')
-                            # 尝试从 Shift-JIS 解码
-                            try:
-                                file_name_display = file_bytes.decode('shift_jis', errors='ignore').replace('.vmd', '')
-                            except:
-                                # 如果 Shift-JIS 失败，尝试从系统编码解码
-                                try:
-                                    file_name_display = file_bytes.decode('utf-8', errors='ignore').replace('.vmd', '')
-                                except:
-                                    pass
-                        except Exception as e:
-                            logging.debug(f"文件名编码转换失败: {file}, 使用原始名称")
+                if file.endswith('.vrma') or file.endswith('.anim'):
+                    # 获取文件名（去掉扩展名）
+                    file_name_display = file.replace('.vrma', '').replace('.anim', '')
                     
                     # 构建可被浏览器访问的URL路径
                     # 使用原始文件名构建路径（需要 URL 编码）
@@ -342,7 +324,8 @@ def find_vmd_animations():
                     
                     found_animations.append({
                         "name": file_name_display,
-                        "path": f"/static/models/vrm/animations/{encoded_file_path}"
+                        "path": f"/static/models/vrm/animations/{encoded_file_path}",
+                        "type": "vrma" if file.endswith('.vrma') else "anim"
                     })
     except Exception as e:
         logging.error(f"搜索animations目录时出错: {e}")
