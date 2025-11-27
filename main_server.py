@@ -307,6 +307,19 @@ async def get_vrm_models(simple: bool = False):
         else:
             return []
 
+@app.get("/api/vrm/animations")
+async def get_vrm_animations():
+    """
+    获取VMD动画文件列表
+    """
+    try:
+        from utils.frontend_utils import find_vmd_animations
+        animations = find_vmd_animations()
+        return {"success": True, "animations": animations}
+    except Exception as e:
+        logger.error(f"获取VMD动画列表失败: {e}")
+        return {"success": False, "error": str(e), "animations": []}
+
 @app.post("/api/preferences/set-preferred")
 async def set_preferred_model(request: Request):
     """设置首选模型"""

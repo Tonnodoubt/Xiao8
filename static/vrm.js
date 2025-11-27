@@ -65,14 +65,34 @@ class VRMManager {
         try {
             // Three.js 已通过 ES 模块导入，直接使用
             console.log('THREE.js 已就绪，开始初始化场景...');
+            
+            // 确保容器可见且有大小
+            if (!this.container) {
+                throw new Error('容器元素不存在');
+            }
+            
+            // 确保容器可见
+            this.container.style.display = 'block';
+            this.container.style.visibility = 'visible';
+            this.container.style.opacity = '1';
+            this.container.style.width = '100%';
+            this.container.style.height = '100%';
+            this.container.style.position = 'fixed';
+            this.container.style.top = '0';
+            this.container.style.left = '0';
 
             // 创建场景
             this.scene = new THREE.Scene();
             this.scene.background = null; // 透明背景
 
-            // 创建相机
-            const width = this.container.clientWidth || window.innerWidth;
-            const height = this.container.clientHeight || window.innerHeight;
+            // 创建相机 - 如果容器大小为0，使用窗口大小
+            let width = this.container.clientWidth || this.container.offsetWidth;
+            let height = this.container.clientHeight || this.container.offsetHeight;
+            
+            if (width === 0 || height === 0) {
+                width = window.innerWidth;
+                height = window.innerHeight;
+            }
             this.camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 2000);
             // 调整相机位置，从正面看模型
             this.camera.position.set(0, 1.2, 1.8);
@@ -89,12 +109,21 @@ class VRMManager {
             
             // 确保容器和 canvas 可以接收事件
             this.container.style.pointerEvents = 'auto';
+            this.container.style.display = 'block';
+            this.container.style.visibility = 'visible';
+            this.container.style.opacity = '1';
+            
             const canvas = this.renderer.domElement;
             canvas.style.pointerEvents = 'auto';
             canvas.style.touchAction = 'none';
             canvas.style.userSelect = 'none';
             canvas.style.cursor = 'grab';
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.style.display = 'block';
             
+            // 清空容器并添加 canvas
+            this.container.innerHTML = '';
             this.container.appendChild(canvas);
 
             // 添加灯光
@@ -119,7 +148,6 @@ class VRMManager {
             // 开始渲染循环
             this.animate();
 
-            console.log('VRM 管理器初始化成功');
         } catch (error) {
             console.error('VRM 管理器初始化失败:', error);
             throw error;
@@ -146,7 +174,6 @@ class VRMManager {
                     (progress) => {
                         if (progress.total > 0) {
                             const percent = (progress.loaded / progress.total) * 100;
-                            console.log(`VRM 加载进度: ${percent.toFixed(1)}%`);
                         }
                     },
                     (error) => reject(error)
@@ -234,28 +261,6 @@ class VRMManager {
                 this.initDragAndZoom();
             }
 
-            console.log('VRM 模型加载成功');
-            const availableExpressions = Object.keys(this.vrm.expressionManager?.expressions || {});
-            console.log('模型信息:', {
-                expressions: availableExpressions,
-                springBones: this.vrm.springBoneManager?.springBoneGroups?.length || 0
-            });
-            
-            // 检查口型同步支持
-            const lipSyncInfo = this.checkLipSyncSupport();
-            
-            // 检查动画支持
-            const animationInfo = this.checkAnimations();
-            
-            // 输出总结
-            console.log('\n=== 模型功能总结 ===');
-            console.log('口型支持:', lipSyncInfo ? 
-                (lipSyncInfo.hasMouthExpressions || lipSyncInfo.hasMouthBlendShapes || lipSyncInfo.hasJawBone ? '✓ 支持' : '✗ 不支持') : 
-                '未知');
-            console.log('动画支持:', animationInfo ? 
-                (animationInfo.hasAnimations ? `✓ 支持 (${animationInfo.count} 个动画)` : '✗ 不支持') : 
-                '未知');
-            console.log('==================\n');
 
             return this.vrm;
         } catch (error) {
@@ -267,7 +272,6 @@ class VRMManager {
     // 设置表情
     setExpression(expressionName, weight) {
         if (!this.vrm || !this.vrm.expressionManager) {
-            console.warn('VRM 模型未加载或没有表情管理器');
             return false;
         }
 
@@ -309,7 +313,6 @@ class VRMManager {
     // 检查口型同步支持
     checkLipSyncSupport() {
         if (!this.vrm) {
-            console.warn('[VRM] 模型未加载');
             return;
         }
 
@@ -344,9 +347,6 @@ class VRMManager {
 
         // 2. 检查 BlendShape（如果有）
         if (this.vrm.blendShapeProxy) {
-            console.log('✓ 模型有 BlendShapeProxy');
-        } else {
-            console.log('⚠ 模型没有 BlendShapeProxy');
         }
 
         // 3. 检查 Humanoid 骨骼（下巴）
@@ -373,14 +373,6 @@ class VRMManager {
         const hasJawBone = !!this.vrm.humanoid?.normalizedHumanBones?.jaw;
         
         if (hasMouthExpressions || hasMouthBlendShapes || hasJawBone) {
-            console.log('✓ 模型支持口型同步！');
-            console.log('   支持方式:');
-            if (hasMouthExpressions) console.log('     - 表情 (Expression)');
-            if (hasMouthBlendShapes) console.log('     - BlendShape');
-            if (hasJawBone) console.log('     - 骨骼 (Jaw Bone)');
-        } else {
-            console.log('⚠ 模型可能不支持口型同步');
-            console.log('提示: 请检查模型是否支持表情，或者表情名称可能不同');
         }
         console.log('==================\n');
         
@@ -397,7 +389,6 @@ class VRMManager {
     // 检查模型是否包含动画
     checkAnimations() {
         if (!this.vrm) {
-            console.warn('[VRM] 模型未加载');
             return null;
         }
 
@@ -418,9 +409,7 @@ class VRMManager {
         }
 
         if (gltf && gltf.animations && gltf.animations.length > 0) {
-            console.log(`✓ 找到 ${gltf.animations.length} 个内置动画`);
             const animations = gltf.animations.map((clip, index) => {
-                console.log(`  [${index}] ${clip.name || `Animation_${index}`} - 时长: ${clip.duration.toFixed(2)}秒, 轨道数: ${clip.tracks.length}`);
                 return {
                     index: index,
                     name: clip.name || `Animation_${index}`,
@@ -436,8 +425,6 @@ class VRMManager {
                 animations: animations
             };
         } else {
-            console.log('⚠ 模型文件中没有找到动画数据');
-            console.log('提示: VRM 模型文件本身通常不包含动画，动画通常是单独的文件（.vrma, .glb, .gltf）');
             console.log('==================\n');
             return {
                 hasAnimations: false,
@@ -478,7 +465,6 @@ class VRMManager {
                 if (keywords.some(keyword => actualName === keyword || actualName.includes(keyword))) {
                     this.mouthExpressions[targetKey] = i;
                     found = true;
-                    console.log(`[VRM] 映射口型 "${targetKey}" -> 表情索引 ${i} ("${actualName}")`);
                     break;
                 }
             }
@@ -493,25 +479,20 @@ class VRMManager {
                     if (keywords.some(keyword => actualName.includes(keyword) || keyword.includes(actualName))) {
                         this.mouthExpressions[targetKey] = i;
                         found = true;
-                        console.log(`[VRM] 映射口型 "${targetKey}" -> 表情索引 ${i} ("${actualName}") [部分匹配]`);
                         break;
                     }
                 }
             }
 
             if (!found) {
-                console.warn(`[VRM] 未找到口型 "${targetKey}" 对应的表情`);
             }
         });
 
         // 检查是否有任何映射成功
         const hasAnyMapping = Object.values(this.mouthExpressions).some(v => v !== null);
         if (!hasAnyMapping) {
-            console.warn('[VRM] ⚠️ 未找到任何口型表情映射，口型同步可能无法工作');
-            console.warn('[VRM] 可用表情:', expressionNames);
         } else {
             const mappedCount = Object.values(this.mouthExpressions).filter(v => v !== null).length;
-            console.log(`[VRM] ✓ 成功映射 ${mappedCount}/5 个口型表情`);
         }
     }
 
@@ -684,17 +665,14 @@ class VRMManager {
     // 启动口型同步
     startLipSync(analyser) {
         if (!this.vrm || !this.vrm.expressionManager) {
-            console.warn('[VRM] 模型未加载，无法启动口型同步');
             return false;
         }
 
         if (!analyser) {
-            console.warn('[VRM] analyser 未提供，无法启动口型同步');
             return false;
         }
 
         if (this.lipSyncActive) {
-            console.warn('[VRM] 口型同步已在运行');
             return false;
         }
 
@@ -704,8 +682,6 @@ class VRMManager {
         // 检查是否有可用的口型表情
         const hasMouthExpressions = Object.values(this.mouthExpressions).some(v => v !== null);
         if (!hasMouthExpressions) {
-            console.warn('[VRM] ⚠️ 未找到可用的口型表情，口型同步可能无法正常工作');
-            console.warn('[VRM] 可用表情:', Object.keys(this.vrm.expressionManager.expressions));
         }
 
         this.lipSyncActive = true;

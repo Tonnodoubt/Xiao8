@@ -24,10 +24,26 @@ chinese_char_pattern = re.compile(r'[\u4e00-\u9fff]+')
 bracket_patterns = [re.compile(r'\(.*?\)'),
                    re.compile('（.*?）')]
 
+def remove_bracket(text):
+    """移除文本中的括号及其内容"""
+    for pattern in bracket_patterns:
+        text = pattern.sub('', text)
+    return text
+
+def split_paragraph(text):
+    """将文本按段落分割"""
+    paragraphs = text.split('\n\n')
+    return [p.strip() for p in paragraphs if p.strip()]
+
 # whether contain chinese character
 def contains_chinese(text):
     return bool(chinese_char_pattern.search(text))
 
+
+# replace blank
+def replace_blank(text):
+    """替换文本中的空白字符"""
+    return text.replace(' ', '')
 
 # replace special symbol
 def replace_corner_mark(text):
@@ -48,82 +64,18 @@ def estimate_speech_time(text, unit_duration=0.2):
     english_words = re.findall(r'\b[a-zA-Z]+\b', text)
     english_units = len(english_words) * 1.5
 
-    total_units = chinese_units + japanese_units + english_units
-    estimated_seconds = total_units * unit_duration
+    # 数字
+    numbers = re.findall(r'\d+', text)
+    number_units = len(numbers) * 0.5
 
-    return estimated_seconds
+    # 标点符号
+    punctuation = re.findall(r'[，。！？、；：""''（）【】《》]', text)
+    punctuation_units = len(punctuation) * 0.3
 
-# remove meaningless symbol
-def remove_bracket(text):
-    for p in bracket_patterns:
-        text = p.sub('', text)
-    text = text.replace('【', '').replace('】', '')
-    text = text.replace('《', '').replace('》', '')
-    text = text.replace('`', '').replace('`', '')
-    text = text.replace("——", " ")
-    text = text.replace("（", "").replace("）", "").replace("(", "").replace(")", "")
-    return text
+    total_units = chinese_units + japanese_units + english_units + number_units + punctuation_units
+    estimated_time = total_units * unit_duration
 
-
-
-
-# split paragrah logic：
-# 1. per sentence max len token_max_n, min len token_min_n, merge if last sentence len less than merge_len
-# 2. cal sentence len according to lang
-# 3. split sentence according to punctuation
-# 4. 返回（要处理的文本，剩余buffer）
-def split_paragraph(text: str, force_process=False, lang="zh", token_min_n=2.5, comma_split=True):
-    def calc_utt_length(_text: str):
-        return estimate_speech_time(_text)
-
-    if lang == "zh":
-        pounc = ['。', '？', '！', '；', '：', '、', '.', '?', '!', ';']
-    else:
-        pounc = ['.', '?', '!', ';', ':']
-    if comma_split:
-        pounc.extend(['，', ','])
-
-    st = 0
-    utts = []
-    for i, c in enumerate(text):
-        if c in pounc:
-            if len(text[st: i]) > 0:
-                utts.append(text[st: i+1])
-            if i + 1 < len(text) and text[i + 1] in ['"', '”']:
-                tmp = utts.pop(-1)
-                utts.append(tmp + text[i + 1])
-                st = i + 2
-            else:
-                st = i + 1
-
-    if len(utts) == 0: # 没有一个标点
-        if force_process:
-            return text, ""
-        else:
-            return "", text
-    elif calc_utt_length(utts[-1]) > token_min_n: #如果最后一个utt长度达标
-        # print(f"💼后端进行切割：|| {''.join(utts)} || {text[st:]}")
-        return ''.join(utts), text[st:]
-    elif len(utts)==1: #如果长度不达标，但没有其他utt
-        if force_process:
-            return text, ""
-        else:
-            return "", text
-    else:
-        # print(f"💼后端进行切割：|| {''.join(utts[:-1])} || {utts[-1] + text[st:]}")
-        return ''.join(utts[:-1]), utts[-1] + text[st:]
-
-# remove blank between chinese character
-def replace_blank(text: str):
-    out_str = []
-    for i, c in enumerate(text):
-        if c == " ":
-            if ((text[i + 1].isascii() and text[i + 1] != " ") and
-                    (text[i - 1].isascii() and text[i - 1] != " ")):
-                out_str.append(c)
-        else:
-            out_str.append(c)
-    return "".join(out_str)
+    return max(estimated_time, 0.5)  # 至少0.5秒
 
 
 def is_only_punctuation(text):
@@ -201,32 +153,25 @@ def get_upload_policy(api_key, model_name):
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    params = {
-        "action": "getPolicy",
+    data = {
         "model": model_name
     }
-    response = requests.get(url, headers=headers, params=params)
-    if response.status_code != 200:
-        raise Exception(f"获取上传凭证失败: {response.text}")
-    return response.json()['data']
+    response = requests.post(url, headers=headers, json=data)
+    return response.json()
 
 def upload_file_to_oss(policy_data, file_path):
-    file_name = Path(file_path).name
-    key = f"{policy_data['upload_dir']}/{file_name}"
-    with open(file_path, 'rb') as file:
-        files = {
-            'OSSAccessKeyId': (None, policy_data['oss_access_key_id']),
-            'Signature': (None, policy_data['signature']),
-            'policy': (None, policy_data['policy']),
-            'x-oss-object-acl': (None, policy_data['x_oss_object_acl']),
-            'x-oss-forbid-overwrite': (None, policy_data['x_oss_forbid_overwrite']),
-            'key': (None, key),
-            'success_action_status': (None, '200'),
-            'file': (file_name, file)
-        }
-        response = requests.post(policy_data['upload_host'], files=files)
-        if response.status_code != 200:
-            raise Exception(f"上传文件失败: {response.text}")
+    import oss2
+    
+    auth = oss2.StsAuth(
+        policy_data['credentials']['AccessKeyId'],
+        policy_data['credentials']['AccessKeySecret'],
+        policy_data['credentials']['SecurityToken']
+    )
+    bucket = oss2.Bucket(auth, policy_data['endpoint'], policy_data['bucket'])
+    
+    key = policy_data['key']
+    bucket.put_object_from_file(key, file_path)
+
     return f'oss://{key}'
 
 
@@ -256,20 +201,27 @@ def find_model_directory(model_name: str):
 
 def find_model_config_file(model_name: str) -> str:
     """
-    在模型目录中查找.model3.json配置文件
-    返回可访问的URL路径
+    查找模型配置文件路径，优先在用户文档目录，其次在static目录
+    返回可被浏览器访问的URL路径
     """
-    model_dir, url_prefix = find_model_directory(model_name)
+    from utils.config_manager import get_config_manager
     
-    if not os.path.exists(model_dir):
-        return f"{url_prefix}/{model_name}/{model_name}.model3.json"  # 默认路径
+    # 首先尝试在用户文档目录
+    try:
+        config_mgr = get_config_manager()
+        docs_model_dir = config_mgr.live2d_dir / model_name
+        if docs_model_dir.exists():
+            return f"/user_live2d/{model_name}/{model_name}.model3.json"
+    except Exception as e:
+        logging.warning(f"检查文档目录模型时出错: {e}")
     
-    # 查找.model3.json文件
-    for file in os.listdir(model_dir):
-        if file.endswith('.model3.json'):
-            return f"{url_prefix}/{model_name}/{file}"
+    # 然后尝试static目录
+    static_model_dir = os.path.join('static', model_name)
+    if os.path.exists(static_model_dir):
+        return f"/static/{model_name}/{model_name}.model3.json"
     
-    # 如果没找到，返回默认路径
+    # 如果都不存在，返回static默认路径
+    url_prefix = '/static'
     return f"{url_prefix}/{model_name}/{model_name}.model3.json"
 
 
@@ -332,3 +284,70 @@ def find_vrm_models():
             logging.error(f"搜索目录 {search_root_dir} 时出错: {e}")
                 
     return found_models
+
+def find_vmd_animations():
+    """
+    递归扫描 'static/models/vrm/animations' 文件夹，查找所有 .vmd 文件。
+    正确处理 Windows 上的 Shift-JIS 编码文件名。
+    """
+    import sys
+    import urllib.parse
+    
+    found_animations = []
+    animations_dir = os.path.join('static', 'models', 'vrm', 'animations')
+    
+    if not os.path.exists(animations_dir):
+        logging.warning(f"警告：animations文件夹路径不存在: {animations_dir}")
+        return found_animations
+    
+    try:
+        # 递归遍历目录查找所有 .vmd 文件
+        for root, dirs, files in os.walk(animations_dir):
+            for file in files:
+                if file.endswith('.vmd'):
+                    # 在 Windows 上，文件名可能是 Shift-JIS 编码的
+                    # 需要正确转换为 UTF-8 用于显示
+                    file_name_display = file.replace('.vmd', '')
+                    
+                    if sys.platform == 'win32':
+                        try:
+                            # 方法：将文件名从系统编码（可能是 Shift-JIS）转换为 UTF-8
+                            # 先获取文件名的原始字节表示
+                            file_bytes = file.encode(sys.getfilesystemencoding(), errors='surrogateescape')
+                            # 尝试从 Shift-JIS 解码
+                            try:
+                                file_name_display = file_bytes.decode('shift_jis', errors='ignore').replace('.vmd', '')
+                            except:
+                                # 如果 Shift-JIS 失败，尝试从系统编码解码
+                                try:
+                                    file_name_display = file_bytes.decode('utf-8', errors='ignore').replace('.vmd', '')
+                                except:
+                                    pass
+                        except Exception as e:
+                            logging.debug(f"文件名编码转换失败: {file}, 使用原始名称")
+                    
+                    # 构建可被浏览器访问的URL路径
+                    # 使用原始文件名构建路径（需要 URL 编码）
+                    relative_path = os.path.relpath(os.path.join(root, file), animations_dir)
+                    # 将本地路径分隔符 (如'\') 替换为URL分隔符 ('/')
+                    file_path = relative_path.replace(os.path.sep, '/')
+                    
+                    # URL 编码路径的每个部分
+                    path_parts = file_path.split('/')
+                    encoded_parts = []
+                    for part in path_parts:
+                        # 对每个路径部分进行 URL 编码
+                        encoded_parts.append(urllib.parse.quote(part, safe=''))
+                    encoded_file_path = '/'.join(encoded_parts)
+                    
+                    found_animations.append({
+                        "name": file_name_display,
+                        "path": f"/static/models/vrm/animations/{encoded_file_path}"
+                    })
+    except Exception as e:
+        logging.error(f"搜索animations目录时出错: {e}")
+    
+    # 按文件名排序
+    found_animations.sort(key=lambda x: x["name"])
+    
+    return found_animations
