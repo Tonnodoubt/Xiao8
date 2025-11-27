@@ -604,6 +604,10 @@ Live2DManager.prototype.setupFloatingButtons = function(model) {
     
     // 为"请她回来"按钮容器添加拖动功能
     this.setupReturnButtonContainerDrag(returnButtonContainer);
+    
+    // 通知其他代码浮动按钮已经创建完成（用于app.js中绑定Agent开关事件）
+    window.dispatchEvent(new CustomEvent('live2d-floating-buttons-ready'));
+    console.log('[Live2D] 浮动按钮就绪事件已发送');
 };
 
 // 创建弹出框
@@ -678,6 +682,334 @@ Live2DManager.prototype._createAgentPopupContent = function(popup) {
         popup.appendChild(toggleItem);
     });
 };
+
+// 创建 Agent 任务 HUD（屏幕正中右侧）
+Live2DManager.prototype.createAgentTaskHUD = function() {
+    // 如果已存在则不重复创建
+    if (document.getElementById('agent-task-hud')) {
+        return document.getElementById('agent-task-hud');
+    }
+    
+    const hud = document.createElement('div');
+    hud.id = 'agent-task-hud';
+    Object.assign(hud.style, {
+        position: 'fixed',
+        top: '50%',
+        right: '20px',
+        transform: 'translateY(-50%)',
+        width: '320px',
+        maxHeight: '60vh',
+        background: 'rgba(15, 23, 42, 0.92)',
+        backdropFilter: 'blur(12px)',
+        borderRadius: '16px',
+        padding: '16px',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+        color: '#e2e8f0',
+        fontFamily: "'Segoe UI', 'SF Pro Display', -apple-system, sans-serif",
+        fontSize: '13px',
+        zIndex: '9999',
+        display: 'none', // 默认隐藏
+        flexDirection: 'column',
+        gap: '12px',
+        pointerEvents: 'auto',
+        overflowY: 'auto',
+        transition: 'opacity 0.3s ease, transform 0.3s ease'
+    });
+    
+    // HUD 标题栏
+    const header = document.createElement('div');
+    Object.assign(header.style, {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingBottom: '12px',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+    });
+    
+    const title = document.createElement('div');
+    title.id = 'agent-task-hud-title';
+    title.innerHTML = `<span style="color: #60a5fa; margin-right: 8px;">⚡</span>${window.t ? window.t('agent.taskHud.title') : 'Agent 任务'}`;
+    Object.assign(title.style, {
+        fontWeight: '600',
+        fontSize: '15px',
+        color: '#f1f5f9'
+    });
+    
+    // 统计信息
+    const stats = document.createElement('div');
+    stats.id = 'agent-task-hud-stats';
+    Object.assign(stats.style, {
+        display: 'flex',
+        gap: '12px',
+        fontSize: '11px'
+    });
+    stats.innerHTML = `
+        <span style="color: #fbbf24;" title="${window.t ? window.t('agent.taskHud.running') : '运行中'}">● <span id="hud-running-count">0</span></span>
+        <span style="color: #60a5fa;" title="${window.t ? window.t('agent.taskHud.queued') : '队列中'}">◐ <span id="hud-queued-count">0</span></span>
+    `;
+    
+    header.appendChild(title);
+    header.appendChild(stats);
+    hud.appendChild(header);
+    
+    // 任务列表容器
+    const taskList = document.createElement('div');
+    taskList.id = 'agent-task-list';
+    Object.assign(taskList.style, {
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
+        maxHeight: 'calc(60vh - 80px)',
+        overflowY: 'auto'
+    });
+    
+    // 空状态提示
+    const emptyState = document.createElement('div');
+    emptyState.id = 'agent-task-empty';
+    emptyState.textContent = window.t ? window.t('agent.taskHud.noTasks') : '暂无活动任务';
+    Object.assign(emptyState.style, {
+        textAlign: 'center',
+        color: '#64748b',
+        padding: '20px',
+        fontSize: '12px'
+    });
+    taskList.appendChild(emptyState);
+    
+    hud.appendChild(taskList);
+    
+    document.body.appendChild(hud);
+    
+    return hud;
+};
+
+// 显示任务 HUD
+Live2DManager.prototype.showAgentTaskHUD = function() {
+    let hud = document.getElementById('agent-task-hud');
+    if (!hud) {
+        hud = this.createAgentTaskHUD();
+    }
+    hud.style.display = 'flex';
+    hud.style.opacity = '1';
+    hud.style.transform = 'translateY(-50%) translateX(0)';
+};
+
+// 隐藏任务 HUD
+Live2DManager.prototype.hideAgentTaskHUD = function() {
+    const hud = document.getElementById('agent-task-hud');
+    if (hud) {
+        hud.style.opacity = '0';
+        hud.style.transform = 'translateY(-50%) translateX(20px)';
+        setTimeout(() => {
+            hud.style.display = 'none';
+        }, 300);
+    }
+};
+
+// 更新任务 HUD 内容
+Live2DManager.prototype.updateAgentTaskHUD = function(tasksData) {
+    const taskList = document.getElementById('agent-task-list');
+    const emptyState = document.getElementById('agent-task-empty');
+    const runningCount = document.getElementById('hud-running-count');
+    const queuedCount = document.getElementById('hud-queued-count');
+    
+    if (!taskList) return;
+    
+    // 更新统计数据
+    if (runningCount) runningCount.textContent = tasksData.running_count || 0;
+    if (queuedCount) queuedCount.textContent = tasksData.queued_count || 0;
+    
+    // 获取活动任务（running 和 queued）
+    const activeTasks = (tasksData.tasks || []).filter(t => 
+        t.status === 'running' || t.status === 'queued'
+    );
+    
+    // 显示/隐藏空状态
+    if (emptyState) {
+        emptyState.style.display = activeTasks.length === 0 ? 'block' : 'none';
+    }
+    
+    // 清除旧的任务卡片（保留空状态）
+    const existingCards = taskList.querySelectorAll('.task-card');
+    existingCards.forEach(card => card.remove());
+    
+    // 添加任务卡片
+    activeTasks.forEach(task => {
+        const card = this._createTaskCard(task);
+        taskList.appendChild(card);
+    });
+};
+
+// 创建单个任务卡片
+Live2DManager.prototype._createTaskCard = function(task) {
+    const card = document.createElement('div');
+    card.className = 'task-card';
+    card.dataset.taskId = task.id;
+    if (task.start_time) {
+        card.dataset.startTime = task.start_time;
+    }
+    
+    const isRunning = task.status === 'running';
+    const statusColor = isRunning ? '#fbbf24' : '#60a5fa';
+    const statusText = isRunning 
+        ? (window.t ? window.t('agent.taskHud.statusRunning') : '运行中') 
+        : (window.t ? window.t('agent.taskHud.statusQueued') : '队列中');
+    
+    Object.assign(card.style, {
+        background: 'rgba(30, 41, 59, 0.8)',
+        borderRadius: '10px',
+        padding: '12px',
+        border: `1px solid ${isRunning ? 'rgba(251, 191, 36, 0.3)' : 'rgba(96, 165, 250, 0.2)'}`,
+        transition: 'all 0.2s ease'
+    });
+    
+    // 任务类型和状态
+    const header = document.createElement('div');
+    Object.assign(header.style, {
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: '8px'
+    });
+    
+    // 任务类型图标
+    const typeIcon = task.source === 'mcp' ? '🔌' : (task.source === 'computer_use' ? '🖱️' : '⚙️');
+    const typeName = task.type || task.source || 'unknown';
+    
+    const typeLabel = document.createElement('span');
+    typeLabel.innerHTML = `${typeIcon} <span style="color: #94a3b8; font-size: 11px;">${typeName}</span>`;
+    
+    const statusBadge = document.createElement('span');
+    statusBadge.textContent = statusText;
+    Object.assign(statusBadge.style, {
+        color: statusColor,
+        fontSize: '11px',
+        fontWeight: '500',
+        padding: '2px 8px',
+        background: isRunning ? 'rgba(251, 191, 36, 0.15)' : 'rgba(96, 165, 250, 0.15)',
+        borderRadius: '10px'
+    });
+    
+    header.appendChild(typeLabel);
+    header.appendChild(statusBadge);
+    card.appendChild(header);
+    
+    // 任务参数/描述
+    const params = task.params || {};
+    let description = '';
+    if (params.query) {
+        description = params.query;
+    } else if (params.tool_name) {
+        description = params.tool_name;
+    } else if (params.action) {
+        description = params.action;
+    } else {
+        description = task.id?.substring(0, 8) || 'Task';
+    }
+    
+    const descDiv = document.createElement('div');
+    descDiv.textContent = description.length > 60 ? description.substring(0, 60) + '...' : description;
+    Object.assign(descDiv.style, {
+        color: '#cbd5e1',
+        fontSize: '12px',
+        lineHeight: '1.4',
+        marginBottom: '8px',
+        wordBreak: 'break-word'
+    });
+    card.appendChild(descDiv);
+    
+    // 运行时间
+    if (task.start_time && isRunning) {
+        const timeDiv = document.createElement('div');
+        const startTime = new Date(task.start_time);
+        const elapsed = Math.floor((Date.now() - startTime.getTime()) / 1000);
+        const minutes = Math.floor(elapsed / 60);
+        const seconds = elapsed % 60;
+        
+        timeDiv.id = `task-time-${task.id}`;
+        timeDiv.innerHTML = `<span style="color: #64748b;">⏱️</span> ${minutes}:${seconds.toString().padStart(2, '0')}`;
+        Object.assign(timeDiv.style, {
+            color: '#94a3b8',
+            fontSize: '11px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px'
+        });
+        card.appendChild(timeDiv);
+    }
+    
+    // 如果是运行中的任务，添加动画指示器
+    if (isRunning) {
+        const progressBar = document.createElement('div');
+        Object.assign(progressBar.style, {
+            height: '2px',
+            background: 'rgba(251, 191, 36, 0.2)',
+            borderRadius: '1px',
+            marginTop: '8px',
+            overflow: 'hidden'
+        });
+        
+        const progressFill = document.createElement('div');
+        Object.assign(progressFill.style, {
+            height: '100%',
+            width: '30%',
+            background: 'linear-gradient(90deg, #fbbf24, #f59e0b)',
+            borderRadius: '1px',
+            animation: 'taskProgress 1.5s ease-in-out infinite'
+        });
+        progressBar.appendChild(progressFill);
+        card.appendChild(progressBar);
+    }
+    
+    return card;
+};
+
+// 添加任务进度动画样式
+(function() {
+    if (document.getElementById('agent-task-hud-styles')) return;
+    
+    const style = document.createElement('style');
+    style.id = 'agent-task-hud-styles';
+    style.textContent = `
+        @keyframes taskProgress {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(200%); }
+            100% { transform: translateX(-100%); }
+        }
+        
+        #agent-task-hud::-webkit-scrollbar {
+            width: 4px;
+        }
+        
+        #agent-task-hud::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 2px;
+        }
+        
+        #agent-task-hud::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+        
+        #agent-task-list::-webkit-scrollbar {
+            width: 4px;
+        }
+        
+        #agent-task-list::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        
+        #agent-task-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 2px;
+        }
+        
+        .task-card:hover {
+            background: rgba(51, 65, 85, 0.8) !important;
+            transform: translateX(-2px);
+        }
+    `;
+    document.head.appendChild(style);
+})();
 
 // 创建设置弹出框内容
 Live2DManager.prototype._createSettingsPopupContent = function(popup) {
@@ -829,7 +1161,8 @@ Live2DManager.prototype._createToggleItem = function(toggle, popup) {
     toggleItem.appendChild(indicator);
     toggleItem.appendChild(label);
     
-    // 存储更新函数
+    // 存储更新函数和同步UI函数到checkbox上，供外部调用
+    checkbox._updateStyle = updateStyle;
     if (toggle.labelKey) {
         toggleItem._updateLabelText = updateLabelText;
     }
@@ -848,11 +1181,25 @@ Live2DManager.prototype._createToggleItem = function(toggle, popup) {
     });
     
     // 点击切换（点击整个项目都可以切换）
+    // 使用 _processing 标志防止快速重复点击导致的竞态条件
     toggleItem.addEventListener('click', (e) => {
         if (checkbox.disabled) return;
-        checkbox.checked = !checkbox.checked;
+        // 如果正在处理中，忽略点击
+        if (checkbox._processing) {
+            console.log('[Live2D] Agent开关正在处理中，忽略重复点击');
+            return;
+        }
+        // 立即设置处理中标志，防止在 dispatchEvent 之前的快速重复点击
+        checkbox._processing = true;
+        const newChecked = !checkbox.checked;
+        checkbox.checked = newChecked;
         checkbox.dispatchEvent(new Event('change', { bubbles: true }));
         updateStyle();
+        // 注意：_processing 标志会在 app.js 的 change 处理完成后被清除
+        // 如果 app.js 没有处理这个 checkbox（比如不是 agent 开关），这里设置一个备用清除
+        if (!checkbox._hasExternalHandler) {
+            checkbox._processing = false;
+        }
     });
 
     return toggleItem;
@@ -1191,11 +1538,6 @@ Live2DManager.prototype.closePopupById = function(buttonId) {
     const popup = document.getElementById(`live2d-popup-${buttonId}`);
     if (!popup || popup.style.display !== 'flex') {
         return false;
-    }
-    
-    // agent 弹出框关闭时停止轮询
-    if (buttonId === 'agent' && window.stopAgentAvailabilityCheck) {
-        window.stopAgentAvailabilityCheck();
     }
 
     popup.style.opacity = '0';
@@ -1608,15 +1950,16 @@ Live2DManager.prototype.showPopup = function(buttonId, popup) {
         }
     }
     
+    // 如果是 agent 弹窗，触发服务器状态检查事件
+    if (buttonId === 'agent' && !isVisible) {
+        // 弹窗即将显示，派发事件让 app.js 检查服务器状态
+        window.dispatchEvent(new CustomEvent('live2d-agent-popup-opening'));
+    }
+    
     if (isVisible) {
         // 如果已经显示，则隐藏
         popup.style.opacity = '0';
         popup.style.transform = 'translateX(-10px)';
-        
-        // agent 弹出框关闭时停止轮询
-        if (buttonId === 'agent' && window.stopAgentAvailabilityCheck) {
-            window.stopAgentAvailabilityCheck();
-        }
         
         setTimeout(() => {
             popup.style.display = 'none';
@@ -1635,11 +1978,6 @@ Live2DManager.prototype.showPopup = function(buttonId, popup) {
     } else {
         // 全局互斥：打开前关闭其他弹出框
         this.closeAllPopupsExcept(buttonId);
-        
-        // agent 弹出框打开时启动轮询
-        if (buttonId === 'agent' && window.startAgentAvailabilityCheck) {
-            window.startAgentAvailabilityCheck();
-        }
 
         // 如果隐藏，则显示
         popup.style.display = 'flex';

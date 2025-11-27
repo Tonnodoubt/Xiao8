@@ -534,7 +534,7 @@
       "keyboardControl": "键鼠控制",
       "mcpTools": "MCP工具",
       "focusMode": "🎯 允许打断",
-      "unavailable": "不可用"
+      "unavailable": "{{name}}不可用"
     }
   },
   "subtitle": {
@@ -542,5 +542,17 @@
   },
   "viewer": {
     "title": "Viewer - Project N.E.K.O."
+  },
+  "agent": {
+    "taskHud": {
+      "title": "Agent 任务",
+      "running": "运行中",
+      "queued": "队列中",
+      "noTasks": "暂无活动任务",
+      "statusRunning": "运行中",
+      "statusQueued": "队列中",
+      "statusCompleted": "已完成",
+      "statusFailed": "失败"
+    }
   }
 }
