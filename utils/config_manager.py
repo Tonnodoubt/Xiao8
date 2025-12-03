@@ -24,6 +24,8 @@ from utils.api_config_loader import (
     get_assist_api_key_fields,
 )
 
+# Workshop配置相关常量 - 将在ConfigManager实例化时使用self.workshop_dir
+
 
 logger = logging.getLogger(__name__)
 
@@ -39,13 +41,22 @@ class ConfigManager:
             app_name: 应用名称，默认使用配置中的 APP_NAME
         """
         self.app_name = app_name if app_name is not None else APP_NAME
+        # 检测是否在子进程中，子进程静默初始化（通过 main_server.py 设置的环境变量）
+        self._verbose = '_NEKO_MAIN_SERVER_INITIALIZED' not in os.environ
         self.docs_dir = self._get_documents_directory()
         self.app_docs_dir = self.docs_dir / self.app_name
         self.config_dir = self.app_docs_dir / "config"
         self.memory_dir = self.app_docs_dir / "memory"
         self.live2d_dir = self.app_docs_dir / "live2d"
+        self.workshop_dir = self.app_docs_dir / "workshop"
+
         self.project_config_dir = self._get_project_config_directory()
         self.project_memory_dir = self._get_project_memory_directory()
+    
+    def _log(self, msg):
+        """仅在主进程中打印调试信息"""
+        if self._verbose:
+            print(msg, file=sys.stderr)
     
     def _get_documents_directory(self):
         """获取用户文档目录（使用系统API）"""
@@ -64,7 +75,7 @@ class ConfigManager:
                 buf = ctypes.create_unicode_buffer(wintypes.MAX_PATH)
                 windll.shell32.SHGetFolderPathW(None, CSIDL_PERSONAL, None, SHGFP_TYPE_CURRENT, buf)
                 api_path = Path(buf.value)
-                print(f"[ConfigManager] API returned path: {api_path}", file=sys.stderr)
+                self._log(f"[ConfigManager] API returned path: {api_path}")
                 candidates.append(api_path)
                 
                 # 如果API返回的路径看起来不对（包含特殊字符但不存在），尝试查找同盘符下可能的替代路径
@@ -76,7 +87,7 @@ class ConfigManager:
                     for name in possible_names:
                         alt_path = Path(drive) / name
                         if alt_path.exists():
-                            print(f"[ConfigManager] Found alternative path on same drive: {alt_path}", file=sys.stderr)
+                            self._log(f"[ConfigManager] Found alternative path on same drive: {alt_path}")
                             candidates.append(alt_path)
             except Exception as e:
                 print(f"Warning: Failed to get Documents path via API: {e}", file=sys.stderr)
@@ -93,7 +104,7 @@ class ConfigManager:
                 
                 # 展开环境变量
                 reg_path = Path(os.path.expandvars(reg_path_str))
-                print(f"[ConfigManager] Registry returned path: {reg_path}", file=sys.stderr)
+                self._log(f"[ConfigManager] Registry returned path: {reg_path}")
                 
                 # 如果注册表路径不存在，尝试在同一盘符下查找
                 if not reg_path.exists() and reg_path.drive:
@@ -104,7 +115,7 @@ class ConfigManager:
                         if drive_path.exists():
                             for item in drive_path.iterdir():
                                 if item.is_dir() and item.name.lower() in ["documents", "文档", "my documents"]:
-                                    print(f"[ConfigManager] Found documents folder on drive: {item}", file=sys.stderr)
+                                    self._log(f"[ConfigManager] Found documents folder on drive: {item}")
                                     candidates.append(item)
                     except Exception:
                         pass
@@ -145,10 +156,10 @@ class ConfigManager:
                     try:
                         test_path.touch()
                         test_path.unlink()
-                        print(f"[ConfigManager] ✓ Using documents directory: {docs_dir}", file=sys.stderr)
+                        self._log(f"[ConfigManager] ✓ Using documents directory: {docs_dir}")
                         return docs_dir
                     except Exception as e:
-                        print(f"[ConfigManager] Path exists but not writable: {docs_dir} - {e}", file=sys.stderr)
+                        self._log(f"[ConfigManager] Path exists but not writable: {docs_dir} - {e}")
                         continue
                 
                 # 如果路径不存在，尝试创建（测试是否可写）
@@ -171,15 +182,15 @@ class ConfigManager:
                     test_path = docs_dir / ".test_neko_write"
                     test_path.touch()
                     test_path.unlink()
-                    print(f"[ConfigManager] ✓ Using documents directory (created): {docs_dir}", file=sys.stderr)
+                    self._log(f"[ConfigManager] ✓ Using documents directory (created): {docs_dir}")
                     return docs_dir
             except Exception as e:
-                print(f"[ConfigManager] Failed to use path {docs_dir}: {e}", file=sys.stderr)
+                self._log(f"[ConfigManager] Failed to use path {docs_dir}: {e}")
                 continue
         
         # 如果所有候选都失败，返回当前目录
         fallback = Path.cwd()
-        print(f"[ConfigManager] ⚠ All document directories failed, using fallback: {fallback}", file=sys.stderr)
+        self._log(f"[ConfigManager] ⚠ All document directories failed, using fallback: {fallback}")
         return fallback
     
     def _get_project_config_directory(self):
@@ -337,8 +348,8 @@ class ConfigManager:
             return
         
         # 显示项目配置目录位置（调试用）
-        print(f"[ConfigManager] Project config directory: {self.project_config_dir}")
-        print(f"[ConfigManager] User config directory: {self.config_dir}")
+        self._log(f"[ConfigManager] Project config directory: {self.project_config_dir}")
+        self._log(f"[ConfigManager] User config directory: {self.config_dir}")
         
         # 迁移每个配置文件
         for filename in CONFIG_FILES:
@@ -347,21 +358,21 @@ class ConfigManager:
             
             # 如果我的文档下已有，跳过
             if docs_config_path.exists():
-                print(f"[ConfigManager] Config already exists: {filename}")
+                self._log(f"[ConfigManager] Config already exists: {filename}")
                 continue
             
             # 如果项目config下有，复制过去
             if project_config_path.exists():
                 try:
                     shutil.copy2(project_config_path, docs_config_path)
-                    print(f"[ConfigManager] ✓ Migrated config: {filename} -> {docs_config_path}")
+                    self._log(f"[ConfigManager] ✓ Migrated config: {filename} -> {docs_config_path}")
                 except Exception as e:
-                    print(f"Warning: Failed to migrate {filename}: {e}", file=sys.stderr)
+                    self._log(f"Warning: Failed to migrate {filename}: {e}")
             else:
                 if filename in DEFAULT_CONFIG_DATA:
-                    print(f"[ConfigManager] ~ Using in-memory default for {filename}")
+                    self._log(f"[ConfigManager] ~ Using in-memory default for {filename}")
                 else:
-                    print(f"[ConfigManager] ✗ Source config not found: {project_config_path}")
+                    self._log(f"[ConfigManager] ✗ Source config not found: {project_config_path}")
     
     def migrate_memory_files(self):
         """
@@ -373,7 +384,7 @@ class ConfigManager:
         """
         # 确保目录存在
         if not self.ensure_memory_directory():
-            print(f"Warning: Cannot create memory directory, using project memory", file=sys.stderr)
+            self._log(f"Warning: Cannot create memory directory, using project memory")
             return
         
         # 如果项目memory/store目录不存在，跳过
@@ -607,6 +618,12 @@ class ConfigManager:
             DEFAULT_TTS_MODEL_PROVIDER,
             DEFAULT_TTS_MODEL_URL,
             DEFAULT_TTS_MODEL_API_KEY,
+            DEFAULT_COMPUTER_USE_MODEL,
+            DEFAULT_COMPUTER_USE_MODEL_URL,
+            DEFAULT_COMPUTER_USE_MODEL_API_KEY,
+            DEFAULT_COMPUTER_USE_GROUND_MODEL,
+            DEFAULT_COMPUTER_USE_GROUND_URL,
+            DEFAULT_COMPUTER_USE_GROUND_API_KEY,
         )
 
         config = {
@@ -626,12 +643,12 @@ class ConfigManager:
             'ASSIST_API_KEY_GLM': DEFAULT_CORE_API_KEY,
             'ASSIST_API_KEY_STEP': DEFAULT_CORE_API_KEY,
             'ASSIST_API_KEY_SILICON': DEFAULT_CORE_API_KEY,
-            'COMPUTER_USE_MODEL': 'glm-4.5v',
-            'COMPUTER_USE_GROUND_MODEL': 'glm-4.5v',
-            'COMPUTER_USE_MODEL_URL': 'https://open.bigmodel.cn/api/paas/v4',
-            'COMPUTER_USE_GROUND_URL': 'https://open.bigmodel.cn/api/paas/v4',
-            'COMPUTER_USE_MODEL_API_KEY': '',
-            'COMPUTER_USE_GROUND_API_KEY': '',
+            'COMPUTER_USE_MODEL': DEFAULT_COMPUTER_USE_MODEL,
+            'COMPUTER_USE_GROUND_MODEL': DEFAULT_COMPUTER_USE_GROUND_MODEL,
+            'COMPUTER_USE_MODEL_URL': DEFAULT_COMPUTER_USE_MODEL_URL,
+            'COMPUTER_USE_GROUND_URL': DEFAULT_COMPUTER_USE_GROUND_URL,
+            'COMPUTER_USE_MODEL_API_KEY': DEFAULT_COMPUTER_USE_MODEL_API_KEY,
+            'COMPUTER_USE_GROUND_API_KEY': DEFAULT_COMPUTER_USE_GROUND_API_KEY,
             'IS_FREE_VERSION': False,
             'VISION_MODEL': DEFAULT_VISION_MODEL,
             'OMNI_MODEL': DEFAULT_OMNI_MODEL,
@@ -687,8 +704,6 @@ class ConfigManager:
         if core_cfg.get('mcpToken'):
             config['MCP_ROUTER_API_KEY'] = core_cfg['mcpToken']
 
-        config['COMPUTER_USE_MODEL_API_KEY'] = config['COMPUTER_USE_GROUND_API_KEY'] = config['ASSIST_API_KEY_GLM']
-
         core_api_profiles = get_core_api_profiles()
         assist_api_profiles = get_assist_api_profiles()
         assist_api_key_fields = get_assist_api_key_fields()
@@ -720,6 +735,7 @@ class ConfigManager:
             config.update(assist_profile)
 
         key_field = assist_api_key_fields.get(assist_api_value)
+        derived_key = ''
         if key_field:
             derived_key = config.get(key_field, '')
             if derived_key:
@@ -730,6 +746,27 @@ class ConfigManager:
             config['AUDIO_API_KEY'] = config['CORE_API_KEY']
         if not config['OPENROUTER_API_KEY']:
             config['OPENROUTER_API_KEY'] = config['CORE_API_KEY']
+
+        # Computer Use 配置处理
+        # 1. 支持用户自定义配置覆盖 assist_profile 的默认值
+        if core_cfg.get('computerUseModel'):
+            config['COMPUTER_USE_MODEL'] = core_cfg['computerUseModel']
+        if core_cfg.get('computerUseModelUrl'):
+            config['COMPUTER_USE_MODEL_URL'] = core_cfg['computerUseModelUrl']
+        if core_cfg.get('computerUseModelApiKey'):
+            config['COMPUTER_USE_MODEL_API_KEY'] = core_cfg['computerUseModelApiKey']
+        if core_cfg.get('computerUseGroundModel'):
+            config['COMPUTER_USE_GROUND_MODEL'] = core_cfg['computerUseGroundModel']
+        if core_cfg.get('computerUseGroundUrl'):
+            config['COMPUTER_USE_GROUND_URL'] = core_cfg['computerUseGroundUrl']
+        if core_cfg.get('computerUseGroundApiKey'):
+            config['COMPUTER_USE_GROUND_API_KEY'] = core_cfg['computerUseGroundApiKey']
+
+        # 2. 如果 API Key 未设置，使用当前 assistApi 对应的 key
+        if not config.get('COMPUTER_USE_MODEL_API_KEY'):
+            config['COMPUTER_USE_MODEL_API_KEY'] = derived_key if derived_key else config['CORE_API_KEY']
+        if not config.get('COMPUTER_USE_GROUND_API_KEY'):
+            config['COMPUTER_USE_GROUND_API_KEY'] = derived_key if derived_key else config['CORE_API_KEY']
 
         return config
 
@@ -815,6 +852,7 @@ class ConfigManager:
             "config_dir": str(self.config_dir),
             "memory_dir": str(self.memory_dir),
             "live2d_dir": str(self.live2d_dir),
+            "workshop_dir": str(self.workshop_dir),
             "project_config_dir": str(self.project_config_dir),
             "project_memory_dir": str(self.project_memory_dir),
             "config_files": {
@@ -822,6 +860,93 @@ class ConfigManager:
                 for filename in CONFIG_FILES
             }
         }
+    
+    def get_workshop_config_path(self):
+        """
+        获取workshop配置文件路径
+        
+        Returns:
+            str: workshop配置文件的绝对路径
+        """
+        return str(self.get_config_path('workshop_config.json'))
+    
+    def load_workshop_config(self):
+        """
+        加载workshop配置
+        
+        Returns:
+            dict: workshop配置数据
+        """
+        config_path = self.get_workshop_config_path()
+        try:
+            if os.path.exists(config_path):
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    logger.info(f"成功加载workshop配置: {config}")
+                    return config
+            else:
+                # 如果配置文件不存在，返回默认配置
+                default_config = {
+                    "default_workshop_folder": str(self.workshop_dir),
+                    "auto_create_folder": True
+                }
+                logger.info(f"创建默认workshop配置: {default_config}")
+                return default_config
+        except Exception as e:
+            error_msg = f"加载workshop配置失败: {e}"
+            logger.error(error_msg)
+            print(error_msg)
+            # 使用默认配置
+            return {
+                "default_workshop_folder": str(self.workshop_dir),
+                "auto_create_folder": True
+            }
+    
+    def save_workshop_config(self, config_data):
+        """
+        保存workshop配置
+        
+        Args:
+            config_data: 要保存的配置数据
+        """
+        config_path = self.get_workshop_config_path()
+        try:
+            # 确保配置目录存在
+            os.makedirs(os.path.dirname(config_path), exist_ok=True)
+            
+            # 保存配置
+            with open(config_path, 'w', encoding='utf-8') as f:
+                json.dump(config_data, f, indent=4, ensure_ascii=False)
+            
+            logger.info(f"成功保存workshop配置: {config_data}")
+        except Exception as e:
+            error_msg = f"保存workshop配置失败: {e}"
+            logger.error(error_msg)
+            print(error_msg)
+            raise
+    
+    def save_workshop_path(self, workshop_path):
+        """
+        保存workshop根目录路径到配置文件
+        
+        Args:
+            workshop_path: workshop根目录路径
+        """
+        config = self.load_workshop_config()
+        config["WORKSHOP_PATH"] = workshop_path
+        self.save_workshop_config(config)
+        logger.info(f"已将workshop路径保存到配置文件: {workshop_path}")
+    
+    def get_workshop_path(self):
+        """
+        获取保存的workshop根目录路径
+        
+        Returns:
+            str: workshop根目录路径
+        """
+        config = self.load_workshop_config()
+        # 优先使用user_mod_folder，然后是WORKSHOP_PATH，然后是default_workshop_folder，最后使用self.workshop_dir
+        return config.get("user_mod_folder", config.get("WORKSHOP_PATH", config.get("default_workshop_folder", str(self.workshop_dir))))
 
 
 # 全局配置管理器实例
@@ -853,6 +978,23 @@ def load_json_config(filename, default_value=None):
 def save_json_config(filename, data):
     """保存JSON配置"""
     return get_config_manager().save_json_config(filename, data)
+
+# Workshop配置便捷函数
+def load_workshop_config():
+    """加载workshop配置"""
+    return get_config_manager().load_workshop_config()
+
+def save_workshop_config(config_data):
+    """保存workshop配置"""
+    return get_config_manager().save_workshop_config(config_data)
+
+def save_workshop_path(workshop_path):
+    """保存workshop根目录路径"""
+    return get_config_manager().save_workshop_path(workshop_path)
+
+def get_workshop_path():
+    """获取workshop根目录路径"""
+    return get_config_manager().get_workshop_path()
 
 
 if __name__ == "__main__":

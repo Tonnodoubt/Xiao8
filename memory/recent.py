@@ -7,7 +7,7 @@ import json
 import os
 import asyncio
 import logging
-from openai import RateLimitError
+from openai import APIConnectionError, InternalServerError, RateLimitError
 
 from config.prompts_sys import recent_history_manager_prompt, detailed_recent_history_manager_prompt, further_summarize_prompt, history_review_prompt
 
@@ -44,14 +44,59 @@ class CompressedRecentHistoryManager:
         return ChatOpenAI(model=core_config['CORRECTION_MODEL'], base_url=core_config['OPENROUTER_URL'], api_key=api_key, temperature=0.1, extra_body={"enable_thinking": False} if core_config['CORRECTION_MODEL'] in MODELS_WITH_EXTRA_BODY else None)
 
     async def update_history(self, new_messages, lanlan_name, detailed=False):
-        if os.path.exists(self.log_file_path[lanlan_name]):
-            with open(self.log_file_path[lanlan_name], encoding='utf-8') as f:
-                self.user_histories[lanlan_name] = messages_from_dict(json.load(f))
+        # 检查角色是否存在于配置中，如果不存在则创建默认路径
+        try:
+            _, _, _, _, _, _, _, _, _, recent_log = self._config_manager.get_character_data()
+            # 更新文件路径映射
+            self.log_file_path = recent_log
+            
+            # 如果角色不在配置中，使用默认路径创建
+            if lanlan_name not in recent_log:
+                # 确保memory目录存在
+                self._config_manager.ensure_memory_directory()
+                memory_base = str(self._config_manager.memory_dir)
+                default_path = os.path.join(memory_base, f'recent_{lanlan_name}.json')
+                self.log_file_path[lanlan_name] = default_path
+                logger.info(f"[RecentHistory] 角色 '{lanlan_name}' 不在配置中，使用默认路径: {default_path}")
+        except Exception as e:
+            logger.error(f"检查角色配置失败: {e}")
+            # 即使配置检查失败，也尝试使用默认路径
+            try:
+                # 确保memory目录存在
+                self._config_manager.ensure_memory_directory()
+                memory_base = str(self._config_manager.memory_dir)
+                default_path = os.path.join(memory_base, f'recent_{lanlan_name}.json')
+                if lanlan_name not in self.log_file_path:
+                    self.log_file_path[lanlan_name] = default_path
+                    logger.info(f"[RecentHistory] 使用默认路径: {default_path}")
+            except Exception as e2:
+                logger.error(f"创建默认路径失败: {e2}")
+                return
+        
+        # 确保角色在 user_histories 中
+        if lanlan_name not in self.user_histories:
+            self.user_histories[lanlan_name] = []
+        
+        # 如果文件存在，加载历史记录
+        if lanlan_name in self.log_file_path and os.path.exists(self.log_file_path[lanlan_name]):
+            try:
+                with open(self.log_file_path[lanlan_name], encoding='utf-8') as f:
+                    file_content = json.load(f)
+                    if file_content:
+                        self.user_histories[lanlan_name] = messages_from_dict(file_content)
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"读取 {lanlan_name} 的历史记录文件失败: {e}，使用空列表")
+                self.user_histories[lanlan_name] = []
 
         try:
             self.user_histories[lanlan_name].extend(new_messages)
+            logger.info(f"[RecentHistory] {lanlan_name} 添加了 {len(new_messages)} 条新消息，当前共 {len(self.user_histories[lanlan_name])} 条")
 
-            with open(self.log_file_path[lanlan_name], "w", encoding='utf-8') as f:  # Save the updated history to file before compressing
+            # 确保文件目录存在
+            file_path = self.log_file_path[lanlan_name]
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            with open(file_path, "w", encoding='utf-8') as f:  # Save the updated history to file before compressing
                 json.dump(messages_to_dict(self.user_histories[lanlan_name]), f, indent=2, ensure_ascii=False)
 
             if len(self.user_histories[lanlan_name]) > self.max_history_length:
@@ -62,10 +107,26 @@ class CompressedRecentHistoryManager:
                 # 只保留最近的max_history_length条消息
                 self.user_histories[lanlan_name] = compressed + self.user_histories[lanlan_name][-self.max_history_length+1:]
         except Exception as e:
-            logger.error(f"Error when updating history: {e}")
+            logger.error(f"[RecentHistory] 更新历史记录时出错: {e}", exc_info=True)
+            # 即使出错，也尝试保存当前状态
+            try:
+                file_path = self.log_file_path[lanlan_name]
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                with open(file_path, "w", encoding='utf-8') as f:
+                    json.dump(messages_to_dict(self.user_histories.get(lanlan_name, [])), f, indent=2, ensure_ascii=False)
+            except Exception as save_error:
+                logger.error(f"[RecentHistory] 保存历史记录失败: {save_error}", exc_info=True)
+            return
 
-        with open(self.log_file_path[lanlan_name], "w", encoding='utf-8') as f:
-            json.dump(messages_to_dict(self.user_histories[lanlan_name]), f, indent=2, ensure_ascii=False)
+        # 最终保存
+        try:
+            file_path = self.log_file_path[lanlan_name]
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, "w", encoding='utf-8') as f:
+                json.dump(messages_to_dict(self.user_histories[lanlan_name]), f, indent=2, ensure_ascii=False)
+            logger.info(f"[RecentHistory] {lanlan_name} 历史记录已保存到文件: {file_path}")
+        except Exception as e:
+            logger.error(f"[RecentHistory] 最终保存历史记录失败: {e}", exc_info=True)
 
 
     # detailed: 保留尽可能多的细节
@@ -123,14 +184,14 @@ class CompressedRecentHistoryManager:
                 else:
                     print('💥 摘要failed: ', response_content)
                     retries += 1
-            except RateLimitError as e:
+            except (APIConnectionError, InternalServerError, RateLimitError) as e:
                 retries += 1
                 if retries >= max_retries:
                     print(f'❌ 摘要模型失败，已达到最大重试次数: {e}')
                     break
                 # 指数退避: 1, 2, 4 秒
                 wait_time = 2 ** (retries - 1)
-                print(f'⚠️ 遇到429错误，等待 {wait_time} 秒后重试 (第 {retries}/{max_retries} 次)')
+                print(f'⚠️ 遇到网络或429错误，等待 {wait_time} 秒后重试 (第 {retries}/{max_retries} 次)')
                 await asyncio.sleep(wait_time)
             except Exception as e:
                 print(f'❌ 摘要模型失败：{e}')
@@ -160,14 +221,14 @@ class CompressedRecentHistoryManager:
                 else:
                     print('💥 第二轮摘要failed: ', response_content)
                     retries += 1
-            except RateLimitError as e:
+            except (APIConnectionError, InternalServerError, RateLimitError) as e:
                 retries += 1
                 if retries >= max_retries:
                     print(f'❌ 第二轮摘要模型失败，已达到最大重试次数: {e}')
                     return None
                 # 指数退避: 1, 2, 4 秒
                 wait_time = 2 ** (retries - 1)
-                print(f'⚠️ 遇到429错误，等待 {wait_time} 秒后重试 (第 {retries}/{max_retries} 次)')
+                print(f'⚠️ 遇到网络或429错误，等待 {wait_time} 秒后重试 (第 {retries}/{max_retries} 次)')
                 await asyncio.sleep(wait_time)
             except Exception as e:
                 print(f'❌ 第二轮摘要模型失败：{e}')
@@ -175,10 +236,48 @@ class CompressedRecentHistoryManager:
         return None
 
     def get_recent_history(self, lanlan_name):
-        if os.path.exists(self.log_file_path[lanlan_name]):
-            with open(self.log_file_path[lanlan_name], encoding='utf-8') as f:
-                self.user_histories[lanlan_name] = messages_from_dict(json.load(f))
-        return self.user_histories[lanlan_name]
+        # 检查角色是否存在于配置中，如果不存在则创建默认路径
+        try:
+            _, _, _, _, _, _, _, _, _, recent_log = self._config_manager.get_character_data()
+            # 更新文件路径映射
+            self.log_file_path = recent_log
+            
+            # 如果角色不在配置中，使用默认路径
+            if lanlan_name not in recent_log:
+                # 确保memory目录存在
+                self._config_manager.ensure_memory_directory()
+                memory_base = str(self._config_manager.memory_dir)
+                default_path = os.path.join(memory_base, f'recent_{lanlan_name}.json')
+                self.log_file_path[lanlan_name] = default_path
+                logger.info(f"[RecentHistory] 角色 '{lanlan_name}' 不在配置中，使用默认路径: {default_path}")
+        except Exception as e:
+            logger.error(f"检查角色配置失败: {e}")
+            # 即使配置检查失败，也尝试使用默认路径
+            try:
+                memory_base = str(self._config_manager.memory_dir)
+                default_path = f'{memory_base}/recent_{lanlan_name}.json'
+                if lanlan_name not in self.log_file_path:
+                    self.log_file_path[lanlan_name] = default_path
+            except Exception as e2:
+                logger.error(f"创建默认路径失败: {e2}")
+                return []
+        
+        # 确保角色在 user_histories 中
+        if lanlan_name not in self.user_histories:
+            self.user_histories[lanlan_name] = []
+        
+        # 如果文件存在，加载历史记录
+        if lanlan_name in self.log_file_path and os.path.exists(self.log_file_path[lanlan_name]):
+            try:
+                with open(self.log_file_path[lanlan_name], encoding='utf-8') as f:
+                    file_content = json.load(f)
+                    if file_content:
+                        self.user_histories[lanlan_name] = messages_from_dict(file_content)
+            except (json.JSONDecodeError, Exception) as e:
+                logger.warning(f"读取 {lanlan_name} 的历史记录文件失败: {e}，使用空列表")
+                self.user_histories[lanlan_name] = []
+        
+        return self.user_histories.get(lanlan_name, [])
 
     async def review_history(self, lanlan_name, cancel_event=None):
         """
@@ -303,14 +402,14 @@ class CompressedRecentHistoryManager:
                     print(f"❌ 审阅响应格式错误：{response_content}")
                     return False
                     
-            except RateLimitError as e:
+            except (APIConnectionError, InternalServerError, RateLimitError) as e:
                 retries += 1
                 if retries >= max_retries:
                     print(f'❌ 记忆整理失败，已达到最大重试次数: {e}')
                     return False
                 # 指数退避: 1, 2, 4 秒
                 wait_time = 2 ** (retries - 1)
-                print(f'⚠️ 遇到429错误，等待 {wait_time} 秒后重试 (第 {retries}/{max_retries} 次)')
+                print(f'⚠️ 遇到网络或429错误，等待 {wait_time} 秒后重试 (第 {retries}/{max_retries} 次)')
                 await asyncio.sleep(wait_time)
                 # 检查是否被取消
                 if cancel_event and cancel_event.is_set():

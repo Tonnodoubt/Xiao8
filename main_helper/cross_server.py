@@ -187,7 +187,7 @@ def sync_connector_process(message_queue, shutdown_event, lanlan_name, sync_serv
                                             else:
                                                 logger.info(f"[{lanlan_name}] 热重置记忆已成功上传到 memory_server")
                                 except Exception as e:
-                                    logger.error(f"[{lanlan_name}] 调用 /renew API 失败: {e}")
+                                    logger.exception(f"[{lanlan_name}] 调用 /renew API 失败: {type(e).__name__}: {e}")
                                 chat_history.clear()
 
                             if message["data"] == 'turn end': # lanlan的消息结束了
@@ -225,6 +225,8 @@ def sync_connector_process(message_queue, shutdown_event, lanlan_name, sync_serv
                                     logger.warning(f"[{lanlan_name}] 发送到analyzer超时")
                                 except Exception as e:
                                     logger.warning(f"[{lanlan_name}] 发送到analyzer失败: {e}")
+                                
+                                # Turn end时不保存聊天记录，只在session end或renew session时保存
 
                             elif message["data"] == 'session end': # 当前session结束了
                                 # 先处理未完成的用户输入缓存（如果有）
@@ -282,7 +284,7 @@ def sync_connector_process(message_queue, shutdown_event, lanlan_name, sync_serv
                                             else:
                                                 logger.info(f"[{lanlan_name}] 会话记忆已成功上传到 memory_server")
                                 except Exception as e:
-                                    logger.error(f"[{lanlan_name}] 调用 /process API 失败: {e}")
+                                    logger.exception(f"[{lanlan_name}] 调用 /process API 失败")
                                 chat_history.clear()
                         except Exception as e:
                             logger.error(f"[{lanlan_name}] System message error: {e}", exc_info=True)
