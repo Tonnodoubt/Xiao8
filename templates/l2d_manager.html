@@ -149,6 +149,34 @@
             max-width: 280px;
             word-break: break-all;
         }
+        
+        /* 参数编辑器样式 */
+        .parameter-slider {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            outline: none;
+        }
+        .parameter-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #44b7fe;
+            cursor: pointer;
+        }
+        .parameter-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #44b7fe;
+            cursor: pointer;
+            border: none;
+        }
     </style>
 </head>
 <body>
@@ -208,6 +236,28 @@
                 <img src="/static/icons/save_settings.png" alt="保存设置" data-i18n-alt="live2d.saveSettings">
                 <span data-i18n="live2d.saveSettings">保存设置</span>
             </button>
+        </div>
+    </div>
+
+    <div class="control-group">
+        <button id="parameter-editor-toggle" class="btn btn-secondary" style="width:100%;">
+            <span>🎨 参数编辑器</span>
+        </button>
+    </div>
+
+    <div class="control-group" id="parameter-editor-box" style="display:none;">
+        <label class="control-label">搜索参数:</label>
+        <input type="text" id="parameter-search-box" class="control-select" placeholder="输入参数名搜索..." style="margin-bottom:8px;">
+        
+        <div style="display:flex; gap: 8px; margin-bottom:8px;">
+            <button id="parameter-reset-all-btn" class="btn btn-secondary" disabled style="flex:1;">重置全部</button>
+            <button id="parameter-save-btn" class="btn btn-success" disabled style="flex:1;">保存参数</button>
+        </div>
+        
+        <div id="parameters-list" style="max-height: 400px; overflow-y: auto; border: 1px solid #ddd; border-radius: 8px; padding: 8px; background: #f8f9fa;">
+            <div style="text-align: center; color: #999; padding: 20px;">
+                请先加载模型
+            </div>
         </div>
     </div>
 
@@ -675,6 +725,18 @@
                     motionSelect.innerHTML = `<option value="">${t('live2d.noMotionFiles', '该模型没有动作文件')}</option>`;
                 }
                 setControlsDisabled(false);
+                
+                // 初始化参数编辑器
+                recordInitialParameters();
+                // 按钮在页面加载时就可以点击，不需要禁用
+                if (parameterResetAllBtn) parameterResetAllBtn.disabled = false;
+                if (parameterSaveBtn) parameterSaveBtn.disabled = false;
+                
+                // 如果参数编辑器已打开，刷新参数列表
+                if (parameterEditorBox && parameterEditorBox.style.display !== 'none') {
+                    displayParameters(parameterSearchBox ? parameterSearchBox.value : '');
+                }
+                
                 showStatus(t('live2d.modelLoadSuccess', `模型 ${modelName} 加载成功`, {model: modelName}));
 
             } catch (error) {
@@ -1133,39 +1195,318 @@
                 showStatus(t('live2d.loadCurrentModelFailed', '加载当前角色模型失败'));
             }
         }
-    });
-    
-    // 监听页面卸载事件，确保返回时主界面可见
-        window.addEventListener('beforeunload', (e) => {
-            // 尝试退出全屏
-            if (isFullscreen()) {
+
+        // ===== 参数编辑器功能 =====
+        const parameterEditorToggle = document.getElementById('parameter-editor-toggle');
+        const parameterEditorBox = document.getElementById('parameter-editor-box');
+        const parameterSearchBox = document.getElementById('parameter-search-box');
+        const parametersList = document.getElementById('parameters-list');
+        const parameterResetAllBtn = document.getElementById('parameter-reset-all-btn');
+        const parameterSaveBtn = document.getElementById('parameter-save-btn');
+        
+        let initialParameters = {};
+        let currentParameters = {};
+
+        // 切换参数编辑器显示
+        if (parameterEditorToggle && parameterEditorBox) {
+            parameterEditorToggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // 检查按钮是否被禁用
+                if (parameterEditorToggle.disabled) {
+                    console.warn('参数编辑器按钮被禁用，请先加载模型');
+                    showStatus('请先加载模型', 2000);
+                    return;
+                }
+                
+                console.log('参数编辑器按钮被点击');
+                const isVisible = parameterEditorBox.style.display !== 'none';
+                console.log('当前可见状态:', isVisible);
+                parameterEditorBox.style.display = isVisible ? 'none' : 'block';
+                
+                if (!isVisible) {
+                    if (live2dModel && live2dModel.internalModel && live2dModel.internalModel.coreModel) {
+                        console.log('显示参数列表');
+                        displayParameters();
+                    } else {
+                        console.warn('模型未加载，无法显示参数');
+                        parametersList.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">请先加载模型</div>';
+                    }
+                }
+            });
+        } else {
+            console.error('参数编辑器元素未找到:', {
+                toggle: !!parameterEditorToggle,
+                box: !!parameterEditorBox
+            });
+        }
+
+        // 记录初始参数
+        function recordInitialParameters() {
+            if (!live2dModel || !live2dModel.internalModel || !live2dModel.internalModel.coreModel) {
+                return;
+            }
+            
+            const coreModel = live2dModel.internalModel.coreModel;
+            initialParameters = {};
+            const paramCount = coreModel.getParameterCount();
+            
+            for (let i = 0; i < paramCount; i++) {
                 try {
-                    exitFullscreen();
-                } catch (err) {
-                    console.log('退出全屏失败:', err);
+                    let paramId = null;
+                    try {
+                        paramId = coreModel.getParameterId(i);
+                    } catch (e) {
+                        paramId = `param_${i}`;
+                    }
+                    const value = coreModel.getParameterValueByIndex(i);
+                    initialParameters[paramId] = value;
+                } catch (e) {
+                    console.warn(`记录参数 ${i} 失败:`, e);
+                }
+            }
+        }
+
+        // 显示参数列表
+        function displayParameters(filter = '') {
+            if (!live2dModel || !live2dModel.internalModel || !live2dModel.internalModel.coreModel) {
+                return;
+            }
+            
+            if (!parametersList) {
+                console.warn('参数列表容器不存在');
+                return;
+            }
+            
+            const coreModel = live2dModel.internalModel.coreModel;
+            parametersList.innerHTML = '';
+            const paramCount = coreModel.getParameterCount();
+            const filterLower = filter ? filter.toLowerCase() : '';
+            
+            let displayedCount = 0;
+            
+            for (let i = 0; i < paramCount; i++) {
+                try {
+                    let paramId = null;
+                    try {
+                        paramId = coreModel.getParameterId(i);
+                    } catch (e) {
+                        paramId = `param_${i}`;
+                    }
+                    
+                    // 过滤
+                    if (filter && !paramId.toLowerCase().includes(filterLower)) {
+                        continue;
+                    }
+                    
+                    const currentValue = coreModel.getParameterValueByIndex(i);
+                    const initialValue = initialParameters[paramId] || 0;
+                    
+                    // 创建参数项
+                    const paramItem = document.createElement('div');
+                    paramItem.style.cssText = 'display: flex; flex-direction: column; gap: 6px; padding: 10px; background: #fff; border-radius: 8px; margin-bottom: 8px; border: 1px solid #ddd;';
+                    paramItem.dataset.paramId = paramId;
+                    
+                    const header = document.createElement('div');
+                    header.style.cssText = 'display: flex; justify-content: space-between; align-items: center;';
+                    
+                    const nameSpan = document.createElement('span');
+                    nameSpan.style.cssText = 'font-weight: 500; font-size: 13px; color: #333; flex: 1;';
+                    nameSpan.textContent = paramId;
+                    
+                    const valueSpan = document.createElement('span');
+                    valueSpan.style.cssText = 'font-size: 12px; color: #666; min-width: 60px; text-align: right;';
+                    valueSpan.textContent = currentValue.toFixed(3);
+                    
+                    header.appendChild(nameSpan);
+                    header.appendChild(valueSpan);
+                    
+                    const controls = document.createElement('div');
+                    controls.style.cssText = 'display: flex; gap: 8px; align-items: center;';
+                    
+                    const slider = document.createElement('input');
+                    slider.type = 'range';
+                    slider.style.cssText = 'flex: 1; height: 6px; border-radius: 3px; background: #ddd; outline: none; -webkit-appearance: none;';
+                    slider.min = '-1';
+                    slider.max = '1';
+                    slider.step = '0.01';
+                    slider.value = currentValue;
+                    slider.style.setProperty('-webkit-appearance', 'none');
+                    slider.style.setProperty('appearance', 'none');
+                    
+                    const input = document.createElement('input');
+                    input.type = 'number';
+                    input.style.cssText = 'width: 80px; padding: 4px 8px; border: 1px solid #ddd; border-radius: 4px; font-size: 12px;';
+                    input.min = '-1';
+                    input.max = '1';
+                    input.step = '0.01';
+                    input.value = currentValue;
+                    
+                    const resetBtn = document.createElement('button');
+                    resetBtn.style.cssText = 'padding: 4px 8px; font-size: 11px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;';
+                    resetBtn.textContent = '重置';
+                    
+                    // 事件处理
+                    const updateParameter = (value) => {
+                        const numValue = parseFloat(value);
+                        if (isNaN(numValue)) return;
+                        
+                        const clampedValue = Math.max(-1, Math.min(1, numValue));
+                        try {
+                            const index = coreModel.getParameterIndex(paramId);
+                            if (index >= 0) {
+                                coreModel.setParameterValueByIndex(index, clampedValue);
+                            } else {
+                                coreModel.setParameterValueById(paramId, clampedValue);
+                            }
+                            valueSpan.textContent = clampedValue.toFixed(3);
+                            slider.value = clampedValue;
+                            input.value = clampedValue;
+                            currentParameters[paramId] = clampedValue;
+                            window.hasUnsavedChanges = true;
+                        } catch (e) {
+                            console.warn(`更新参数 ${paramId} 失败:`, e);
+                        }
+                    };
+                    
+                    slider.addEventListener('input', (e) => {
+                        updateParameter(e.target.value);
+                    });
+                    
+                    input.addEventListener('input', (e) => {
+                        updateParameter(e.target.value);
+                    });
+                    
+                    resetBtn.addEventListener('click', () => {
+                        updateParameter(initialValue);
+                    });
+                    
+                    controls.appendChild(slider);
+                    controls.appendChild(input);
+                    controls.appendChild(resetBtn);
+                    
+                    paramItem.appendChild(header);
+                    paramItem.appendChild(controls);
+                    
+                    parametersList.appendChild(paramItem);
+                    displayedCount++;
+                } catch (e) {
+                    console.warn(`显示参数 ${i} 失败:`, e);
                 }
             }
             
-            if (window.opener) {
-                sendMessageToMainPage('show_main_ui');
+            if (displayedCount === 0) {
+                parametersList.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">未找到匹配的参数</div>';
+            }
+        }
+
+        // 搜索功能
+        if (parameterSearchBox) {
+            parameterSearchBox.addEventListener('input', (e) => {
+                displayParameters(e.target.value);
+            });
+        }
+
+        // 重置全部
+        if (parameterResetAllBtn) {
+            parameterResetAllBtn.addEventListener('click', () => {
+                if (!live2dModel || !live2dModel.internalModel || !live2dModel.internalModel.coreModel) return;
+                
+                const coreModel = live2dModel.internalModel.coreModel;
+                for (const [paramId, initialValue] of Object.entries(initialParameters)) {
+                    try {
+                        const index = coreModel.getParameterIndex(paramId);
+                        if (index >= 0) {
+                            coreModel.setParameterValueByIndex(index, initialValue);
+                        } else {
+                            coreModel.setParameterValueById(paramId, initialValue);
+                        }
+                        currentParameters[paramId] = initialValue;
+                    } catch (e) {
+                        console.warn(`重置参数 ${paramId} 失败:`, e);
+                    }
+                }
+                
+                displayParameters(parameterSearchBox ? parameterSearchBox.value : '');
+                showStatus(t('live2d.parametersReset', '已重置所有参数'), 2000);
+            });
+        }
+
+        // 保存参数
+        if (parameterSaveBtn) {
+            parameterSaveBtn.addEventListener('click', async () => {
+            if (!currentModelInfo || !live2dModel) return;
+            
+            showStatus(t('live2d.savingParameters', '正在保存参数...'));
+            
+            // 获取当前位置和缩放
+            const position = { x: live2dModel.x, y: live2dModel.y };
+            const scale = { x: live2dModel.scale.x, y: live2dModel.scale.y };
+            
+            // 收集当前所有参数值
+            const paramsToSave = {};
+            if (live2dModel.internalModel && live2dModel.internalModel.coreModel) {
+                const coreModel = live2dModel.internalModel.coreModel;
+                const paramCount = coreModel.getParameterCount();
+                for (let i = 0; i < paramCount; i++) {
+                    try {
+                        let paramId = null;
+                        try {
+                            paramId = coreModel.getParameterId(i);
+                        } catch (e) {
+                            paramId = `param_${i}`;
+                        }
+                        const value = coreModel.getParameterValueByIndex(i);
+                        paramsToSave[paramId] = value;
+                    } catch (e) {
+                        console.warn(`收集参数 ${i} 失败:`, e);
+                    }
+                }
             }
             
-            // 如果有未保存的更改，本应阻止页面关闭并显示确认对话框
-            // 但在Electron中可能导致无法关闭窗口，且无法使用自定义模态窗替代系统默认弹窗
-            // 因此直接允许关闭，不再拦截
-            /* 
-            if (window.hasUnsavedChanges) {
-                e.preventDefault();
-                e.returnValue = ''; // Chrome需要这个
-                return ''; // 某些浏览器需要返回值
+            // 保存偏好（包含参数）
+            const positionSuccess = await window.live2dManager.saveUserPreferences(
+                currentModelInfo.path,
+                position,
+                scale,
+                paramsToSave
+            );
+            
+            if (positionSuccess) {
+                showStatus(t('live2d.parametersSaved', '参数保存成功！'), 2000);
+                window.hasUnsavedChanges = false;
+            } else {
+                showStatus(t('live2d.parametersSaveFailed', '参数保存失败'), 3000);
             }
-            */
         });
+        }
+    });
+    
+    // 监听页面卸载事件，确保返回时主界面可见
+    window.addEventListener('beforeunload', (e) => {
+        // 尝试退出全屏
+        if (typeof isFullscreen === 'function' && isFullscreen()) {
+            try {
+                if (typeof exitFullscreen === 'function') {
+                    exitFullscreen();
+                }
+            } catch (err) {
+                console.log('退出全屏失败:', err);
+            }
+        }
         
-        // 确保在页面关闭时也恢复主界面
-        window.addEventListener('unload', () => {
-            // 页面卸载时不需要再次发送消息
-        });
+        if (window.opener) {
+            if (typeof sendMessageToMainPage === 'function') {
+                sendMessageToMainPage('show_main_ui');
+            }
+        }
+    });
+    
+    // 确保在页面关闭时也恢复主界面
+    window.addEventListener('unload', () => {
+        // 页面卸载时不需要再次发送消息
+    });
         </script>
 
 </body>

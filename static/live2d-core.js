@@ -142,7 +142,7 @@ class Live2DManager {
     }
 
     // 保存用户偏好
-    async saveUserPreferences(modelPath, position, scale) {
+    async saveUserPreferences(modelPath, position, scale, parameters = null) {
         try {
             // 验证位置和缩放值是否为有效的有限数值
             if (!position || typeof position !== 'object' || 
@@ -168,6 +168,12 @@ class Live2DManager {
                 position: position,
                 scale: scale
             };
+            
+            // 如果有参数，添加到偏好中
+            if (parameters && typeof parameters === 'object') {
+                preferences.parameters = parameters;
+            }
+            
             const response = await fetch('/api/preferences', {
                 method: 'POST',
                 headers: {

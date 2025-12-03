@@ -190,6 +190,31 @@ Live2DManager.prototype.loadModel = async function(modelPath, options = {}) {
         // 记录模型的初始参数（用于expression重置）
         this.recordInitialParameters();
 
+        // 应用保存的参数（如果有）
+        if (options.preferences && options.preferences.parameters) {
+            try {
+                const coreModel = model.internalModel && model.internalModel.coreModel;
+                if (coreModel) {
+                    const savedParams = options.preferences.parameters;
+                    for (const [paramId, value] of Object.entries(savedParams)) {
+                        try {
+                            const index = coreModel.getParameterIndex(paramId);
+                            if (index >= 0) {
+                                coreModel.setParameterValueByIndex(index, value);
+                            } else {
+                                coreModel.setParameterValueById(paramId, value);
+                            }
+                        } catch (e) {
+                            console.warn(`应用保存的参数 ${paramId} 失败:`, e);
+                        }
+                    }
+                    console.log('已应用保存的参数设置');
+                }
+            } catch (e) {
+                console.warn('应用保存的参数失败:', e);
+            }
+        }
+
         // 调用回调函数
         if (this.onModelLoaded) {
             this.onModelLoaded(model, modelPath);

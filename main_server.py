@@ -442,8 +442,11 @@ async def save_preferences(request: Request):
         if not validate_model_preferences(data):
             return {"success": False, "error": "偏好数据格式无效"}
         
+        # 获取可选的参数
+        parameters = data.get('parameters')
+        
         # 更新偏好
-        if update_model_preferences(data['model_path'], data['position'], data['scale']):
+        if update_model_preferences(data['model_path'], data['position'], data['scale'], parameters):
             return {"success": True, "message": "偏好设置已保存"}
         else:
             return {"success": False, "error": "保存失败"}
@@ -4613,6 +4616,18 @@ async def live2d_emotion_manager(request: Request):
         return HTMLResponse(content=content)
     except Exception as e:
         logger.error(f"加载Live2D情感映射管理器页面失败: {e}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+@app.get('/live2d_parameter_editor', response_class=HTMLResponse)
+async def live2d_parameter_editor(request: Request):
+    """Live2D参数编辑器页面"""
+    try:
+        template_path = os.path.join(_get_app_root(), 'templates', 'live2d_parameter_editor.html')
+        with open(template_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        return HTMLResponse(content=content)
+    except Exception as e:
+        logger.error(f"加载Live2D参数编辑器页面失败: {e}")
         return JSONResponse(status_code=500, content={"error": str(e)})
 
 @app.get('/api/live2d/emotion_mapping/{model_name}')

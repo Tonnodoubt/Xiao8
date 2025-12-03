@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live2D 参数编辑器 - Project N.E.K.O.</title>
+    <script src="/static/i18n-i18next.js"></script>
+    <script src="/static/common_dialogs.js"></script>
+    <style>
+        *:focus {
+            outline: none !important;
+            box-shadow: none !important; 
+        }
+        html, body {
+            height: 100%; margin: 0; padding: 0; background: #eee; color: #222;
+            font-family: 'Segoe UI', Arial, sans-serif; overflow: hidden;
+        }
+        #live2d-container {
+            position: fixed; right: 0px; bottom: 0px; width: 100%; height: 100%;
+            z-index: 10; pointer-events: auto;
+        }
+        #live2d-canvas {
+            display: block; width: 100%; height: 100%; background: transparent;
+            cursor: grab; pointer-events: auto;
+        }
+        #live2d-canvas:active { cursor: grabbing; }
+
+        #sidebar {
+            position: fixed;
+            left: 20px;
+            top: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            z-index: 20;
+            min-width: 320px;
+            max-width: 400px;
+            max-height: 90vh;
+            padding: 20px;
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .control-label {
+            font-weight: 600;
+            color: #333;
+            font-size: 14px;
+        }
+        .btn {
+            padding: 10px 15px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            cursor: pointer;
+            color: white;
+            transition: background 0.2s, transform 0.2s;
+            text-align: center;
+        }
+        .btn:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+        }
+        .btn:disabled {
+            background: #e0e0e0;
+            cursor: not-allowed;
+            opacity: 0.7;
+        }
+        .btn-primary { background: #44b7fe; }
+        .btn-primary:hover:not(:disabled) { background: #2662c8; }
+        .btn-success { background: #28a745; }
+        .btn-success:hover:not(:disabled) { background: #218838; }
+        .btn-secondary { 
+            background: #6c757d; 
+            color: white;
+        }
+        .btn-secondary:hover:not(:disabled) { 
+            background: #5a6268; 
+        }
+
+        .parameter-item {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 8px;
+        }
+        .parameter-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .parameter-name {
+            font-weight: 500;
+            font-size: 13px;
+            color: #333;
+            flex: 1;
+        }
+        .parameter-value {
+            font-size: 12px;
+            color: #666;
+            min-width: 60px;
+            text-align: right;
+        }
+        .parameter-slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        .parameter-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #44b7fe;
+            cursor: pointer;
+        }
+        .parameter-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #44b7fe;
+            cursor: pointer;
+            border: none;
+        }
+        .parameter-input {
+            width: 80px;
+            padding: 4px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+        .parameter-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .reset-btn {
+            padding: 4px 8px;
+            font-size: 11px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .reset-btn:hover {
+            background: #c82333;
+        }
+        #status {
+            margin-top: 10px;
+            color: #4f8cff;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        .search-box {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+        .parameters-list {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <div class="control-group">
+        <button id="backToMainBtn" class="btn btn-primary">← 返回主页</button>
+    </div>
+    
+    <div class="control-group">
+        <label class="control-label">搜索参数:</label>
+        <input type="text" id="search-box" class="search-box" placeholder="输入参数名搜索...">
+    </div>
+
+    <div class="control-group">
+        <div style="display:flex; gap: 10px;">
+            <button id="reset-all-btn" class="btn btn-secondary" disabled>重置全部</button>
+            <button id="save-btn" class="btn btn-success" disabled>保存参数</button>
+        </div>
+    </div>
+
+    <div class="control-group">
+        <label class="control-label">模型参数:</label>
+        <div id="parameters-list" class="parameters-list">
+            <div style="text-align: center; color: #999; padding: 20px;">
+                正在加载参数...
+            </div>
+        </div>
+    </div>
+    
+    <div id="status">正在初始化...</div>
+</div>
+
+<div id="live2d-container"><canvas id="live2d-canvas"></canvas></div>
+
+<script src="/static/libs/live2dcubismcore.min.js"></script>
+<script src="/static/libs/live2d.min.js"></script>
+<script src="/static/libs/pixi.min.js"></script>
+<script src="/static/libs/index.min.js"></script>
+<script src="/static/live2d-core.js"></script>
+<script src="/static/live2d-emotion.js"></script>
+<script src="/static/live2d-model.js"></script>
+<script src="/static/live2d-interaction.js"></script>
+<script src="/static/live2d-ui.js"></script>
+<script src="/static/live2d-init.js"></script>
+
+<script>
+    document.addEventListener('DOMContentLoaded', async () => {
+        const statusDiv = document.getElementById('status');
+        const parametersList = document.getElementById('parameters-list');
+        const searchBox = document.getElementById('search-box');
+        const saveBtn = document.getElementById('save-btn');
+        const resetAllBtn = document.getElementById('reset-all-btn');
+        const backToMainBtn = document.getElementById('backToMainBtn');
+        
+        let currentModel = null;
+        let coreModel = null;
+        let initialParameters = {};
+        let currentParameters = {};
+        let modelPath = '';
+        
+        const showStatus = (msg, duration = 0) => {
+            statusDiv.textContent = msg;
+            if (duration > 0) {
+                setTimeout(() => {
+                    if (currentModel) {
+                        showStatus(`当前模型: ${modelPath.split('/').pop()}`);
+                    }
+                }, duration);
+            }
+        };
+
+        // 初始化 Live2D
+        try {
+            await window.live2dManager.initPIXI('live2d-canvas', 'live2d-container');
+            showStatus('PIXI 初始化完成');
+            
+            // 获取当前模型路径
+            const urlParams = new URLSearchParams(window.location.search);
+            const modelPathParam = urlParams.get('model_path');
+            
+            if (!modelPathParam) {
+                // 从 API 获取当前角色的模型
+                try {
+                    const response = await fetch('/api/config/page_config');
+                    const data = await response.json();
+                    if (data.success && data.model_path) {
+                        modelPath = data.model_path;
+                    } else {
+                        // 尝试从当前加载的模型获取路径
+                        if (window.live2dManager && window.live2dManager._lastLoadedModelPath) {
+                            modelPath = window.live2dManager._lastLoadedModelPath;
+                        } else {
+                            showStatus('错误：无法获取模型路径，请先加载模型');
+                            return;
+                        }
+                    }
+                } catch (e) {
+                    // 尝试从当前加载的模型获取路径
+                    if (window.live2dManager && window.live2dManager._lastLoadedModelPath) {
+                        modelPath = window.live2dManager._lastLoadedModelPath;
+                    } else {
+                        showStatus('错误：无法获取模型路径，请先加载模型');
+                        return;
+                    }
+                }
+            } else {
+                modelPath = modelPathParam;
+            }
+            
+            // 加载用户偏好
+            const preferences = await window.live2dManager.loadUserPreferences();
+            const modelPreferences = preferences.find(p => p && p.model_path === modelPath) || null;
+            
+            // 加载模型
+            await window.live2dManager.loadModel(modelPath, {
+                preferences: modelPreferences,
+                loadEmotionMapping: false
+            });
+            
+            currentModel = window.live2dManager.getCurrentModel();
+            if (!currentModel || !currentModel.internalModel || !currentModel.internalModel.coreModel) {
+                showStatus('错误：模型加载失败');
+                return;
+            }
+            
+            coreModel = currentModel.internalModel.coreModel;
+            
+            // 记录初始参数
+            recordInitialParameters();
+            
+            // 加载保存的参数
+            if (modelPreferences && modelPreferences.parameters) {
+                applyParameters(modelPreferences.parameters);
+                currentParameters = {...modelPreferences.parameters};
+            }
+            
+            // 显示参数列表
+            displayParameters();
+            
+            saveBtn.disabled = false;
+            resetAllBtn.disabled = false;
+            showStatus('模型加载成功');
+        } catch (error) {
+            console.error('初始化失败:', error);
+            showStatus(`初始化失败: ${error.message}`);
+        }
+
+        // 记录初始参数
+        function recordInitialParameters() {
+            if (!coreModel) return;
+            
+            initialParameters = {};
+            const paramCount = coreModel.getParameterCount();
+            
+            for (let i = 0; i < paramCount; i++) {
+                try {
+                    let paramId = null;
+                    try {
+                        paramId = coreModel.getParameterId(i);
+                    } catch (e) {
+                        paramId = `param_${i}`;
+                    }
+                    
+                    const value = coreModel.getParameterValueByIndex(i);
+                    initialParameters[paramId] = value;
+                } catch (e) {
+                    console.warn(`记录参数 ${i} 失败:`, e);
+                }
+            }
+        }
+
+        // 应用参数
+        function applyParameters(params) {
+            if (!coreModel) return;
+            
+            for (const [paramId, value] of Object.entries(params)) {
+                try {
+                    const index = coreModel.getParameterIndex(paramId);
+                    if (index >= 0) {
+                        coreModel.setParameterValueByIndex(index, value);
+                    } else {
+                        coreModel.setParameterValueById(paramId, value);
+                    }
+                } catch (e) {
+                    console.warn(`应用参数 ${paramId} 失败:`, e);
+                }
+            }
+        }
+
+        // 显示参数列表
+        function displayParameters(filter = '') {
+            if (!coreModel) return;
+            
+            parametersList.innerHTML = '';
+            const paramCount = coreModel.getParameterCount();
+            const filterLower = filter.toLowerCase();
+            
+            let displayedCount = 0;
+            
+            for (let i = 0; i < paramCount; i++) {
+                try {
+                    let paramId = null;
+                    try {
+                        paramId = coreModel.getParameterId(i);
+                    } catch (e) {
+                        paramId = `param_${i}`;
+                    }
+                    
+                    // 过滤
+                    if (filter && !paramId.toLowerCase().includes(filterLower)) {
+                        continue;
+                    }
+                    
+                    const currentValue = coreModel.getParameterValueByIndex(i);
+                    const initialValue = initialParameters[paramId] || 0;
+                    
+                    // 创建参数项
+                    const paramItem = document.createElement('div');
+                    paramItem.className = 'parameter-item';
+                    paramItem.dataset.paramId = paramId;
+                    
+                    const header = document.createElement('div');
+                    header.className = 'parameter-header';
+                    
+                    const nameSpan = document.createElement('span');
+                    nameSpan.className = 'parameter-name';
+                    nameSpan.textContent = paramId;
+                    
+                    const valueSpan = document.createElement('span');
+                    valueSpan.className = 'parameter-value';
+                    valueSpan.textContent = currentValue.toFixed(3);
+                    
+                    header.appendChild(nameSpan);
+                    header.appendChild(valueSpan);
+                    
+                    const controls = document.createElement('div');
+                    controls.className = 'parameter-controls';
+                    
+                    const slider = document.createElement('input');
+                    slider.type = 'range';
+                    slider.className = 'parameter-slider';
+                    slider.min = '-1';
+                    slider.max = '1';
+                    slider.step = '0.01';
+                    slider.value = currentValue;
+                    
+                    const input = document.createElement('input');
+                    input.type = 'number';
+                    input.className = 'parameter-input';
+                    input.min = '-1';
+                    input.max = '1';
+                    input.step = '0.01';
+                    input.value = currentValue;
+                    
+                    const resetBtn = document.createElement('button');
+                    resetBtn.className = 'reset-btn';
+                    resetBtn.textContent = '重置';
+                    
+                    // 事件处理
+                    const updateParameter = (value) => {
+                        const numValue = parseFloat(value);
+                        if (isNaN(numValue)) return;
+                        
+                        const clampedValue = Math.max(-1, Math.min(1, numValue));
+                        try {
+                            const index = coreModel.getParameterIndex(paramId);
+                            if (index >= 0) {
+                                coreModel.setParameterValueByIndex(index, clampedValue);
+                            } else {
+                                coreModel.setParameterValueById(paramId, clampedValue);
+                            }
+                            valueSpan.textContent = clampedValue.toFixed(3);
+                            slider.value = clampedValue;
+                            input.value = clampedValue;
+                            currentParameters[paramId] = clampedValue;
+                        } catch (e) {
+                            console.warn(`更新参数 ${paramId} 失败:`, e);
+                        }
+                    };
+                    
+                    slider.addEventListener('input', (e) => {
+                        updateParameter(e.target.value);
+                    });
+                    
+                    input.addEventListener('input', (e) => {
+                        updateParameter(e.target.value);
+                    });
+                    
+                    resetBtn.addEventListener('click', () => {
+                        updateParameter(initialValue);
+                    });
+                    
+                    controls.appendChild(slider);
+                    controls.appendChild(input);
+                    controls.appendChild(resetBtn);
+                    
+                    paramItem.appendChild(header);
+                    paramItem.appendChild(controls);
+                    
+                    parametersList.appendChild(paramItem);
+                    displayedCount++;
+                } catch (e) {
+                    console.warn(`显示参数 ${i} 失败:`, e);
+                }
+            }
+            
+            if (displayedCount === 0) {
+                parametersList.innerHTML = '<div style="text-align: center; color: #999; padding: 20px;">未找到匹配的参数</div>';
+            }
+        }
+
+        // 搜索功能
+        searchBox.addEventListener('input', (e) => {
+            displayParameters(e.target.value);
+        });
+
+        // 重置全部
+        resetAllBtn.addEventListener('click', () => {
+            if (!coreModel) return;
+            
+            for (const [paramId, initialValue] of Object.entries(initialParameters)) {
+                try {
+                    const index = coreModel.getParameterIndex(paramId);
+                    if (index >= 0) {
+                        coreModel.setParameterValueByIndex(index, initialValue);
+                    } else {
+                        coreModel.setParameterValueById(paramId, initialValue);
+                    }
+                    currentParameters[paramId] = initialValue;
+                } catch (e) {
+                    console.warn(`重置参数 ${paramId} 失败:`, e);
+                }
+            }
+            
+            displayParameters(searchBox.value);
+            showStatus('已重置所有参数', 2000);
+        });
+
+        // 保存参数
+        saveBtn.addEventListener('click', async () => {
+            if (!currentModel || !modelPath) {
+                showStatus('错误：模型未加载或路径无效', 3000);
+                return;
+            }
+            
+            showStatus('正在保存参数...');
+            
+            // 获取当前位置和缩放
+            const position = { x: currentModel.x, y: currentModel.y };
+            const scale = { x: currentModel.scale.x, y: currentModel.scale.y };
+            
+            // 收集当前所有参数值
+            const paramsToSave = {};
+            if (coreModel) {
+                const paramCount = coreModel.getParameterCount();
+                for (let i = 0; i < paramCount; i++) {
+                    try {
+                        let paramId = null;
+                        try {
+                            paramId = coreModel.getParameterId(i);
+                        } catch (e) {
+                            paramId = `param_${i}`;
+                        }
+                        const value = coreModel.getParameterValueByIndex(i);
+                        paramsToSave[paramId] = value;
+                    } catch (e) {
+                        console.warn(`收集参数 ${i} 失败:`, e);
+                    }
+                }
+            }
+            
+            // 保存偏好（包含参数）
+            const success = await window.live2dManager.saveUserPreferences(
+                modelPath,
+                position,
+                scale,
+                paramsToSave
+            );
+            
+            if (success) {
+                showStatus('参数保存成功！', 2000);
+            } else {
+                showStatus('参数保存失败', 3000);
+            }
+        });
+
+        // 返回主页
+        backToMainBtn.addEventListener('click', () => {
+            window.location.href = '/';
+        });
+    });
+</script>
+
+</body>
+</html>
+

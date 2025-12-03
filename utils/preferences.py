@@ -58,7 +58,7 @@ def save_user_preferences(preferences: List[Dict[str, Any]]) -> bool:
         print(f"保存用户偏好失败: {e}")
         return False
 
-def update_model_preferences(model_path: str, position: Dict[str, float], scale: Dict[str, float]) -> bool:
+def update_model_preferences(model_path: str, position: Dict[str, float], scale: Dict[str, float], parameters: Optional[Dict[str, float]] = None) -> bool:
     """
     更新指定模型的偏好设置
     
@@ -66,6 +66,7 @@ def update_model_preferences(model_path: str, position: Dict[str, float], scale:
         model_path (str): 模型路径
         position (Dict[str, float]): 位置信息 {'x': float, 'y': float}
         scale (Dict[str, float]): 缩放信息 {'x': float, 'y': float}
+        parameters (Dict[str, float], optional): 模型参数 {'ParamId': value}
         
     Returns:
         bool: 更新成功返回True，失败返回False
@@ -88,9 +89,20 @@ def update_model_preferences(model_path: str, position: Dict[str, float], scale:
             'scale': scale
         }
         
+        # 如果有参数，添加到偏好中
+        if parameters is not None:
+            new_model_pref['parameters'] = parameters
+        
         if model_index >= 0:
-            # 更新现有模型的偏好
-            current_preferences[model_index] = new_model_pref
+            # 更新现有模型的偏好，保留已有的参数（如果新参数为None则不更新参数）
+            if parameters is not None:
+                current_preferences[model_index] = new_model_pref
+            else:
+                # 保留原有参数
+                existing_params = current_preferences[model_index].get('parameters')
+                if existing_params:
+                    new_model_pref['parameters'] = existing_params
+                current_preferences[model_index] = new_model_pref
         else:
             # 添加新模型的偏好到列表开头（作为首选）
             current_preferences.insert(0, new_model_pref)
@@ -160,6 +172,10 @@ def validate_model_preferences(preferences: Dict[str, Any]) -> bool:
         return False
     
     if not isinstance(preferences.get('scale'), dict) or 'x' not in preferences['scale'] or 'y' not in preferences['scale']:
+        return False
+    
+    # parameters 是可选的，但如果存在，必须是字典
+    if 'parameters' in preferences and not isinstance(preferences['parameters'], dict):
         return False
     
     return True
