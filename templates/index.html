@@ -1505,14 +1505,101 @@
             }
         }
         
+        // 处理模型路径：如果只是文件名，需要查找完整路径
+        let actualModelPath = modelPath;
+        let modelFound = false;
+        
+        // 如果路径不是以/开头（不是完整路径），尝试查找完整路径
+        if (!modelPath.startsWith('/')) {
+            try {
+                // 获取所有VRM模型列表
+                const modelsResponse = await fetch('/api/vrm/models');
+                if (modelsResponse.ok) {
+                    const models = await modelsResponse.json();
+                    // 尝试通过文件名匹配
+                    const modelFileName = modelPath.endsWith('.vrm') ? modelPath : `${modelPath}.vrm`;
+                    const foundModel = models.find(m => {
+                        const pathFileName = m.path.split('/').pop();
+                        return pathFileName === modelFileName || m.name === modelPath;
+                    });
+                    
+                    if (foundModel) {
+                        actualModelPath = foundModel.path;
+                        modelFound = true;
+                        console.log(`找到VRM模型完整路径: ${actualModelPath}`);
+                    } else {
+                        console.warn(`VRM模型 ${modelPath} 不存在于模型列表中`);
+                    }
+                }
+            } catch (error) {
+                console.warn('获取VRM模型列表失败:', error);
+            }
+        } else {
+            // 如果是完整路径，先验证文件是否存在
+            try {
+                const checkResponse = await fetch(actualModelPath, { method: 'HEAD' });
+                if (checkResponse.ok) {
+                    modelFound = true;
+                } else {
+                    console.warn(`VRM模型文件不存在: ${actualModelPath}`);
+                }
+            } catch (error) {
+                console.warn(`无法验证VRM模型文件: ${actualModelPath}`, error);
+            }
+        }
+        
+        // 如果找不到模型文件，回退到Live2D模型
+        if (!modelFound) {
+            console.warn(`VRM模型 ${modelPath} 不存在，回退到Live2D模型`);
+            // 恢复Live2D显示
+            if (live2dContainer) {
+                live2dContainer.style.display = 'block';
+                live2dContainer.classList.remove('minimized');
+                live2dContainer.style.visibility = 'visible';
+                live2dContainer.style.opacity = '1';
+            }
+            if (vrmContainer) {
+                vrmContainer.classList.add('hidden');
+                vrmContainer.style.display = 'none';
+            }
+            return;
+        }
+        
         // 加载 VRM 模型
         try {
-            console.log('开始加载 VRM 模型:', modelPath);
-            await vrmManager.loadModel(modelPath);
+            console.log('开始加载 VRM 模型:', actualModelPath);
+            await vrmManager.loadModel(actualModelPath);
             console.log('VRM 模型加载成功');
+            
+            // 设置模型类型为VRM，确保口型同步能正确启动
+            localStorage.setItem('modelType', 'vrm');
+            
+            // 自动播放idle.vrma待机动画
+            try {
+                const idleAnimationPath = '/static/models/vrm/animations/idle.vrma';
+                await vrmManager.playVRMAAnimation(idleAnimationPath, {
+                    loop: true,
+                    timeScale: 1.0
+                });
+                console.log('已自动播放idle.vrma待机动画');
+            } catch (animError) {
+                console.warn('自动播放idle.vrma失败（文件可能不存在）:', animError.message);
+            }
             
         } catch (error) {
             console.error('加载 VRM 模型失败:', error);
+            // 加载失败时也回退到Live2D
+            console.warn('VRM模型加载失败，回退到Live2D模型');
+            if (live2dContainer) {
+                live2dContainer.style.display = 'block';
+                live2dContainer.classList.remove('minimized');
+                live2dContainer.style.visibility = 'visible';
+                live2dContainer.style.opacity = '1';
+            }
+            if (vrmContainer) {
+                vrmContainer.classList.add('hidden');
+                vrmContainer.style.display = 'none';
+            }
         }
     }
     

@@ -769,9 +769,10 @@
         }
 
         // 刷新 VRM 模型列表按钮
-        // 加载 VRM 模型列表的函数
+        // 加载 VRM 模型列表的函数（自动扫描VRM文件夹）
         async function loadVRMModels() {
             try {
+                console.log('[VRM] 开始扫描VRM文件夹并加载模型列表...');
                 const response = await fetch('/api/vrm/models');
                 
                 if (!response.ok) {
@@ -788,20 +789,27 @@
                     return;
                 }
                 
+                console.log(`[VRM] 扫描完成，找到 ${vrmModels.length} 个VRM模型`);
+                
                 if (vrmModels.length > 0) {
                     vrmModelSelect.innerHTML = `<option value="">${t('live2d.pleaseSelectModel', '请选择一个模型')}</option>`;
                     vrmModels.forEach(model => {
                         const option = document.createElement('option');
                         option.value = model.path;
                         option.textContent = model.name;
+                        // 添加来源信息（如果有）
+                        if (model.source) {
+                            option.textContent += ` (${model.source})`;
+                        }
                         vrmModelSelect.appendChild(option);
                     });
-                    showStatus(t('live2d.vrmModelListLoaded', 'VRM 模型列表加载成功'));
+                    showStatus(t('live2d.vrmModelListLoaded', `VRM 模型列表加载成功，找到 ${vrmModels.length} 个模型`));
                 } else {
                     vrmModelSelect.innerHTML = `<option value="">${t('live2d.noVRMModelsFound', '未找到可用 VRM 模型')}</option>`;
-                    showStatus(t('live2d.noVRMModelsFound', '未找到可用 VRM 模型'));
+                    showStatus(t('live2d.noVRMModelsFound', '未找到可用 VRM 模型，请将.vrm文件放入 static/models/vrm 文件夹'));
                 }
             } catch (e) {
+                console.error('[VRM] 加载模型列表失败:', e);
                 vrmModelSelect.innerHTML = `<option value="">${t('live2d.vrmModelListLoadFailed', '加载失败')}</option>`;
                 showStatus(t('live2d.vrmModelListLoadFailed', `加载 VRM 模型列表失败: ${e.message || e}`));
             }

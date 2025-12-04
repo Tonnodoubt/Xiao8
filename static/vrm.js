@@ -205,9 +205,9 @@ class VRMManager {
             
             // 调整模型位置（居中）
             this.vrm.scene.position.set(-center.x, -center.y, -center.z);
-            // 旋转模型180度，确保正面显示
-            this.vrm.scene.rotation.set(0, Math.PI, 0);
-            this.modelRotation = { x: 0, y: Math.PI };
+            // 不旋转模型，保持正面显示（VRM模型默认就是正面朝向）
+            this.vrm.scene.rotation.set(0, 0, 0);
+            this.modelRotation = { x: 0, y: 0 };
             
             // 计算合适的初始缩放（参考Live2D的默认大小计算）
             // Live2D: scale = Math.min(0.5, (window.innerHeight * 0.75) / 7000, (window.innerWidth * 0.6) / 7000)
@@ -265,6 +265,36 @@ class VRMManager {
             if (this.renderer && !this.dragHandler) {
                 this.initDragAndZoom();
             }
+
+            // 更新口型表情映射（确保口型同步能正常工作）
+            this.updateMouthExpressionMapping();
+            
+            // 输出口型同步支持信息（用于调试）
+            const lipSyncInfo = this.checkLipSyncSupport();
+            if (lipSyncInfo.supported) {
+                console.log('[VRM] 口型同步已就绪:', {
+                    找到表情数: lipSyncInfo.mouthExpressions.length,
+                    已映射表情: Object.values(this.mouthExpressions).filter(v => v !== null).length
+                });
+            } else {
+                console.warn('[VRM] 口型同步可能不可用，模型可能没有嘴巴相关表情');
+            }
+
+            // 自动播放idle.vrma待机动画（如果文件存在）
+            // 延迟一小段时间确保模型完全加载
+            setTimeout(async () => {
+                try {
+                    const idleAnimationPath = '/static/models/vrm/animations/idle.vrma';
+                    await this.playVRMAAnimation(idleAnimationPath, {
+                        loop: true,
+                        timeScale: 1.0
+                    });
+                    console.log('[VRM] 已自动播放idle.vrma待机动画');
+                } catch (animError) {
+                    // 静默失败，idle.vrma文件可能不存在
+                    console.log('[VRM] idle.vrma文件不存在，跳过自动播放');
+                }
+            }, 100);
 
 
             return this.vrm;
@@ -702,11 +732,15 @@ class VRMManager {
         const dataArray = new Uint8Array(bufferLength);
         const frequencyData = new Uint8Array(bufferLength);
 
-        // 平滑参数 - 调整为更明显、更直接的口型
-        const smoothingFactor = 0.4; // 权重平滑因子（增大，让变化更快更明显）
-        const volumeThreshold = 0.002; // 音量阈值（进一步降低，避免在音频块间隙时关闭）
-        const volumeSensitivity = 3.5; // 音量敏感度（提高，让嘴巴更容易张开）
-        const silenceDecayRate = 0.95; // 静音时的衰减率（降低衰减速度，保持嘴巴稍微张开）
+        // 优化后的口型同步参数 - 更自然、更平滑的对口型
+        const smoothingFactor = 0.2; // 权重平滑因子（进一步降低，让变化更平滑自然）
+        const volumeThreshold = 0.001; // 音量阈值
+        const volumeSensitivity = 4.0; // 音量敏感度（稍微降低，避免过度反应）
+        const minMouthOpen = 0.1; // 最小嘴巴张开度（降低，更自然）
+        const maxMouthOpen = 0.85; // 最大嘴巴张开度（降低，避免过度张开）
+        
+        // 音量平滑处理（避免突然变化）
+        let smoothedVolume = 0;
 
         const animate = () => {
             if (!this.lipSyncActive) return;
@@ -715,81 +749,110 @@ class VRMManager {
             analyser.getByteFrequencyData(frequencyData);
             analyser.getByteTimeDomainData(dataArray);
 
-            // 计算 RMS（均方根）音量
+            // 计算 RMS（均方根）音量 - 更准确的音量计算
             let sum = 0;
+            let maxAmplitude = 0;
             for (let i = 0; i < dataArray.length; i++) {
                 const normalized = (dataArray[i] - 128) / 128;
+                const absValue = Math.abs(normalized);
                 sum += normalized * normalized;
+                if (absValue > maxAmplitude) {
+                    maxAmplitude = absValue;
+                }
             }
             const rms = Math.sqrt(sum / dataArray.length);
-            const volume = Math.min(1, rms * volumeSensitivity);
+            // 结合RMS和最大振幅，更准确地反映音量
+            const rawVolume = (rms * 0.7 + maxAmplitude * 0.3) * volumeSensitivity;
+            // 对音量进行平滑处理，避免突然变化（使用指数移动平均）
+            smoothedVolume = smoothedVolume * 0.7 + Math.min(1, rawVolume) * 0.3;
+            const volume = smoothedVolume;
 
-            // 如果音量太低，逐渐关闭嘴巴（但不要完全关闭，保持轻微张开）
+            // 如果音量太低，逐渐关闭嘴巴（但保持最小张开度，更平滑）
             if (volume < volumeThreshold) {
                 if (this.currentMouthExpression) {
-                    // 平滑关闭，但保持最小张开度
-                    this.targetMouthWeight = 0.1; // 保持最小张开度，而不是完全关闭
-                    this.currentMouthWeight += (this.targetMouthWeight - this.currentMouthWeight) * 0.1; // 缓慢衰减
+                    this.targetMouthWeight = minMouthOpen;
+                    // 使用更平滑的衰减
+                    this.currentMouthWeight += (this.targetMouthWeight - this.currentMouthWeight) * 0.12;
                     const expr = this.vrm.expressionManager.expressions[this.currentMouthExpression.index];
                     if (expr) {
-                        expr.weight = Math.max(0.1, this.currentMouthWeight); // 保持最小权重
+                        // 平滑过渡到最小张开度
+                        expr.weight += (Math.max(minMouthOpen, this.currentMouthWeight) - expr.weight) * 0.12;
+                        expr.weight = Math.max(minMouthOpen, expr.weight);
                     }
                 }
                 this.lipSyncAnimationId = requestAnimationFrame(animate);
                 return;
             }
 
-            // 分析频率，确定主要元音
-            const lowFreq = this.getFrequencyRange(frequencyData, 0, Math.floor(bufferLength * 0.1)); // 低频（0-10%）
-            const midFreq = this.getFrequencyRange(frequencyData, Math.floor(bufferLength * 0.1), Math.floor(bufferLength * 0.4)); // 中频（10-40%）
-            const highFreq = this.getFrequencyRange(frequencyData, Math.floor(bufferLength * 0.4), Math.floor(bufferLength * 0.7)); // 高频（40-70%）
+            // 简化口型同步逻辑 - 主要基于音量，频率分析作为辅助
+            // 这样可以避免过于复杂的判断，让口型更自然
+            
+            // 分析频率，确定主要元音（简化判断逻辑）
+            const lowFreq = this.getFrequencyRange(frequencyData, 0, Math.floor(bufferLength * 0.2)); // 低频（0-20%）
+            const midFreq = this.getFrequencyRange(frequencyData, Math.floor(bufferLength * 0.2), Math.floor(bufferLength * 0.6)); // 中频（20-60%）
+            const highFreq = this.getFrequencyRange(frequencyData, Math.floor(bufferLength * 0.6), Math.floor(bufferLength * 0.85)); // 高频（60-85%）
 
-            // 根据频率特征判断元音
+            // 归一化频率值（0-1范围）
+            const maxFreq = Math.max(lowFreq, midFreq, highFreq, 0.01);
+            const normalizedLow = lowFreq / maxFreq;
+            const normalizedMid = midFreq / maxFreq;
+            const normalizedHigh = highFreq / maxFreq;
+
+            // 简化判断逻辑 - 主要基于音量，频率作为辅助
             let primaryExpression = null;
             let primaryWeight = 0;
 
-            // 'aa' (あ) - 低频为主
-            if (lowFreq > midFreq * 0.8 && lowFreq > highFreq * 0.8) {
+            // 优先使用音量来决定口型张开度，频率只用于选择表情类型
+            // 如果音量足够，根据频率选择表情；否则使用默认'aa'
+            if (volume > volumeThreshold) {
+                // 根据频率特征判断元音（简化判断条件）
+                if (normalizedLow > 0.65 && normalizedLow >= normalizedMid && normalizedLow >= normalizedHigh) {
+                    // 'aa' (あ) - 低频为主
+                    primaryExpression = this.mouthExpressions['aa'];
+                    primaryWeight = normalizedLow;
+                }
+                else if (normalizedHigh > 0.6 && normalizedHigh > normalizedLow * 1.15) {
+                    // 'ee' (え) 或 'ih' (い) - 高频为主
+                    primaryExpression = this.mouthExpressions['ee'] || this.mouthExpressions['ih'] || this.mouthExpressions['aa'];
+                    primaryWeight = normalizedHigh;
+                }
+                else if (normalizedMid > 0.55) {
+                    // 'ou' (う) 或 'oh' (お) - 中频为主
+                    primaryExpression = this.mouthExpressions['ou'] || this.mouthExpressions['oh'] || this.mouthExpressions['aa'];
+                    primaryWeight = normalizedMid;
+                }
+                else {
+                    // 默认使用'aa'（嘴巴张开）
+                    primaryExpression = this.mouthExpressions['aa'];
+                    primaryWeight = Math.max(normalizedLow, normalizedMid, normalizedHigh, 0.5);
+                }
+            } else {
+                // 音量太低，使用默认表情但保持最小张开度
                 primaryExpression = this.mouthExpressions['aa'];
-                primaryWeight = lowFreq;
-            }
-            // 'ih' (い) - 中高频
-            else if (midFreq > lowFreq * 1.2 && midFreq > highFreq * 0.9) {
-                primaryExpression = this.mouthExpressions['ih'];
-                primaryWeight = midFreq;
-            }
-            // 'ou' (う) - 中频为主
-            else if (midFreq > lowFreq && midFreq > highFreq) {
-                primaryExpression = this.mouthExpressions['ou'];
-                primaryWeight = midFreq;
-            }
-            // 'ee' (え) - 中高频
-            else if (highFreq > midFreq * 0.9 && highFreq > lowFreq * 1.1) {
-                primaryExpression = this.mouthExpressions['ee'];
-                primaryWeight = highFreq;
-            }
-            // 'oh' (お) - 中低频
-            else if (midFreq > lowFreq * 0.8 && midFreq > highFreq * 0.9) {
-                primaryExpression = this.mouthExpressions['oh'];
-                primaryWeight = midFreq;
+                primaryWeight = 0.3;
             }
 
             // 如果找到了主要表情
             if (primaryExpression !== null && primaryExpression !== undefined) {
-                // 计算最终权重（结合音量和频率强度）- 调整为更明显的口型
-                const finalWeight = Math.max(0.5, Math.min(1.2, primaryWeight * 1.2)); // 提高最小值和最大值
-                this.targetMouthWeight = finalWeight * volume * 1.2; // 增加音量影响
+                // 简化权重计算 - 主要基于音量，频率作为辅助
+                // 音量是主要因素，频率只影响表情选择
+                const volumeBasedWeight = Math.max(minMouthOpen, Math.min(maxMouthOpen, volume * 0.9));
+                // 结合频率强度（但影响较小）
+                const frequencyBoost = Math.min(0.15, primaryWeight * 0.2);
+                this.targetMouthWeight = Math.min(maxMouthOpen, volumeBasedWeight + frequencyBoost);
 
-                // 平滑过渡到新权重
+                // 使用更平滑的过渡
                 this.currentMouthWeight += (this.targetMouthWeight - this.currentMouthWeight) * smoothingFactor;
+                this.currentMouthWeight = Math.max(minMouthOpen, Math.min(maxMouthOpen, this.currentMouthWeight));
 
                 // 如果切换到新的表情，平滑关闭其他表情
                 if (!this.currentMouthExpression || this.currentMouthExpression.index !== primaryExpression) {
-                    // 关闭之前的表情
+                    // 平滑关闭之前的表情
                     if (this.currentMouthExpression) {
                         const oldExpr = this.vrm.expressionManager.expressions[this.currentMouthExpression.index];
                         if (oldExpr) {
-                            oldExpr.weight *= 0.9; // 逐渐衰减
+                            // 更平滑的衰减
+                            oldExpr.weight += (0 - oldExpr.weight) * 0.25;
                             if (oldExpr.weight < 0.01) {
                                 oldExpr.weight = 0;
                             }
@@ -803,10 +866,12 @@ class VRMManager {
                     };
                 }
 
-                // 应用权重到当前表情
+                // 应用权重到当前表情（使用平滑过渡）
                 const expr = this.vrm.expressionManager.expressions[primaryExpression];
                 if (expr) {
-                    expr.weight = this.currentMouthWeight;
+                    // 平滑过渡到目标权重
+                    expr.weight += (this.currentMouthWeight - expr.weight) * smoothingFactor;
+                    expr.weight = Math.max(minMouthOpen, Math.min(maxMouthOpen, expr.weight));
                 }
 
                 // 平滑关闭其他表情
@@ -815,7 +880,8 @@ class VRMManager {
                     if (exprIndex !== null && exprIndex !== primaryExpression) {
                         const expr = this.vrm.expressionManager.expressions[exprIndex];
                         if (expr) {
-                            expr.weight *= 0.9;
+                            // 更平滑的衰减
+                            expr.weight += (0 - expr.weight) * 0.25;
                             if (expr.weight < 0.01) {
                                 expr.weight = 0;
                             }
@@ -823,15 +889,19 @@ class VRMManager {
                     }
                 });
             } else {
-                // 如果没有找到匹配的表情，保持当前表情但降低权重（不完全关闭）
-                if (this.currentMouthExpression) {
-                    // 保持最小张开度，而不是完全关闭
-                    this.targetMouthWeight = Math.max(0.15, this.currentMouthWeight * 0.95); // 缓慢衰减，保持最小张开
-                    this.currentMouthWeight += (this.targetMouthWeight - this.currentMouthWeight) * 0.1;
-                    const expr = this.vrm.expressionManager.expressions[this.currentMouthExpression.index];
-                    if (expr) {
-                        expr.weight = Math.max(0.15, this.currentMouthWeight); // 保持最小权重
+                // 如果没有找到匹配的表情，使用默认张开（基于音量）
+                if (this.mouthExpressions['aa'] !== null) {
+                    const defaultWeight = Math.max(minMouthOpen, Math.min(maxMouthOpen, volume * 0.8));
+                    this.currentMouthWeight += (defaultWeight - this.currentMouthWeight) * smoothingFactor;
+                    const defaultExpr = this.vrm.expressionManager.expressions[this.mouthExpressions['aa']];
+                    if (defaultExpr) {
+                        defaultExpr.weight += (this.currentMouthWeight - defaultExpr.weight) * smoothingFactor;
+                        defaultExpr.weight = Math.max(minMouthOpen, Math.min(maxMouthOpen, defaultExpr.weight));
                     }
+                    this.currentMouthExpression = {
+                        index: this.mouthExpressions['aa'],
+                        weight: this.currentMouthWeight
+                    };
                 }
             }
 
@@ -937,6 +1007,7 @@ class VRMManager {
 
     /**
      * 加载并播放 VRMA 动画
+     * VRMA是VRM官方格式，可以直接作用于VRM模型，无需任何映射或转换
      * @param {string} vrmaPath - VRMA 文件路径
      * @param {Object} options - 播放选项 { loop, timeScale }
      */
@@ -949,34 +1020,11 @@ class VRMManager {
             // 停止当前动画
             this.stopVRMAAnimation();
 
-            // 动态导入 GLTFLoader
+            // 加载 GLTFLoader
             const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
             const loader = new GLTFLoader();
 
-            const isAnimFile = vrmaPath.toLowerCase().endsWith('.anim');
-            console.log(`[VRMA] 开始加载 ${isAnimFile ? 'ANIM' : 'VRMA'} 文件:`, vrmaPath);
-
-            // 如果是.anim文件，先尝试检查是否为Unity格式
-            if (isAnimFile) {
-                try {
-                    // 尝试加载，如果是Unity格式会失败
-                    const response = await fetch(vrmaPath);
-                    const arrayBuffer = await response.arrayBuffer();
-                    const header = new Uint8Array(arrayBuffer.slice(0, 20));
-                    const headerText = new TextDecoder().decode(header);
-                    
-                    if (headerText.startsWith('%YAML')) {
-                        throw new Error('这是Unity的.anim格式文件，无法直接播放。请使用VRMA格式文件，或使用Unity工具将.anim文件转换为VRMA格式。');
-                    }
-                } catch (error) {
-                    if (error.message.includes('Unity')) {
-                        throw error;
-                    }
-                    // 其他错误继续尝试加载
-                }
-            }
-
-            // 加载 VRMA/GLB 文件
+            // 直接加载 VRMA 文件（VRMA本质上是包含动画的GLB文件）
             const gltf = await new Promise((resolve, reject) => {
                 loader.load(
                     vrmaPath,
@@ -991,26 +1039,71 @@ class VRMManager {
                 );
             });
 
-            console.log('[VRMA] VRMA 文件加载成功');
-            console.log('[VRMA] 动画数量:', gltf.animations.length);
-
+            // 检查动画数据
             if (!gltf.animations || gltf.animations.length === 0) {
                 throw new Error('VRMA 文件中没有找到动画数据');
             }
 
-            // 使用第一个动画（通常VRMA文件只有一个动画）
-            // VRMA是官方格式，可以直接使用，不需要重新映射
-            const clip = gltf.animations[0];
-            console.log('[VRMA] 动画名称:', clip.name);
-            console.log('[VRMA] 动画时长:', clip.duration, '秒');
-            console.log('[VRMA] 动画轨道数:', clip.tracks.length);
-
-            // 创建 AnimationMixer
+            // VRMA文件可能包含一些VRM模型中不存在的节点（如手指骨骼等）
+            // 需要过滤掉这些不存在的节点，只保留VRM模型中实际存在的节点的tracks
+            const originalClip = gltf.animations[0];
+            const vrmScene = this.vrm.scene;
+            
+            // 创建VRM模型中所有节点的名称集合（用于快速查找）
+            const vrmNodeNames = new Set();
+            vrmScene.traverse((node) => {
+                if (node.name) {
+                    vrmNodeNames.add(node.name);
+                }
+            });
+            
+            // 过滤tracks：只保留VRM模型中存在的节点
+            const validTracks = [];
+            const skippedTracks = [];
+            
+            for (const track of originalClip.tracks) {
+                // track.name格式通常是 "NodeName.property" 或 "NodeName.property[index]"
+                const match = track.name.match(/^([^.]+)\.(.+)$/);
+                if (match) {
+                    const nodeName = match[1];
+                    const property = match[2];
+                    
+                    // 检查节点是否存在于VRM模型中
+                    if (vrmNodeNames.has(nodeName)) {
+                        validTracks.push(track);
+                    } else {
+                        skippedTracks.push(nodeName);
+                    }
+                } else {
+                    // 无法解析的track，跳过
+                    skippedTracks.push(track.name);
+                }
+            }
+            
+            if (validTracks.length === 0) {
+                throw new Error('VRMA动画中没有找到与VRM模型匹配的节点');
+            }
+            
+            // 创建新的动画clip，只包含有效的tracks
+            const clip = new THREE.AnimationClip(
+                originalClip.name || 'VRMA_Animation',
+                originalClip.duration,
+                validTracks
+            );
+            
+            // 输出统计信息
+            if (skippedTracks.length > 0) {
+                const uniqueSkipped = [...new Set(skippedTracks)];
+                console.log(`[VRMA] 已过滤 ${skippedTracks.length} 个不匹配的轨道（${uniqueSkipped.length} 个唯一节点）`);
+                console.log(`[VRMA] 有效轨道: ${validTracks.length} 个`);
+            }
+            
+            // 创建或复用 AnimationMixer（绑定到VRM场景）
             if (!this.vrmaMixer) {
                 this.vrmaMixer = new THREE.AnimationMixer(this.vrm.scene);
             }
 
-            // 创建动画动作（直接使用VRMA文件中的动画）
+            // 创建动画动作（现在只包含有效的tracks，不会有警告）
             this.vrmaAction = this.vrmaMixer.clipAction(clip);
 
             // 设置播放选项
@@ -1024,9 +1117,10 @@ class VRMManager {
             this.vrmaAction.play();
             this.vrmaIsPlaying = true;
 
-            console.log('[VRMA] 动画开始播放:', {
+            console.log('[VRMA] 动画播放成功:', {
+                文件: vrmaPath,
                 名称: clip.name,
-                时长: clip.duration,
+                时长: clip.duration.toFixed(2) + '秒',
                 循环: loop,
                 速度: timeScale
             });
