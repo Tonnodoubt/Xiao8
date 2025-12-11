@@ -566,6 +566,9 @@ class VRMManager {
                 console.warn('[VRM] 口型同步可能不可用，模型可能没有嘴巴相关表情');
             }
 
+            // 确保锁图标存在
+            this.ensureLockIconExists();
+
             // 自动播放wait03.vrma动作
             setTimeout(async () => {
                 try {
@@ -1030,6 +1033,9 @@ class VRMManager {
 
         // 更新浮动按钮位置（跟随模型）
         this.updateFloatingButtonsPosition();
+        
+        // 更新锁定图标位置（跟随模型）
+        this.updateLockIconPosition();
 
         // 渲染场景
         if (this.renderer && this.scene && this.camera) {
@@ -1055,6 +1061,11 @@ class VRMManager {
             // 获取浮动按钮容器
             const floatingButtons = document.getElementById('live2d-floating-buttons');
             if (!floatingButtons) {
+                return;
+            }
+
+            // 拖动时跳过更新，避免闪烁和不稳定
+            if (this.isDragging) {
                 return;
             }
 
@@ -1105,8 +1116,18 @@ class VRMManager {
                 maxY = Math.max(maxY, corner.y);
             });
 
+            // 验证边界框是否有效（防止 NaN 或 Infinity）
+            if (!Number.isFinite(minX) || !Number.isFinite(maxX) || 
+                !Number.isFinite(minY) || !Number.isFinite(maxY) ||
+                minX >= maxX || minY >= maxY) {
+                return; // 边界框无效，跳过更新
+            }
+
             // 计算模型实际高度（屏幕像素）
             const modelHeight = maxY - minY;
+            if (!Number.isFinite(modelHeight) || modelHeight <= 0) {
+                return; // 模型高度无效，跳过更新
+            }
 
             // 基准按钮尺寸和工具栏高度（用于计算缩放）
             const baseButtonSize = 48;
@@ -1123,13 +1144,10 @@ class VRMManager {
             const rawScale = targetToolbarHeight / baseToolbarHeight;
             const scale = Math.max(minScale, Math.min(maxScale, rawScale));
 
-            // 应用缩放到容器（使用 transform-origin: left top 确保从左上角缩放）
-            floatingButtons.style.transformOrigin = 'left top';
-            floatingButtons.style.transform = `scale(${scale})`;
-
-            // X轴：定位在角色右侧（与Live2D类似的横向位置）
+            // X轴：定位在角色右侧，确保始终在模型右边
             const screenWidth = window.innerWidth;
-            const targetX = maxX * 0.8 + minX * 0.2;
+            const buttonSpacing = 16 * scale; // 按钮与模型之间的间距（根据缩放调整）
+            const targetX = maxX + buttonSpacing; // 直接使用模型右边界 + 间距
 
             // Y轴：工具栏中心与模型中心对齐
             const modelCenterY = (minY + maxY) / 2;
@@ -1144,11 +1162,291 @@ class VRMManager {
             const maxYBound = screenHeight - actualToolbarHeight - 20; // 距离屏幕底部的最小距离
             const boundedY = Math.max(minYBound, Math.min(targetY, maxYBound));
 
-            floatingButtons.style.left = `${Math.min(targetX, screenWidth - 80 * scale)}px`;
-            floatingButtons.style.top = `${boundedY}px`;
+            // 确保不超出屏幕右边界
+            const buttonWidth = baseButtonSize * scale;
+            const finalX = Math.min(targetX, screenWidth - buttonWidth - 20);
+
+            // 验证最终位置是否有效
+            if (!Number.isFinite(finalX) || !Number.isFinite(boundedY) || !Number.isFinite(scale)) {
+                return; // 位置无效，跳过更新
+            }
+
+            // 位置缓存和阈值，防止闪烁
+            if (!this._lastButtonPosition) {
+                this._lastButtonPosition = { x: null, y: null, scale: null };
+            }
+            
+            // 拖动时使用更大的阈值，减少更新频率
+            const isDragging = this.isDragging;
+            const POSITION_THRESHOLD = isDragging ? 5 : 2; // 拖动时阈值更大
+            const SCALE_THRESHOLD = 0.01; // 缩放变化阈值，小于此值不更新
+
+            // 只有当位置或缩放变化超过阈值时才更新，防止闪烁
+            const shouldUpdate = 
+                this._lastButtonPosition.x === null || 
+                this._lastButtonPosition.y === null || 
+                this._lastButtonPosition.scale === null ||
+                Math.abs(finalX - this._lastButtonPosition.x) > POSITION_THRESHOLD ||
+                Math.abs(boundedY - this._lastButtonPosition.y) > POSITION_THRESHOLD ||
+                Math.abs(scale - this._lastButtonPosition.scale) > SCALE_THRESHOLD;
+
+            if (shouldUpdate) {
+                // 应用缩放到容器（使用 transform-origin: left top 确保从左上角缩放）
+                floatingButtons.style.transformOrigin = 'left top';
+                floatingButtons.style.transform = `scale(${scale})`;
+
+                floatingButtons.style.left = `${finalX}px`;
+                floatingButtons.style.top = `${boundedY}px`;
+
+                // 更新缓存
+                this._lastButtonPosition.x = finalX;
+                this._lastButtonPosition.y = boundedY;
+                this._lastButtonPosition.scale = scale;
+            }
         } catch (error) {
             // 忽略单帧异常，避免影响渲染循环
             // console.warn('[VRM] 更新浮动按钮位置失败:', error);
+        }
+    }
+
+    /**
+     * 确保锁图标存在（如果不存在则创建）
+     */
+    ensureLockIconExists() {
+        // 检查是否在主页面（有chat-container）
+        if (!document.getElementById('chat-container')) {
+            return;
+        }
+
+        // 如果锁图标已存在，直接返回
+        let lockIcon = document.getElementById('live2d-lock-icon');
+        if (lockIcon) {
+            return;
+        }
+
+        // 创建锁图标
+        lockIcon = document.createElement('div');
+        lockIcon.id = 'live2d-lock-icon';
+        Object.assign(lockIcon.style, {
+            position: 'fixed',
+            zIndex: '99999',
+            width: '32px',
+            height: '32px',
+            cursor: 'pointer',
+            userSelect: 'none',
+            pointerEvents: 'auto',
+            display: 'block'
+        });
+
+        // 添加版本号防止缓存
+        const iconVersion = '?v=' + Date.now();
+
+        // 创建图片容器
+        const imgContainer = document.createElement('div');
+        Object.assign(imgContainer.style, {
+            position: 'relative',
+            width: '32px',
+            height: '32px'
+        });
+
+        // 创建锁定状态图片
+        const imgLocked = document.createElement('img');
+        imgLocked.src = '/static/icons/locked_icon.png' + iconVersion;
+        imgLocked.alt = 'Locked';
+        Object.assign(imgLocked.style, {
+            position: 'absolute',
+            width: '32px',
+            height: '32px',
+            objectFit: 'contain',
+            pointerEvents: 'none',
+            opacity: '0',
+            transition: 'opacity 0.3s ease'
+        });
+
+        // 创建解锁状态图片
+        const imgUnlocked = document.createElement('img');
+        imgUnlocked.src = '/static/icons/unlocked_icon.png' + iconVersion;
+        imgUnlocked.alt = 'Unlocked';
+        Object.assign(imgUnlocked.style, {
+            position: 'absolute',
+            width: '32px',
+            height: '32px',
+            objectFit: 'contain',
+            pointerEvents: 'none',
+            opacity: '1',
+            transition: 'opacity 0.3s ease'
+        });
+
+        imgContainer.appendChild(imgLocked);
+        imgContainer.appendChild(imgUnlocked);
+        lockIcon.appendChild(imgContainer);
+        document.body.appendChild(lockIcon);
+
+        // 存储引用
+        this._lockIconElement = lockIcon;
+        this._lockIconImages = {
+            locked: imgLocked,
+            unlocked: imgUnlocked
+        };
+
+        // 添加点击事件
+        lockIcon.addEventListener('click', (e) => {
+            e.stopPropagation();
+            // 切换锁定状态
+            this.isLocked = !this.isLocked;
+            if (this._lockIconImages) {
+                const { locked: imgLocked, unlocked: imgUnlocked } = this._lockIconImages;
+                if (imgLocked) imgLocked.style.opacity = this.isLocked ? '1' : '0';
+                if (imgUnlocked) imgUnlocked.style.opacity = this.isLocked ? '0' : '1';
+            }
+            // 更新 VRM 容器的 pointerEvents
+            const vrmContainer = document.getElementById('vrm-container');
+            if (vrmContainer) {
+                vrmContainer.style.pointerEvents = this.isLocked ? 'none' : 'auto';
+            }
+        });
+
+        console.log('[VRM] 锁图标已创建');
+    }
+
+    /**
+     * 更新锁定图标位置，使其跟随VRM模型
+     */
+    updateLockIconPosition() {
+        try {
+            // 检查是否在主页面（有chat-container）
+            if (!document.getElementById('chat-container')) {
+                return;
+            }
+
+            // 确保锁图标存在
+            this.ensureLockIconExists();
+
+            // 获取锁定图标
+            const lockIcon = document.getElementById('live2d-lock-icon');
+            if (!lockIcon) {
+                return;
+            }
+
+            // 拖动时跳过更新，避免闪烁和不稳定
+            if (this.isDragging) {
+                return;
+            }
+
+            // 移动端固定位置，不随模型移动
+            const isMobile = window.innerWidth <= 768;
+            if (isMobile) {
+                return;
+            }
+
+            // 检查是否有VRM模型
+            if (!this.vrm || !this.vrm.scene || !this.camera || !this.renderer) {
+                return;
+            }
+
+            // 计算模型的边界框（使用世界坐标）
+            const box = new THREE.Box3().setFromObject(this.vrm.scene);
+            
+            // 获取边界框的8个顶点（局部坐标）
+            const localCorners = [
+                new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+                new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+                new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+                new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+                new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+                new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+                new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+                new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+            ];
+
+            // 将3D坐标转换为屏幕坐标
+            const screenCorners = localCorners.map(localCorner => {
+                // 转换为世界坐标
+                const worldPos = localCorner.clone();
+                this.vrm.scene.localToWorld(worldPos);
+                
+                // 投影到屏幕坐标（NDC坐标，范围-1到1）
+                const screenPos = worldPos.clone().project(this.camera);
+                
+                // 转换为像素坐标（屏幕坐标）
+                const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+                
+                return { x, y };
+            });
+
+            // 计算屏幕边界框
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            screenCorners.forEach(corner => {
+                minX = Math.min(minX, corner.x);
+                maxX = Math.max(maxX, corner.x);
+                minY = Math.min(minY, corner.y);
+                maxY = Math.max(maxY, corner.y);
+            });
+
+            // 验证边界框是否有效（防止 NaN 或 Infinity）
+            if (!Number.isFinite(minX) || !Number.isFinite(maxX) || 
+                !Number.isFinite(minY) || !Number.isFinite(maxY) ||
+                minX >= maxX || minY >= maxY) {
+                return; // 边界框无效，跳过更新
+            }
+
+            // 计算锁定图标位置：确保始终在模型右侧
+            const screenWidth = window.innerWidth;
+            const screenHeight = window.innerHeight;
+            const lockIconSize = 32; // 锁图标尺寸
+            const lockIconSpacing = 16; // 锁图标与模型之间的间距
+            
+            // X轴：定位在模型右侧，与菜单栏对齐
+            const targetX = maxX + lockIconSpacing;
+            
+            // Y轴：定位在模型顶部，如果顶部空间不够则放在模型内部顶部
+            let targetY = minY - lockIconSize - 8; // 在模型顶部上方
+            // 如果顶部空间不够（小于20px），则放在模型内部顶部
+            if (targetY < 20) {
+                targetY = minY + 8; // 放在模型内部顶部
+            }
+
+            // 确保不超出屏幕边界
+            const finalX = Math.min(targetX, screenWidth - lockIconSize - 20);
+            const finalY = Math.max(20, Math.min(targetY, screenHeight - lockIconSize - 20));
+            
+            // 确保锁图标可见
+            lockIcon.style.display = 'block';
+            lockIcon.style.visibility = 'visible';
+            lockIcon.style.opacity = '1';
+
+            // 验证最终位置是否有效
+            if (!Number.isFinite(finalX) || !Number.isFinite(finalY)) {
+                return; // 位置无效，跳过更新
+            }
+
+            // 位置缓存和阈值，防止闪烁
+            if (!this._lastLockIconPosition) {
+                this._lastLockIconPosition = { x: null, y: null };
+            }
+            // 使用更大的阈值以减少更新频率
+            const POSITION_THRESHOLD = 3; // 位置变化阈值（像素），小于此值不更新
+
+            // 只有当位置变化超过阈值时才更新，防止闪烁
+            const shouldUpdate = 
+                this._lastLockIconPosition.x === null || 
+                this._lastLockIconPosition.y === null ||
+                Math.abs(finalX - this._lastLockIconPosition.x) > POSITION_THRESHOLD ||
+                Math.abs(finalY - this._lastLockIconPosition.y) > POSITION_THRESHOLD;
+
+            if (shouldUpdate) {
+                lockIcon.style.left = `${finalX}px`;
+                lockIcon.style.top = `${finalY}px`;
+
+                // 更新缓存
+                this._lastLockIconPosition.x = finalX;
+                this._lastLockIconPosition.y = finalY;
+            }
+        } catch (error) {
+            // 忽略单帧异常，避免影响渲染循环
+            // console.warn('[VRM] 更新锁定图标位置失败:', error);
         }
     }
 

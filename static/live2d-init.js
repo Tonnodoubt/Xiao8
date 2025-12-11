@@ -21,6 +21,34 @@ async function initLive2DModel() {
         await window.pageConfigReady;
     }
     
+    // 检查是否需要根据角色配置加载模型（优先使用角色配置）
+    // 如果 loadModelBasedOnCharacterConfig 存在且会被调用，则跳过默认模型加载
+    if (typeof window.loadModelBasedOnCharacterConfig === 'function') {
+        // 等待更长时间，让 loadModelBasedOnCharacterConfig 有机会先执行
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        // 检查是否已经有模型被加载（通过角色配置）
+        const currentModel = window.live2dManager?.getCurrentModel();
+        if (currentModel) {
+            console.log('模型已通过角色配置加载，跳过默认模型初始化');
+            return;
+        }
+        
+        // 检查当前模型类型（如果是 VRM，不加载 Live2D）
+        const modelType = localStorage.getItem('modelType');
+        if (modelType === 'vrm') {
+            console.log('当前模型类型为 VRM，跳过 Live2D 初始化');
+            return;
+        }
+        
+        // 检查 Live2D 容器是否被隐藏（说明正在等待角色配置加载）
+        const live2dContainer = document.getElementById('live2d-container');
+        if (live2dContainer && (live2dContainer.style.display === 'none' || live2dContainer.style.visibility === 'hidden')) {
+            console.log('Live2D 容器已隐藏，等待角色配置加载，跳过默认模型初始化');
+            return;
+        }
+    }
+    
     // 获取模型路径
     const targetModelPath = (typeof cubism4Model !== 'undefined' ? cubism4Model : (window.cubism4Model || ''));
     
