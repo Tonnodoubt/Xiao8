@@ -12,8 +12,8 @@
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![Commit](https://img.shields.io/github/last-commit/wehos/N.E.K.O?color=green)]()
-[![百度云](https://custom-icon-badges.demolab.com/badge/百度云-Link-4169E1?style=flat&logo=baidunetdisk)](https://pan.baidu.com/s/1qb9XVV94c2FwhIeQO2De5A?pwd=kuro)
-[![QQ群](https://custom-icon-badges.demolab.com/badge/QQ群-1048307485-00BFFF?style=flat&logo=tencent-qq)](https://qm.qq.com/q/mxDoz0TnGg)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Us-5865F2?style=flat&logo=discord&logoColor=white)](https://discord.gg/5kgHfepNJr)
+[![QQ群](https://custom-icon-badges.demolab.com/badge/QQ群-1022939659-00BFFF?style=flat&logo=tencent-qq)](https://qm.qq.com/q/hN82yFONJQ)
 [![Steam](https://img.shields.io/badge/Steam-%23000000.svg?logo=steam&logoColor=white)](https://store.steampowered.com/app/4099310/__NEKO/)
 
 
@@ -84,6 +84,100 @@ QQ群：1022939659
 ## 快速开始
 
 对于*一键包用户*，直接运行`N.E.K.O.exe`即可启动。
+
+## 🐳 Docker部署
+
+### 1. 使用 docker-compose 部署 (目前唯一docker部署方案)
+
+#### docker-compose.yml （目前仅有amd64架构镜像）
+```yaml
+version: '3.8'
+
+services:
+  neko-main:
+    image: ghcr.io/project-n-e-k-o/n.e.k.o:latest
+    container_name: neko
+    restart: unless-stopped
+    ports:
+      #webui端口（默认48911）
+#      - "48911(服务器外部端口):80(N.E.K.O项目容器内部Nginx反代端口)"
+      - "48911:80"
+    environment:
+      # API Keys
+      - NEKO_CORE_API_KEY=${NEKO_CORE_API_KEY}
+      - NEKO_ASSIST_API_KEY_QWEN=${NEKO_ASSIST_API_KEY_QWEN:-}
+      - NEKO_ASSIST_API_KEY_OPENAI=${NEKO_ASSIST_API_KEY_OPENAI:-}
+      - NEKO_ASSIST_API_KEY_GLM=${NEKO_ASSIST_API_KEY_GLM:-}
+      - NEKO_ASSIST_API_KEY_STEP=${NEKO_ASSIST_API_KEY_STEP:-}
+      - NEKO_ASSIST_API_KEY_SILICON=${NEKO_ASSIST_API_KEY_SILICON:-}
+      - NEKO_MCP_TOKEN=${NEKO_MCP_TOKEN:-}
+
+      # API Providers
+      - NEKO_CORE_API=${NEKO_CORE_API:-qwen}
+      - NEKO_ASSIST_API=${NEKO_ASSIST_API:-qwen}
+
+      # Server Ports
+      - NEKO_MAIN_SERVER_PORT=48911
+      - NEKO_MEMORY_SERVER_PORT=48912
+      - NEKO_MONITOR_SERVER_PORT=48913
+      - NEKO_TOOL_SERVER_PORT=48915
+
+      # Models (Optional)
+      - NEKO_SUMMARY_MODEL=${NEKO_SUMMARY_MODEL:-qwen-plus}
+      - NEKO_CORRECTION_MODEL=${NEKO_CORRECTION_MODEL:-qwen-max}
+      - NEKO_EMOTION_MODEL=${NEKO_EMOTION_MODEL:-qwen-turbo}
+      - NEKO_VISION_MODEL=${NEKO_VISION_MODEL:-qwen3-vl-plus-2025-09-23}
+
+      # MCP
+      - NEKO_MCP_ROUTER_URL=${NEKO_MCP_ROUTER_URL:-http://localhost:3283}
+
+    volumes:
+      # 持久化配置
+      - ./N.E.K.O:/root/Documents/N.E.K.O
+      # 日志
+      - ./logs:/app/logs
+    
+    networks:
+      - neko-network
+
+networks:
+  neko-network:
+    driver: bridge
+```
+
+#### 核心 API 配置
+
+| 环境变量 | 说明 | 默认值 | 示例 |
+|---------|------|--------|------|
+| `NEKO_CORE_API_KEY` | 核心 API Key（必填） | - | `sk-xxxxx` |
+| `NEKO_CORE_API` | 核心 API 提供商 | `qwen` | `qwen`, `openai`, `glm`, `step`, `free` |
+| `NEKO_ASSIST_API` | 辅助 API 提供商 | `qwen` | `qwen`, `openai`, `glm`, `step`, `silicon` |
+| `NEKO_ASSIST_API_KEY_QWEN` | 阿里云 API Key | - | `sk-xxxxx` |
+| `NEKO_ASSIST_API_KEY_OPENAI` | OpenAI API Key | - | `sk-xxxxx` |
+| `NEKO_ASSIST_API_KEY_GLM` | 智谱 API Key | - | `xxxxx` |
+| `NEKO_ASSIST_API_KEY_STEP` | 阶跃星辰 API Key | - | `xxxxx` |
+| `NEKO_ASSIST_API_KEY_SILICON` | 硅基流动 API Key | - | `xxxxx` |
+| `NEKO_MCP_TOKEN` | MCP Router Token | - | `xxxxx` |
+
+#### 服务器端口配置（不要更改！！！）
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `NEKO_MAIN_SERVER_PORT` | 主服务器端口 | `48911` |
+| `NEKO_MEMORY_SERVER_PORT` | 记忆服务器端口 | `48912` |
+| `NEKO_MONITOR_SERVER_PORT` | 监控服务器端口 | `48913` |
+| `NEKO_TOOL_SERVER_PORT` | 工具服务器端口 | `48915` |
+
+#### 模型配置（高级）
+
+| 环境变量 | 说明 | 默认值 |
+|---------|------|--------|
+| `NEKO_SUMMARY_MODEL` | 摘要模型 | `qwen-plus` |
+| `NEKO_CORRECTION_MODEL` | 纠错模型 | `qwen-max` |
+| `NEKO_EMOTION_MODEL` | 情感分析模型 | `qwen-turbo` |
+| `NEKO_VISION_MODEL` | 视觉模型 | `qwen3-vl-plus-2025-09-23` |
+
+**注：** 目前docker部署方案由 *倒霉蛋HINS* 提供
 
 ## 进阶使用
 

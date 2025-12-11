@@ -201,7 +201,7 @@ class LLMSessionManager:
     async def handle_response_complete(self):
         """Qwen完成回调：用于处理Core API的响应完成事件，包含TTS和热切换逻辑"""
         if self.use_tts and self.tts_process and self.tts_process.is_alive():
-            print("Response complete")
+            logger.info("📨 Response complete (LLM 回复结束)")
             try:
                 self.tts_request_queue.put((None, None))
             except Exception as e:
@@ -646,9 +646,18 @@ class LLMSessionManager:
             """异步创建并连接 LLM Session"""
             # 获取初始 prompt
             initial_prompt = (f"你是一个角色扮演大师，并且精通电脑操作。请按要求扮演以下角色（{self.lanlan_name}），并在对方请求时、回答'我试试'并尝试操纵电脑。" if self._is_agent_enabled() else f"你是一个角色扮演大师。请按要求扮演以下角色（{self.lanlan_name}）。") + self.lanlan_prompt
-            async with httpx.AsyncClient() as client:
-                resp = await client.get(f"http://localhost:{self.memory_server_port}/new_dialog/{self.lanlan_name}")
-                initial_prompt += resp.text
+            
+            # 连接 Memory Server 获取记忆上下文
+            try:
+                async with httpx.AsyncClient(timeout=2.0) as client:
+                    resp = await client.get(f"http://localhost:{self.memory_server_port}/new_dialog/{self.lanlan_name}")
+                    initial_prompt += resp.text
+            except httpx.ConnectError:
+                raise ConnectionError(f"❌ 记忆服务未启动！请先启动记忆服务 (端口 {self.memory_server_port})")
+            except httpx.TimeoutException:
+                raise ConnectionError(f"❌ 记忆服务响应超时！请检查记忆服务是否正常运行 (端口 {self.memory_server_port})")
+            except Exception as e:
+                raise ConnectionError(f"❌ 记忆服务连接失败: {e} (端口 {self.memory_server_port})")
             
             logger.info(f"🤖 开始创建 LLM Session (input_mode={input_mode})")
             
@@ -787,31 +796,44 @@ class LLMSessionManager:
             self.session_start_failure_count += 1
             self.session_start_last_failure_time = datetime.now()
             
-            error_message = f"Error starting session: {e}"
-            logger.error(f"💥 {error_message} (失败次数: {self.session_start_failure_count})")
-            
-            # 如果达到最大失败次数，发送严重警告并通知前端
-            if self.session_start_failure_count >= self.session_start_max_failures:
-                critical_message = f"⛔ Session启动连续失败{self.session_start_failure_count}次，已停止自动重试。请检查网络连接和API配置，然后刷新页面重试。"
-                logger.critical(critical_message)
-                await self.send_status(critical_message)
-            else:
-                await self.send_status(f"{error_message} (失败{self.session_start_failure_count}次)")
-            
-            # 检查是否是memory_server连接错误（端口48912）
             error_str = str(e)
-            if 'WinError 10061' in error_str or 'WinError 10054' in error_str:
-                # 检查端口号是否为48912
-                if str(self.memory_server_port) in error_str or '48912' in error_str:
-                    await self.send_status(f"💥 记忆服务器(端口{self.memory_server_port})已崩溃。请检查API设置是否正确。")
-                else:
-                    await self.send_status("💥 服务器连接被拒绝。请检查API Key和网络连接。")
-            elif '401' in error_str:
-                await self.send_status("💥 API Key被服务器拒绝。请检查API Key是否与所选模型匹配。")
-            elif '429' in error_str:
-                await self.send_status("💥 API请求频率过高，请稍后再试。")
+            
+            # 🔴 优先检查 Memory Server 错误（最常见的启动问题）
+            is_memory_server_error = isinstance(e, ConnectionError) and "Memory Server" in error_str
+            
+            if is_memory_server_error:
+                # Memory Server 错误使用专门的日志格式
+                logger.error(f"🧠 {error_str}")
+                await self.send_status(f"🧠 记忆服务器未启动！请先运行 memory_server.py")
+                # Memory Server 错误不计入失败次数（因为这是配置问题而非网络问题）
+                self.session_start_failure_count -= 1
             else:
-                await self.send_status(f"💥 连接异常关闭: {error_str}")
+                error_message = f"Error starting session: {e}"
+                logger.exception(f"💥 {error_message} (失败次数: {self.session_start_failure_count})")
+                
+                # 如果达到最大失败次数，发送严重警告并通知前端
+                if self.session_start_failure_count >= self.session_start_max_failures:
+                    critical_message = f"⛔ Session启动连续失败{self.session_start_failure_count}次，已停止自动重试。请检查网络连接和API配置，然后刷新页面重试。"
+                    logger.critical(critical_message)
+                    await self.send_status(critical_message)
+                else:
+                    await self.send_status(f"{error_message} (失败{self.session_start_failure_count}次)")
+                
+                # 检查其他类型的连接错误
+                if 'WinError 10061' in error_str or 'WinError 10054' in error_str:
+                    # 检查端口号是否为memory_server端口
+                    if str(self.memory_server_port) in error_str or '48912' in error_str:
+                        await self.send_status(f"🧠 记忆服务器(端口{self.memory_server_port})已崩溃。请重启 memory_server.py")
+                    else:
+                        await self.send_status("💥 服务器连接被拒绝。请检查API Key和网络连接。")
+                elif '401' in error_str:
+                    await self.send_status("💥 API Key被服务器拒绝。请检查API Key是否与所选模型匹配。")
+                elif '429' in error_str:
+                    await self.send_status("💥 API请求频率过高，请稍后再试。")
+                elif 'All connection attempts failed' in error_str:
+                    await self.send_status("💥 LLM API 连接失败。请检查网络连接和API配置。")
+                else:
+                    await self.send_status(f"💥 连接异常关闭: {error_str}")
             
             await self.cleanup()
         
@@ -867,21 +889,39 @@ class LLMSessionManager:
             
             logger.info(f"🔄 热切换准备: 已重新加载配置, voice_id={self.voice_id}")
             
-            # 创建新的pending session
-            self.pending_session = OmniRealtimeClient(
-                base_url=self.core_url,
-                api_key=self.core_api_key,
-                model=self.model,
-                on_text_delta=self.handle_text_data,
-                on_audio_delta=self.handle_audio_data,
-                on_new_message=self.handle_new_message,
-                on_input_transcript=self.handle_input_transcript,
-                on_output_transcript=self.handle_output_transcript,
-                on_connection_error=self.handle_connection_error,
-                on_response_done=self.handle_response_complete,
-                on_status_message=self.send_status,
-                api_type=self.core_api_type  # 传入API类型，用于判断是否启用静默超时
-            )
+            # 根据input_mode创建对应类型的pending session
+            if self.input_mode == 'text':
+                # 文本模式：使用 OmniOfflineClient
+                self.pending_session = OmniOfflineClient(
+                    base_url=self.openrouter_url,
+                    api_key=self.openrouter_api_key,
+                    model=self.text_model,
+                    vision_model=self.vision_model,
+                    on_text_delta=self.handle_text_data,
+                    on_input_transcript=self.handle_input_transcript,
+                    on_output_transcript=self.handle_output_transcript,
+                    on_connection_error=self.handle_connection_error,
+                    on_response_done=self.handle_response_complete
+                )
+                logger.info(f"🔄 热切换准备: 创建文本模式 OmniOfflineClient")
+            else:
+                # 语音模式：使用 OmniRealtimeClient
+                self.pending_session = OmniRealtimeClient(
+                    base_url=self.core_url,
+                    api_key=self.core_api_key,
+                    model=self.model,
+                    on_text_delta=self.handle_text_data,
+                    on_audio_delta=self.handle_audio_data,
+                    on_new_message=self.handle_new_message,
+                    on_input_transcript=self.handle_input_transcript,
+                    on_output_transcript=self.handle_output_transcript,
+                    on_connection_error=self.handle_connection_error,
+                    on_response_done=self.handle_response_complete,
+                    on_silence_timeout=self.handle_silence_timeout,
+                    on_status_message=self.send_status,
+                    api_type=self.core_api_type  # 传入API类型，用于判断是否启用静默超时
+                )
+                logger.info(f"🔄 热切换准备: 创建语音模式 OmniRealtimeClient")
             
             initial_prompt = (f"你是一个角色扮演大师，并且精通电脑操作。请按要求扮演以下角色（{self.lanlan_name}），在对方请求时、回答“我试试”并尝试操纵电脑。" if self._is_agent_enabled() else f"你是一个角色扮演大师。请按要求扮演以下角色（{self.lanlan_name}）。") + self.lanlan_prompt
             self.initial_cache_snapshot_len = len(self.message_cache_for_new_session)
@@ -1060,13 +1100,28 @@ class LLMSessionManager:
         # 检查session是否就绪
         async with self.input_cache_lock:
             if not self.session_ready:
-                # Session未就绪，缓存输入数据
-                self.pending_input_data.append(message)
-                if len(self.pending_input_data) == 1:
-                    logger.info(f"Session未就绪，开始缓存输入数据...")
-                else:
-                    logger.debug(f"继续缓存输入数据 (总计: {len(self.pending_input_data)} 条)...")
-                return
+                # 检查是否正在启动session - 只有在启动过程中才缓存
+                if self.is_starting_session:
+                    # Session正在启动中，缓存输入数据
+                    self.pending_input_data.append(message)
+                    if len(self.pending_input_data) == 1:
+                        logger.info(f"Session正在启动中，开始缓存输入数据...")
+                    else:
+                        logger.debug(f"继续缓存输入数据 (总计: {len(self.pending_input_data)} 条)...")
+                    return
+        
+        # 在锁外检查是否需要创建新session（不要在锁内创建session，避免死锁）
+        if not self.session_ready and not self.is_starting_session:
+            if not self.session or not self.is_active:
+                logger.info(f"Session未就绪且不存在，根据输入类型 {input_type} 自动创建 session")
+                # 根据输入类型确定模式
+                mode = 'text' if input_type == 'text' else 'audio'
+                await self.start_session(self.websocket, new=False, input_mode=mode)
+                
+                # 检查启动是否成功
+                if not self.session or not self.is_active:
+                    logger.warning(f"⚠️ Session启动失败，放弃本次数据流")
+                    return
         
         # Session已就绪，直接处理
         await self._process_stream_data_internal(message)

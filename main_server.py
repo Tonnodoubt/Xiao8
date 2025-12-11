@@ -442,8 +442,11 @@ async def save_preferences(request: Request):
         if not validate_model_preferences(data):
             return {"success": False, "error": "偏好数据格式无效"}
         
+        # 获取参数（可选）
+        parameters = data.get('parameters')
+        
         # 更新偏好
-        if update_model_preferences(data['model_path'], data['position'], data['scale']):
+        if update_model_preferences(data['model_path'], data['position'], data['scale'], parameters):
             return {"success": True, "message": "偏好设置已保存"}
         else:
             return {"success": False, "error": "保存失败"}
@@ -703,6 +706,8 @@ async def get_core_config_api():
             # 如果文件不存在，返回当前配置中的CORE_API_KEY
             core_config = _config_manager.get_core_config()
             api_key = core_config['CORE_API_KEY']
+            # 创建空的配置对象用于返回默认值
+            core_cfg = {}
         
         return {
             "api_key": api_key,
@@ -715,6 +720,31 @@ async def get_core_config_api():
             "assistApiKeySilicon": core_cfg.get('assistApiKeySilicon', ''),
             "mcpToken": core_cfg.get('mcpToken', ''),  # 添加mcpToken字段
             "enableCustomApi": core_cfg.get('enableCustomApi', False),  # 添加enableCustomApi字段
+            # 自定义API相关字段
+            "summaryModelProvider": core_cfg.get('summaryModelProvider', ''),
+            "summaryModelUrl": core_cfg.get('summaryModelUrl', ''),
+            "summaryModelId": core_cfg.get('summaryModelId', ''),
+            "summaryModelApiKey": core_cfg.get('summaryModelApiKey', ''),
+            "correctionModelProvider": core_cfg.get('correctionModelProvider', ''),
+            "correctionModelUrl": core_cfg.get('correctionModelUrl', ''),
+            "correctionModelId": core_cfg.get('correctionModelId', ''),
+            "correctionModelApiKey": core_cfg.get('correctionModelApiKey', ''),
+            "emotionModelProvider": core_cfg.get('emotionModelProvider', ''),
+            "emotionModelUrl": core_cfg.get('emotionModelUrl', ''),
+            "emotionModelId": core_cfg.get('emotionModelId', ''),
+            "emotionModelApiKey": core_cfg.get('emotionModelApiKey', ''),
+            "visionModelProvider": core_cfg.get('visionModelProvider', ''),
+            "visionModelUrl": core_cfg.get('visionModelUrl', ''),
+            "visionModelId": core_cfg.get('visionModelId', ''),
+            "visionModelApiKey": core_cfg.get('visionModelApiKey', ''),
+            "omniModelProvider": core_cfg.get('omniModelProvider', ''),
+            "omniModelUrl": core_cfg.get('omniModelUrl', ''),
+            "omniModelId": core_cfg.get('omniModelId', ''),
+            "omniModelApiKey": core_cfg.get('omniModelApiKey', ''),
+            "ttsModelProvider": core_cfg.get('ttsModelProvider', ''),
+            "ttsModelUrl": core_cfg.get('ttsModelUrl', ''),
+            "ttsModelId": core_cfg.get('ttsModelId', ''),
+            "ttsModelApiKey": core_cfg.get('ttsModelApiKey', ''),
             "success": True
         }
     except Exception as e:
@@ -831,36 +861,48 @@ async def update_core_config(request: Request):
             core_cfg['summaryModelProvider'] = data['summaryModelProvider']
         if 'summaryModelUrl' in data:
             core_cfg['summaryModelUrl'] = data['summaryModelUrl']
+        if 'summaryModelId' in data:
+            core_cfg['summaryModelId'] = data['summaryModelId']
         if 'summaryModelApiKey' in data:
             core_cfg['summaryModelApiKey'] = data['summaryModelApiKey']
         if 'correctionModelProvider' in data:
             core_cfg['correctionModelProvider'] = data['correctionModelProvider']
         if 'correctionModelUrl' in data:
             core_cfg['correctionModelUrl'] = data['correctionModelUrl']
+        if 'correctionModelId' in data:
+            core_cfg['correctionModelId'] = data['correctionModelId']
         if 'correctionModelApiKey' in data:
             core_cfg['correctionModelApiKey'] = data['correctionModelApiKey']
         if 'emotionModelProvider' in data:
             core_cfg['emotionModelProvider'] = data['emotionModelProvider']
         if 'emotionModelUrl' in data:
             core_cfg['emotionModelUrl'] = data['emotionModelUrl']
+        if 'emotionModelId' in data:
+            core_cfg['emotionModelId'] = data['emotionModelId']
         if 'emotionModelApiKey' in data:
             core_cfg['emotionModelApiKey'] = data['emotionModelApiKey']
         if 'visionModelProvider' in data:
             core_cfg['visionModelProvider'] = data['visionModelProvider']
         if 'visionModelUrl' in data:
             core_cfg['visionModelUrl'] = data['visionModelUrl']
+        if 'visionModelId' in data:
+            core_cfg['visionModelId'] = data['visionModelId']
         if 'visionModelApiKey' in data:
             core_cfg['visionModelApiKey'] = data['visionModelApiKey']
         if 'omniModelProvider' in data:
             core_cfg['omniModelProvider'] = data['omniModelProvider']
         if 'omniModelUrl' in data:
             core_cfg['omniModelUrl'] = data['omniModelUrl']
+        if 'omniModelId' in data:
+            core_cfg['omniModelId'] = data['omniModelId']
         if 'omniModelApiKey' in data:
             core_cfg['omniModelApiKey'] = data['omniModelApiKey']
         if 'ttsModelProvider' in data:
             core_cfg['ttsModelProvider'] = data['ttsModelProvider']
         if 'ttsModelUrl' in data:
             core_cfg['ttsModelUrl'] = data['ttsModelUrl']
+        if 'ttsModelId' in data:
+            core_cfg['ttsModelId'] = data['ttsModelId']
         if 'ttsModelApiKey' in data:
             core_cfg['ttsModelApiKey'] = data['ttsModelApiKey']
         
@@ -1353,6 +1395,13 @@ async def proactive_chat(request: Request):
 async def get_l2d_manager(request: Request):
     """渲染Live2D模型管理器页面"""
     return templates.TemplateResponse("templates/l2d_manager.html", {
+        "request": request
+    })
+
+@app.get("/live2d_parameter_editor", response_class=HTMLResponse)
+async def live2d_parameter_editor(request: Request):
+    """Live2D参数编辑器页面"""
+    return templates.TemplateResponse("templates/live2d_parameter_editor.html", {
         "request": request
     })
 
@@ -2210,6 +2259,30 @@ async def get_current_catgirl():
     characters = _config_manager.load_characters()
     current_catgirl = characters.get('当前猫娘', '')
     return JSONResponse(content={'current_catgirl': current_catgirl})
+
+@app.get('/api/characters/catgirl/{name}/voice_mode_status')
+async def get_catgirl_voice_mode_status(name: str):
+    """检查指定角色是否在语音模式下"""
+    characters = _config_manager.load_characters()
+    is_current = characters.get('当前猫娘') == name
+    
+    if name not in session_manager:
+        return JSONResponse({'is_voice_mode': False, 'is_current': is_current, 'is_active': False})
+    
+    mgr = session_manager[name]
+    is_active = mgr.is_active if mgr else False
+    
+    is_voice_mode = False
+    if is_active and mgr:
+        # 检查是否是语音模式（通过session类型判断）
+        from main_helper.omni_realtime_client import OmniRealtimeClient
+        is_voice_mode = mgr.session and isinstance(mgr.session, OmniRealtimeClient)
+    
+    return JSONResponse({
+        'is_voice_mode': is_voice_mode,
+        'is_current': is_current,
+        'is_active': is_active
+    })
 
 @app.post('/api/characters/current_catgirl')
 async def set_current_catgirl(request: Request):
@@ -3095,6 +3168,20 @@ async def rename_catgirl(old_name: str, request: Request):
     # 如果当前猫娘是被重命名的猫娘，需要先保存WebSocket连接并发送通知
     # 必须在 initialize_character_data() 之前发送，因为那个函数会删除旧的 session_manager 条目
     is_current_catgirl = characters.get('当前猫娘') == old_name
+    
+    # 检查当前角色是否有活跃的语音session
+    if is_current_catgirl and old_name in session_manager:
+        mgr = session_manager[old_name]
+        if mgr.is_active:
+            # 检查是否是语音模式（通过session类型判断）
+            from main_helper.omni_realtime_client import OmniRealtimeClient
+            is_voice_mode = mgr.session and isinstance(mgr.session, OmniRealtimeClient)
+            
+            if is_voice_mode:
+                return JSONResponse({
+                    'success': False, 
+                    'error': '语音状态下无法修改角色名称，请先停止语音对话后再修改'
+                }, status_code=400)
     if is_current_catgirl:
         logger.info(f"开始通知WebSocket客户端：猫娘从 {old_name} 重命名为 {new_name}")
         message = json.dumps({
@@ -3358,6 +3445,116 @@ async def get_model_files(model_name: str):
     except Exception as e:
         logger.error(f"获取模型文件列表失败: {e}")
         return {"success": False, "error": str(e)}
+
+@app.get('/api/live2d/model_parameters/{model_name}')
+async def get_model_parameters(model_name: str):
+    """获取指定Live2D模型的参数信息（从.cdi3.json文件）"""
+    try:
+        # 查找模型目录
+        model_dir, url_prefix = find_model_directory(model_name)
+        
+        if not os.path.exists(model_dir):
+            return {"success": False, "error": f"模型 {model_name} 不存在"}
+        
+        # 查找.cdi3.json文件
+        cdi3_file = None
+        for file in os.listdir(model_dir):
+            if file.endswith('.cdi3.json'):
+                cdi3_file = os.path.join(model_dir, file)
+                break
+        
+        if not cdi3_file or not os.path.exists(cdi3_file):
+            return {"success": False, "error": "未找到.cdi3.json文件"}
+        
+        # 读取.cdi3.json文件
+        with open(cdi3_file, 'r', encoding='utf-8') as f:
+            cdi3_data = json.load(f)
+        
+        # 提取参数信息
+        parameters = []
+        if 'Parameters' in cdi3_data and isinstance(cdi3_data['Parameters'], list):
+            for param in cdi3_data['Parameters']:
+                if isinstance(param, dict) and 'Id' in param:
+                    parameters.append({
+                        'id': param.get('Id'),
+                        'groupId': param.get('GroupId', ''),
+                        'name': param.get('Name', param.get('Id'))
+                    })
+        
+        # 提取参数组信息
+        parameter_groups = {}
+        if 'ParameterGroups' in cdi3_data and isinstance(cdi3_data['ParameterGroups'], list):
+            for group in cdi3_data['ParameterGroups']:
+                if isinstance(group, dict) and 'Id' in group:
+                    parameter_groups[group.get('Id')] = {
+                        'id': group.get('Id'),
+                        'name': group.get('Name', group.get('Id'))
+                    }
+        
+        return {
+            "success": True,
+            "parameters": parameters,
+            "parameter_groups": parameter_groups
+        }
+    except Exception as e:
+        logger.error(f"获取模型参数信息失败: {e}")
+        return {"success": False, "error": str(e)}
+
+@app.post('/api/live2d/save_model_parameters/{model_name}')
+async def save_model_parameters(model_name: str, request: Request):
+    """保存模型参数到模型目录的parameters.json文件"""
+    try:
+        # 查找模型目录
+        model_dir, url_prefix = find_model_directory(model_name)
+        
+        if not os.path.exists(model_dir):
+            return JSONResponse(status_code=404, content={"success": False, "error": f"模型 {model_name} 不存在"})
+        
+        # 获取请求体中的参数
+        body = await request.json()
+        parameters = body.get('parameters', {})
+        
+        if not isinstance(parameters, dict):
+            return JSONResponse(status_code=400, content={"success": False, "error": "参数格式错误"})
+        
+        # 保存到parameters.json文件
+        parameters_file = os.path.join(model_dir, 'parameters.json')
+        with open(parameters_file, 'w', encoding='utf-8') as f:
+            json.dump(parameters, f, indent=2, ensure_ascii=False)
+        
+        logger.info(f"已保存模型参数到: {parameters_file}, 参数数量: {len(parameters)}")
+        return {"success": True, "message": "参数保存成功"}
+    except Exception as e:
+        logger.error(f"保存模型参数失败: {e}")
+        return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
+
+@app.get('/api/live2d/load_model_parameters/{model_name}')
+async def load_model_parameters(model_name: str):
+    """从模型目录的parameters.json文件加载参数"""
+    try:
+        # 查找模型目录
+        model_dir, url_prefix = find_model_directory(model_name)
+        
+        if not os.path.exists(model_dir):
+            return {"success": False, "error": f"模型 {model_name} 不存在"}
+        
+        # 读取parameters.json文件
+        parameters_file = os.path.join(model_dir, 'parameters.json')
+        
+        if not os.path.exists(parameters_file):
+            return {"success": True, "parameters": {}}  # 文件不存在时返回空参数
+        
+        with open(parameters_file, 'r', encoding='utf-8') as f:
+            parameters = json.load(f)
+        
+        if not isinstance(parameters, dict):
+            return {"success": True, "parameters": {}}
+        
+        logger.info(f"已加载模型参数从: {parameters_file}, 参数数量: {len(parameters)}")
+        return {"success": True, "parameters": parameters}
+    except Exception as e:
+        logger.error(f"加载模型参数失败: {e}")
+        return {"success": False, "error": str(e), "parameters": {}}
 
 @app.get("/api/live2d/model_config_by_id/{model_id}")
 async def get_model_config(model_id: str):
@@ -5617,7 +5814,7 @@ if __name__ == "__main__":
     # 1) 配置 UVicorn
     config = uvicorn.Config(
         app=app,
-        host="0.0.0.0",
+        host="127.0.0.1",
         port=MAIN_SERVER_PORT,
         log_level="info",
         loop="asyncio",

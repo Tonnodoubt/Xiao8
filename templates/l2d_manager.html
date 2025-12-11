@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <meta charset="UTF-8">
@@ -11,28 +12,41 @@
     <style>
         *:focus {
             outline: none !important;
-            box-shadow: none !important; 
+            box-shadow: none !important;
         }
-        html, body {
-            height: 100%; margin: 0; padding: 0; background: #eee; color: #222;
-            font-family: 'Segoe UI', Arial, sans-serif; overflow: hidden;
-        }
-        #live2d-container {
-            position: fixed; right: 0px; bottom: 0px; width: 100%; height: 100%;
-            z-index: 10; pointer-events: auto;
-        }
-        #live2d-canvas {
-            display: block; width: 100%; height: 100%; background: transparent;
-            cursor: grab; pointer-events: auto;
-        }
-        #live2d-canvas:active { cursor: grabbing; }
 
-        #vrm-container {
-            position: fixed; right: 0px; bottom: 0px; width: 100%; height: 100%;
-            z-index: 10; pointer-events: auto;
+        html,
+        body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background: #eee;
+            color: #222;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            overflow: hidden;
         }
-        .hidden {
-            display: none !important;
+
+        #live2d-container {
+            position: fixed;
+            right: 0px;
+            bottom: 0px;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: auto;
+        }
+
+        #live2d-canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: transparent;
+            cursor: grab;
+            pointer-events: auto;
+        }
+
+        #live2d-canvas:active {
+            cursor: grabbing;
         }
 
         #sidebar {
@@ -43,22 +57,33 @@
             flex-direction: column;
             gap: 15px;
             z-index: 20;
-            min-width: 280px;
+            width: 300px;
+            max-width: calc(100vw - 40px);
+            max-height: calc(100vh - 40px);
             padding: 20px;
             background: #fff;
             border-radius: 12px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            overflow-y: auto;
+            overflow-x: hidden;
+            box-sizing: border-box;
         }
+
         .control-group {
             display: flex;
             flex-direction: column;
             gap: 8px;
+            width: 100%;
+            min-width: 0;
+            box-sizing: border-box;
         }
+
         .control-label {
             font-weight: 600;
             color: #333;
             font-size: 14px;
         }
+
         .control-select {
             padding: 10px 15px;
             border-radius: 8px;
@@ -75,7 +100,7 @@
             background-position: right 12px center;
             padding-right: 35px;
         }
-        
+
         .btn {
             padding: 10px 15px;
             border-radius: 8px;
@@ -85,47 +110,65 @@
             color: white;
             transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
             text-align: center;
+            width: 100%;
+            box-sizing: border-box;
+            max-width: 100%;
         }
+
         .btn:hover:not(:disabled) {
             transform: translateY(-1px);
-            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
         }
+
         .btn:disabled {
             background: #e0e0e0;
             cursor: not-allowed;
             opacity: 0.7;
         }
-        .btn-primary { background: #44b7fe; }
-        .btn-primary:hover:not(:disabled) { background: #2662c8; }
-        
-        .btn-secondary { 
-            background: #d5f1ff; 
-            color: #333;
+
+        .btn-primary {
+            background: #44b7fe;
         }
-        .btn-secondary:hover:not(:disabled) { 
-            background: #b8e5ff; 
+
+        .btn-primary:hover:not(:disabled) {
+            background: #2662c8;
+        }
+
+        .btn-secondary {
+            background: #d5f1ff;
             color: #333;
         }
 
-        .btn-success { background: #44b7fe; }
-        .btn-success:hover:not(:disabled) { background: #2662c8; }
-        
+        .btn-secondary:hover:not(:disabled) {
+            background: #b8e5ff;
+            color: #333;
+        }
+
+        .btn-success {
+            background: #44b7fe;
+        }
+
+        .btn-success:hover:not(:disabled) {
+            background: #2662c8;
+        }
+
         #save-position-btn {
             background: #d5f1ff !important;
             color: #333 !important;
         }
+
         #save-position-btn:hover:not(:disabled) {
             background: #b8e5ff !important;
             color: #333 !important;
         }
-        
+
         .btn-icon {
             display: flex;
             align-items: center;
             justify-content: center;
             gap: 6px;
         }
-        
+
         .btn-icon img {
             width: 16px;
             height: 16px;
@@ -136,9 +179,11 @@
             display: flex;
             gap: 10px;
         }
+
         .action-group .control-select {
             flex-grow: 1;
         }
+
         #persistent-list {
             margin-top: 6px;
             max-height: 120px;
@@ -148,7 +193,7 @@
             padding: 6px;
             background: #fff;
         }
-        
+
         #status {
             margin-top: 10px;
             color: #4f8cff;
@@ -159,181 +204,108 @@
         }
     </style>
 </head>
+
 <body>
 
-<div id="sidebar">
-    <div class="control-group">
-        <button id="backToMainBtn" class="btn btn-primary" data-i18n="live2d.backToMain">← 返回主页</button>
-    </div>
-    
-    <div class="control-group">
-        <label class="control-label" data-i18n="live2d.importModel">导入模型:</label>
-        <input type="file" id="model-upload" webkitdirectory directory multiple style="display: none;">
-        <button id="upload-btn" class="btn btn-primary" data-i18n="live2d.selectFolder">📁 选择文件夹</button>
-        <div id="upload-status" style="font-size:12px; color:#666; margin-top:4px;"></div>
-    </div>
-    
-    <div class="control-group">
-        <label for="model-type-select" class="control-label" data-i18n="live2d.modelType">模型类型:</label>
-        <select id="model-type-select" class="control-select">
-            <option value="live2d">Live2D</option>
-            <option value="vrm">VRM</option>
-        </select>
-    </div>
+    <div id="sidebar">
+        <div class="control-group">
+            <button id="backToMainBtn" class="btn btn-primary" data-i18n="live2d.backToMain">← 返回主页</button>
+        </div>
 
-    <div class="control-group" id="live2d-model-group">
-        <label for="model-select" class="control-label" id="live2d-model-label" data-i18n="live2d.selectLive2DModel">选择Live2D模型:</label>
-        <select id="model-select" class="control-select">
-            <option data-i18n="common.loading">加载中...</option>
-        </select>
-    </div>
+        <div class="control-group">
+            <label class="control-label" data-i18n="live2d.importModel">导入模型:</label>
+            <input type="file" id="model-upload" webkitdirectory directory multiple style="display: none;">
+            <button id="upload-btn" class="btn btn-primary" data-i18n="live2d.selectFolder">📁 选择文件夹</button>
+            <div id="upload-status" style="font-size:12px; color:#666; margin-top:4px;"></div>
+        </div>
 
-    <div class="control-group" id="vrm-model-group" style="display:none;">
-        <label for="vrm-model-select" class="control-label" id="vrm-model-label" data-i18n="live2d.selectVRMModel">选择VRM模型:</label>
-        <select id="vrm-model-select" class="control-select">
-            <option data-i18n="common.loading">加载中...</option>
-        </select>
-    </div>
-
-    <div class="control-group">
-        <label class="control-label" data-i18n="live2d.motionPreview">动作预览:</label>
-        <div class="action-group">
-            <select id="motion-select" class="control-select" disabled>
-                <option data-i18n="live2d.pleaseLoadModel">请先加载模型</option>
+        <div class="control-group">
+            <label for="model-select" class="control-label" data-i18n="live2d.selectModel">选择模型:</label>
+            <select id="model-select" class="control-select">
+                <option data-i18n="common.loading">加载中...</option>
             </select>
-            <button id="play-motion-btn" class="btn btn-primary btn-icon" disabled>
-                <img src="/static/icons/play_icon.png" alt="播放" data-i18n-alt="live2d.play">
-                <span data-i18n="live2d.play">播放</span>
-            </button>
         </div>
-    </div>
-    
-    <div class="control-group">
-        <label class="control-label" data-i18n="live2d.expressionPreview">表情预览:</label>
-        <div class="action-group">
-            <select id="expression-select" class="control-select" disabled>
-                <option data-i18n="live2d.pleaseLoadModel">请先加载模型</option>
-            </select>
-            <button id="play-expression-btn" class="btn btn-primary btn-icon" disabled>
-                <img src="/static/icons/play_icon.png" alt="播放" data-i18n-alt="live2d.play">
-                <span data-i18n="live2d.play">播放</span>
-            </button>
-        </div>
-    </div>
 
-    <div class="control-group" id="vrm-animation-group" style="display: none;">
-        <label class="control-label">VRM 动画预览 (VRMA/VMD):</label>
-        <div class="action-group">
-            <select id="vrma-animation-select" class="control-select" disabled>
-                <option value="">加载中...</option>
-            </select>
-            <button id="play-vrma-animation-btn" class="btn btn-primary btn-icon" disabled>
-                <img src="/static/icons/play_icon.png" alt="播放" data-i18n-alt="live2d.play">
-                <span data-i18n="live2d.play">播放</span>
-            </button>
+        <div class="control-group">
+            <label class="control-label" data-i18n="live2d.motionPreview">动作预览:</label>
+            <div class="action-group">
+                <select id="motion-select" class="control-select" disabled>
+                    <option data-i18n="live2d.pleaseLoadModel">请先加载模型</option>
+                </select>
+                <button id="play-motion-btn" class="btn btn-primary btn-icon" disabled>
+                    <img src="/static/icons/play_icon.png" alt="播放" data-i18n-alt="live2d.play">
+                    <span data-i18n="live2d.play">播放</span>
+                </button>
+            </div>
         </div>
-    </div>
 
-    <div class="control-group">
-        <div style="display:flex; gap: 10px;">
-            <button id="emotion-manager-btn" class="btn btn-primary btn-icon" disabled style="flex:1;">
-                <img src="/static/icons/emotion_config_icon.png" alt="情感配置" data-i18n-alt="live2d.emotionConfig">
-                <span data-i18n="live2d.emotionConfig">情感配置</span>
-            </button>
-            <button id="save-position-btn" class="btn btn-success btn-icon" disabled style="flex:1;">
-                <img src="/static/icons/save_settings.png" alt="保存设置" data-i18n-alt="live2d.saveSettings">
-                <span data-i18n="live2d.saveSettings">保存设置</span>
-            </button>
+        <div class="control-group">
+            <label class="control-label" data-i18n="live2d.expressionPreview">表情预览:</label>
+            <div class="action-group">
+                <select id="expression-select" class="control-select" disabled>
+                    <option data-i18n="live2d.pleaseLoadModel">请先加载模型</option>
+                </select>
+                <button id="play-expression-btn" class="btn btn-primary btn-icon" disabled>
+                    <img src="/static/icons/play_icon.png" alt="播放" data-i18n-alt="live2d.play">
+                    <span data-i18n="live2d.play">播放</span>
+                </button>
+            </div>
         </div>
-    </div>
 
-    <div class="control-group" id="persistent-box" style="display:none;">
-        <label class="control-label" data-i18n="live2d.persistentExpression">常驻表情（仅expression）:</label>
-        <div class="action-group">
+        <div class="control-group">
+            <label class="control-label" data-i18n="live2d.persistentExpression">常驻表情（仅expression）:</label>
+            <p style="font-size: 11px; color: #666; margin: 4px 0 8px 0;" data-i18n="live2d.persistentHint">
+                常驻表情会一直生效，不会被清除或覆盖；此处仅能选择 .exp3.json。
+            </p>
             <select id="persistent-expression-select" class="control-select" disabled>
-                <option data-i18n="live2d.pleaseLoadModel">请先加载模型</option>
+                <option value="" data-i18n="live2d.selectPersistentExpression">选择常驻表情</option>
             </select>
-            <button id="add-persistent-btn" class="btn btn-primary" disabled data-i18n="live2d.add">添加</button>
+            <div id="persistent-list" style="display: none;"></div>
         </div>
-        <div id="persistent-list"></div>
-        <button id="save-persistent-btn" class="btn btn-success" disabled style="margin-top:6px;" data-i18n="live2d.savePersistent">保存常驻表情</button>
-        <div style="font-size:12px; color:#666;" data-i18n="live2d.persistentHint">常驻表情会一直生效，不会被清除或覆盖；此处仅能选择 .exp3.json。</div>
+
+        <div class="control-group">
+            <div style="display:flex; gap: 10px;">
+                <button id="emotion-manager-btn" class="btn btn-primary btn-icon" disabled style="flex:1;">
+                    <img src="/static/icons/emotion_config_icon.png" alt="情感配置" data-i18n-alt="live2d.emotionConfig">
+                    <span data-i18n="live2d.emotionConfig">情感配置</span>
+                </button>
+                <button id="save-position-btn" class="btn btn-success btn-icon" disabled style="flex:1;">
+                    <img src="/static/icons/save_settings.png" alt="保存设置" data-i18n-alt="live2d.saveSettings">
+                    <span data-i18n="live2d.saveSettings">保存设置</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="control-group">
+            <a href="/live2d_parameter_editor" class="btn btn-secondary"
+                style="width:100%; text-decoration: none; display: block; text-align: center;"
+                data-i18n="live2d.parameterEditor.title">
+                <span>🎨 参数编辑器</span>
+            </a>
+        </div>
+
+
+        <div id="status" data-i18n="status.initializing">正在初始化...</div>
     </div>
-    
-    <div id="status" data-i18n="status.initializing">正在初始化...</div>
-</div>
 
-<div id="live2d-container"><canvas id="live2d-canvas"></canvas></div>
-<div id="vrm-container" class="hidden"></div>
+    <div id="live2d-container"><canvas id="live2d-canvas"></canvas></div>
 
-<script src="/static/libs/live2dcubismcore.min.js"></script>
-<script src="/static/libs/live2d.min.js"></script>
-<script src="/static/libs/pixi.min.js"></script>
-<script src="/static/libs/index.min.js"></script>
-<script src="/static/live2d-core.js"></script>
-<script src="/static/live2d-emotion.js"></script>
-<script src="/static/live2d-model.js"></script>
-<script src="/static/live2d-interaction.js"></script>
-<script src="/static/live2d-ui.js"></script>
-<script src="/static/live2d-init.js"></script>
-<!-- Three.js 和 three-vrm 的 importmap（用于动态导入 ES 模块） -->
-<script type="importmap">
-{
-  "imports": {
-    "three": "/static/libs/three.module.js",
-    "three/addons/": "/static/libs/three/addons/",
-    "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js"
-  }
-}
-</script>
-<script type="module" src="/static/vrm.js?v=2"></script>
-<script type="module">
-    // 等待 vrm.js 模块加载并确保导出到全局
-    
-    // 方法1: 直接检查 window.VRMManager（如果静态加载成功）
-    let checkCount = 0;
-    const maxChecks = 150; // 15秒
-    
-    const checkVRMManager = setInterval(() => {
-        checkCount++;
-        
-        if (typeof window.VRMManager !== 'undefined') {
-            clearInterval(checkVRMManager);
-            window.dispatchEvent(new CustomEvent('VRMManagerLoaded'));
-        } else if (checkCount >= maxChecks) {
-            console.error('[VRM Loader] ✗ VRMManager 在15秒后仍未加载');
-            clearInterval(checkVRMManager);
-            
-            // 尝试动态导入作为备用方案
-            import('/static/vrm.js?v=2').then((module) => {
-                const VRMManager = module.default || module.VRMManager;
-                if (VRMManager) {
-                    window.VRMManager = VRMManager;
-                    window.dispatchEvent(new CustomEvent('VRMManagerLoaded'));
-                } else {
-                    console.error('[VRM Loader] ✗ VRMManager 未在动态导入的模块中找到');
-                    window.dispatchEvent(new CustomEvent('VRMManagerLoadError', { 
-                        detail: new Error('VRMManager 未在模块中找到') 
-                    }));
-                }
-            }).catch((error) => {
-                console.error('[VRM Loader] ✗ 动态导入也失败:', error);
-                window.dispatchEvent(new CustomEvent('VRMManagerLoadError', { detail: error }));
-            });
-        }
-    }, 100);
-</script>
-<script>
-    // 监听 VRMManager 加载事件
-    window.addEventListener('VRMManagerLoaded', () => {
-    });
-    
-    window.addEventListener('VRMManagerLoadError', (event) => {
-        console.error('VRMManager 加载错误事件:', event.detail);
-    });
-</script>
-<script>
-    // 用于页面间通信的事件处理
+    <script src="/static/libs/live2dcubismcore.min.js"></script>
+    <script src="/static/libs/live2d.min.js"></script>
+    <script src="/static/libs/pixi.min.js"></script>
+    <script src="/static/libs/index.min.js"></script>
+    <script src="/static/live2d-core.js"></script>
+    <script src="/static/live2d-emotion.js"></script>
+    <script src="/static/live2d-model.js"></script>
+    <script src="/static/live2d-interaction.js"></script>
+    <script src="/static/live2d-ui-buttons.js"></script>
+    <script src="/static/live2d-ui-popup.js"></script>
+    <script src="/static/live2d-ui-hud.js"></script>
+    <script src="/static/live2d-ui-drag.js"></script>
+    <script src="/static/live2d-init.js"></script>
+
+    <script>
+        // 用于页面间通信的事件处理
         function sendMessageToMainPage(action) {
             try {
                 // 使用localStorage事件机制发送消息给主页面
@@ -365,7 +337,7 @@
             }
             return Promise.reject(new Error('Fullscreen not supported'));
         };
-        
+
         const exitFullscreen = () => {
             if (document.exitFullscreen) {
                 return document.exitFullscreen();
@@ -378,370 +350,138 @@
             }
             return Promise.reject(new Error('Exit fullscreen not supported'));
         };
-        
+
         const isFullscreen = () => {
-            return !!(document.fullscreenElement || 
-                     document.webkitFullscreenElement || 
-                     document.mozFullScreenElement || 
-                     document.msFullscreenElement);
+            return !!(document.fullscreenElement ||
+                document.webkitFullscreenElement ||
+                document.mozFullScreenElement ||
+                document.msFullscreenElement);
         };
 
         document.addEventListener('DOMContentLoaded', async () => {
-        try {
-        // Electron白屏修复
-        if (document.body) {
-            void document.body.offsetHeight;
-            const currentOpacity = document.body.style.opacity || '1';
-            document.body.style.opacity = '0.99';
-            requestAnimationFrame(() => {
-                document.body.style.opacity = currentOpacity;
-            });
-        }
-
-        const statusDiv = document.getElementById('status');
-        const modelTypeSelect = document.getElementById('model-type-select');
-        const modelSelect = document.getElementById('model-select');
-        const vrmModelSelect = document.getElementById('vrm-model-select');
-        const live2dModelGroup = document.getElementById('live2d-model-group');
-        const vrmModelGroup = document.getElementById('vrm-model-group');
-        const live2dContainer = document.getElementById('live2d-container');
-        const vrmContainer = document.getElementById('vrm-container');
-        const motionSelect = document.getElementById('motion-select');
-        const expressionSelect = document.getElementById('expression-select');
-        const playMotionBtn = document.getElementById('play-motion-btn');
-        const playExpressionBtn = document.getElementById('play-expression-btn');
-        const emotionManagerBtn = document.getElementById('emotion-manager-btn');
-        const savePositionBtn = document.getElementById('save-position-btn');
-        const persistentBox = document.getElementById('persistent-box');
-        const persistentSelect = document.getElementById('persistent-expression-select');
-        const addPersistentBtn = document.getElementById('add-persistent-btn');
-        const persistentList = document.getElementById('persistent-list');
-        const savePersistentBtn = document.getElementById('save-persistent-btn');
-        const uploadBtn = document.getElementById('upload-btn');
-        const modelUpload = document.getElementById('model-upload');
-        const uploadStatus = document.getElementById('upload-status');
-        const backToMainBtn = document.getElementById('backToMainBtn');
-        
-        // 检查必要的元素是否存在
-        if (!statusDiv || !modelTypeSelect || !modelSelect || !vrmModelSelect || !uploadBtn || !backToMainBtn) {
-            console.error('必要的DOM元素未找到，请检查页面结构');
-            return;
-        }
-        
-        let vrmManager = null;
-        let currentModelType = localStorage.getItem('modelType') || 'live2d'; // 'live2d' 或 'vrm'
-        
-        // 检测页面来源，设置返回按钮文本
-        const isPopupWindow = window.opener !== null;
-        if (isPopupWindow) {
-            backToMainBtn.textContent = t('common.close', '✖ 关闭');
-            
-            // 尝试最大化窗口
-            try {
-                window.resizeTo(screen.availWidth, screen.availHeight);
-                window.moveTo(0, 0);
-            } catch (e) {
-                console.log('最大化窗口失败:', e);
+            // Electron白屏修复
+            if (document.body) {
+                void document.body.offsetHeight;
+                const currentOpacity = document.body.style.opacity || '1';
+                document.body.style.opacity = '0.99';
+                requestAnimationFrame(() => {
+                    document.body.style.opacity = currentOpacity;
+                });
             }
-            
-            // 为popup窗口添加全屏按钮
-            const fullscreenBtn = document.createElement('button');
-            fullscreenBtn.id = 'fullscreen-btn';
-            fullscreenBtn.className = 'btn btn-primary';
-            fullscreenBtn.textContent = t('live2d.toggleFullscreen', '切换全屏');
-            fullscreenBtn.setAttribute('data-i18n', 'live2d.toggleFullscreen');
-            fullscreenBtn.onclick = async () => {
+
+            const statusDiv = document.getElementById('status');
+            const modelSelect = document.getElementById('model-select');
+            const motionSelect = document.getElementById('motion-select');
+            const expressionSelect = document.getElementById('expression-select');
+            const playMotionBtn = document.getElementById('play-motion-btn');
+            const playExpressionBtn = document.getElementById('play-expression-btn');
+            const emotionManagerBtn = document.getElementById('emotion-manager-btn');
+            const savePositionBtn = document.getElementById('save-position-btn');
+            const uploadBtn = document.getElementById('upload-btn');
+            const modelUpload = document.getElementById('model-upload');
+            const uploadStatus = document.getElementById('upload-status');
+            const backToMainBtn = document.getElementById('backToMainBtn');
+
+
+            // 检测页面来源，设置返回按钮文本
+            const isPopupWindow = window.opener !== null;
+            if (isPopupWindow) {
+                backToMainBtn.textContent = t('common.close', '✖ 关闭');
+
+                // 尝试最大化窗口
                 try {
+                    window.resizeTo(screen.availWidth, screen.availHeight);
+                    window.moveTo(0, 0);
+                } catch (e) {
+                    console.log('最大化窗口失败:', e);
+                }
+
+                // 为popup窗口添加全屏按钮
+                const fullscreenBtn = document.createElement('button');
+                fullscreenBtn.id = 'fullscreen-btn';
+                fullscreenBtn.className = 'btn btn-primary';
+                fullscreenBtn.textContent = t('live2d.toggleFullscreen', '切换全屏');
+                fullscreenBtn.setAttribute('data-i18n', 'live2d.toggleFullscreen');
+                fullscreenBtn.onclick = async () => {
+                    try {
+                        if (isFullscreen()) {
+                            await exitFullscreen();
+                            fullscreenBtn.textContent = t('live2d.toggleFullscreen', '切换全屏');
+                            fullscreenBtn.setAttribute('data-i18n', 'live2d.toggleFullscreen');
+                        } else {
+                            await requestFullscreen();
+                            fullscreenBtn.textContent = t('live2d.exitFullscreen', '退出全屏');
+                            fullscreenBtn.setAttribute('data-i18n', 'live2d.exitFullscreen');
+                        }
+                    } catch (e) {
+                        console.log('切换全屏失败:', e);
+                    }
+                };
+
+                // 将全屏按钮添加到返回按钮旁边
+                const backToMainBtnParent = backToMainBtn.parentElement;
+                backToMainBtnParent.appendChild(fullscreenBtn);
+            } else {
+                backToMainBtn.textContent = t('live2d.backToMain', '← 返回主页');
+            }
+
+            // 监听全屏状态变化，更新按钮文本
+            document.addEventListener('fullscreenchange', updateFullscreenButton);
+            document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+            document.addEventListener('mozfullscreenchange', updateFullscreenButton);
+            document.addEventListener('MSFullscreenChange', updateFullscreenButton);
+
+            function updateFullscreenButton() {
+                const fullscreenBtn = document.getElementById('fullscreen-btn');
+                if (fullscreenBtn) {
                     if (isFullscreen()) {
-                        await exitFullscreen();
-                        fullscreenBtn.textContent = t('live2d.toggleFullscreen', '切换全屏');
-                        fullscreenBtn.setAttribute('data-i18n', 'live2d.toggleFullscreen');
-                    } else {
-                        await requestFullscreen();
                         fullscreenBtn.textContent = t('live2d.exitFullscreen', '退出全屏');
                         fullscreenBtn.setAttribute('data-i18n', 'live2d.exitFullscreen');
+                    } else {
+                        fullscreenBtn.textContent = t('live2d.toggleFullscreen', '切换全屏');
+                        fullscreenBtn.setAttribute('data-i18n', 'live2d.toggleFullscreen');
+                    }
+                }
+            }
+
+            // 页面加载时发送消息隐藏主界面（仅在弹出窗口模式下）
+            if (isPopupWindow) {
+                sendMessageToMainPage('hide_main_ui');
+            }
+
+            // 翻译辅助函数：简化翻译调用并处理错误
+            function t(key, fallback, params = {}) {
+                try {
+                    if (window.t && typeof window.t === 'function') {
+                        return window.t(key, params);
                     }
                 } catch (e) {
-                    console.log('切换全屏失败:', e);
+                    console.error(`[i18n] Translation failed for key "${key}":`, e);
+                }
+                return fallback;
+            }
+
+            let currentModelInfo = null;
+            let availableModels = [];
+            let currentModelFiles = { motion_files: [], expression_files: [] };
+            let live2dModel = null;
+            let currentEmotionMapping = null; // { motions: {...}, expressions: {...} }
+
+            const showStatus = (msg, duration = 0) => {
+                statusDiv.textContent = msg;
+                if (duration > 0) {
+                    setTimeout(() => {
+                        if (currentModelInfo) {
+                            showStatus(t('live2d.currentModel', `当前模型: ${currentModelInfo.name}`, { model: currentModelInfo.name }));
+                        }
+                    }, duration);
                 }
             };
-            
-            // 将全屏按钮添加到返回按钮旁边
-            const backToMainBtnParent = backToMainBtn.parentElement;
-            backToMainBtnParent.appendChild(fullscreenBtn);
-        } else {
-            backToMainBtn.textContent = t('live2d.backToMain', '← 返回主页');
-        }
-        
-        // 监听全屏状态变化，更新按钮文本
-        document.addEventListener('fullscreenchange', updateFullscreenButton);
-        document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
-        document.addEventListener('mozfullscreenchange', updateFullscreenButton);
-        document.addEventListener('MSFullscreenChange', updateFullscreenButton);
-        
-        function updateFullscreenButton() {
-            const fullscreenBtn = document.getElementById('fullscreen-btn');
-            if (fullscreenBtn) {
-                if (isFullscreen()) {
-                    fullscreenBtn.textContent = t('live2d.exitFullscreen', '退出全屏');
-                    fullscreenBtn.setAttribute('data-i18n', 'live2d.exitFullscreen');
-                } else {
-                    fullscreenBtn.textContent = t('live2d.toggleFullscreen', '切换全屏');
-                    fullscreenBtn.setAttribute('data-i18n', 'live2d.toggleFullscreen');
-                }
-            }
-        }
-        
-        // 页面加载时发送消息隐藏主界面（仅在弹出窗口模式下）
-        if (isPopupWindow) {
-            sendMessageToMainPage('hide_main_ui');
-        }
 
-        // 翻译辅助函数：简化翻译调用并处理错误
-        function t(key, fallback, params = {}) {
-            try {
-                if (window.t && typeof window.t === 'function') {
-                    return window.t(key, params);
-                }
-            } catch (e) {
-                console.error(`[i18n] Translation failed for key "${key}":`, e);
-            }
-            return fallback;
-        }
-
-        let currentModelInfo = null;
-        let availableModels = [];
-        let currentModelFiles = { motion_files: [], expression_files: [] };
-        let live2dModel = null;
-        let currentEmotionMapping = null; // { motions: {...}, expressions: {...} }
-        let currentPersistent = []; // expressions.常驻
-
-        const showStatus = (msg, duration = 0) => {
-            statusDiv.textContent = msg;
-            if (duration > 0) {
-                setTimeout(() => {
-                    if (currentModelInfo) {
-                        showStatus(t('live2d.currentModel', `当前模型: ${currentModelInfo.name}`, {model: currentModelInfo.name}));
-                    }
-                }, duration);
-            }
-        };
-
-        // 模型类型切换处理
-        async function switchModelDisplay(type) {
-            currentModelType = type;
-            localStorage.setItem('modelType', type);
-            modelTypeSelect.value = type;
-
-            if (type === 'live2d') {
-                live2dModelGroup.style.display = 'flex';
-                vrmModelGroup.style.display = 'none';
-                live2dContainer.style.display = 'block';
-                vrmContainer.classList.add('hidden');
-                vrmContainer.style.display = 'none';
-                // 显示 Live2D 特有的控件
-                document.querySelectorAll('.control-group').forEach(group => {
-                    if (group.id !== 'live2d-model-group' && group.id !== 'vrm-model-group' && group.id !== 'vrm-animation-group') {
-                        group.style.display = 'flex';
-                    }
-                });
-                
-                // 隐藏 VRMA 动画菜单
-                if (vrmAnimationGroup) {
-                    vrmAnimationGroup.style.display = 'none';
-                }
-
-                if (vrmManager) {
-                    vrmManager.enableMouseTracking(false);
-                }
-                if (!window.live2dManager.pixi_app) {
-                    await window.live2dManager.initPIXI('live2d-canvas', 'live2d-container');
-                    showStatus(t('live2d.pixiInitialized', 'PIXI 初始化完成'));
-                }
-                await loadLive2DModels();
-                await loadCurrentCharacterModel();
-            } else { // VRM
-                live2dModelGroup.style.display = 'none';
-                vrmModelGroup.style.display = 'flex';
-                live2dContainer.style.display = 'none';
-                vrmContainer.classList.remove('hidden');
-                vrmContainer.style.display = 'block';
-                // 隐藏 Live2D 特有的控件
-                const live2dOnlyControls = ['motion-select', 'expression-select', 'play-motion-btn', 
-                    'play-expression-btn', 'emotion-manager-btn', 'persistent-box'];
-                live2dOnlyControls.forEach(id => {
-                    const elem = document.getElementById(id);
-                    if (elem) {
-                        const group = elem.closest('.control-group');
-                        if (group) {
-                            group.style.display = 'none';
-                        }
-                    }
-                });
-                
-                // 显示 VRMA 动画菜单
-                if (vrmAnimationGroup) {
-                    vrmAnimationGroup.style.display = 'block';
-                }
-                // 加载 VRM 动画列表（包括VRMA和VMD）
-                await loadVRMAAnimations();
-
-                if (window.live2dManager) {
-                    window.live2dManager.dispose();
-                }
-
-                if (!vrmManager) {
-                    try {
-                        showStatus(t('live2d.waitingVRMLoader', '等待 VRM 加载器...'));
-                        
-                        // 先检查是否已经加载
-                        if (typeof VRMManager !== 'undefined') {
-                        } else {
-                            // 等待加载事件或轮询检查
-                            const loadPromise = new Promise((resolve, reject) => {
-                                let checkCount = 0;
-                                const maxChecks = 100; // 10秒
-                                
-                                const timeout = setTimeout(() => {
-                                    clearInterval(checkInterval);
-                                    clearEventListener();
-                                    reject(new Error('VRMManager 加载超时（10秒）'));
-                                }, 10000);
-                                
-                                const checkInterval = setInterval(() => {
-                                    checkCount++;
-                                    if (typeof VRMManager !== 'undefined') {
-                                        clearInterval(checkInterval);
-                                        clearTimeout(timeout);
-                                        clearEventListener();
-                                        resolve();
-                                    }
-                                }, 100);
-                                
-                                const eventHandler = () => {
-                                    clearInterval(checkInterval);
-                                    clearTimeout(timeout);
-                                    clearEventListener();
-                                    // 再检查一次，确保真的加载了
-                                    if (typeof VRMManager !== 'undefined') {
-                                        resolve();
-                                    } else {
-                                        console.warn('VRMManager 加载事件触发，但类仍未定义');
-                                        // 再等待一下
-                                        setTimeout(() => {
-                                            if (typeof VRMManager !== 'undefined') {
-                                                resolve();
-                                            } else {
-                                                reject(new Error('VRMManager 加载事件触发但类未定义'));
-                                            }
-                                        }, 500);
-                                    }
-                                };
-                                
-                                const errorHandler = (event) => {
-                                    clearInterval(checkInterval);
-                                    clearTimeout(timeout);
-                                    clearEventListener();
-                                    reject(event.detail || new Error('VRMManager 加载错误'));
-                                };
-                                
-                                const clearEventListener = () => {
-                                    window.removeEventListener('VRMManagerLoaded', eventHandler);
-                                    window.removeEventListener('VRMManagerLoadError', errorHandler);
-                                };
-                                
-                                // 监听加载事件
-                                window.addEventListener('VRMManagerLoaded', eventHandler, { once: true });
-                                window.addEventListener('VRMManagerLoadError', errorHandler, { once: true });
-                            });
-                            
-                            try {
-                                await loadPromise;
-                            } catch (error) {
-                                console.error('等待 VRMManager 加载失败:', error);
-                                console.error('可能的原因：');
-                                console.error('1. vrm.js 文件未正确加载 - 请检查网络标签页');
-                                console.error('2. ES模块导入失败 - 请检查控制台错误');
-                                console.error('3. importmap 配置错误 - 请检查 Three.js 路径');
-                                console.error('4. 浏览器不支持 ES 模块');
-                                console.error('5. 模块导出格式问题');
-                                
-                                // 最后尝试：直接检查全局
-                                if (typeof window.VRMManager !== 'undefined') {
-                                    window.VRMManager = window.VRMManager;
-                                } else {
-                                    showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请检查控制台并刷新页面'));
-                                    await loadVRMModels();
-                                    return;
-                                }
-                            }
-                        }
-                        
-                        if (typeof VRMManager === 'undefined') {
-                            throw new Error('VRMManager 仍未定义');
-                        }
-                        
-                        showStatus(t('live2d.waitingVRMLoader', '正在初始化 VRM 管理器...'));
-                        vrmManager = new VRMManager('vrm-container');
-                        await vrmManager.init();
-                        window.vrmManager = vrmManager;
-                        showStatus(t('live2d.vrmInitialized', 'VRM 管理器初始化成功'));
-                    } catch (error) {
-                        console.error('VRM 管理器初始化失败:', error);
-                        console.error('错误堆栈:', error.stack);
-                        showStatus(t('live2d.vrmInitFailed', `VRM 管理器初始化失败: ${error.message}`));
-                        // 即使初始化失败，也继续加载模型列表
-                        await loadVRMModels();
-                        return;
-                    }
-                }
-                await loadVRMModels();
-                await loadCurrentCharacterModel();
-            }
-        }
-
-        modelTypeSelect.addEventListener('change', async (e) => {
-            await switchModelDisplay(e.target.value);
-        });
-
-        // 等待 Live2D 管理器初始化
-        let retryCount = 0;
-        while (!window.live2dManager && retryCount < 10) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-            retryCount++;
-        }
-        
-        if (!window.live2dManager) {
-            console.error('Live2D 管理器未初始化，请检查脚本加载顺序');
-            showStatus('错误：Live2D 管理器未初始化');
-            return;
-        }
-        
-        // 初始化 Live2D（默认模式）
-        try {
             await window.live2dManager.initPIXI('live2d-canvas', 'live2d-container');
             showStatus(t('live2d.pixiInitialized', 'PIXI 初始化完成'));
-        } catch (error) {
-            console.error('初始化 PIXI 失败:', error);
-            showStatus('错误：初始化 PIXI 失败');
-        }
-        
-        // 根据保存的类型或默认类型初始化显示
-        try {
-            await switchModelDisplay(currentModelType);
-        } catch (error) {
-            console.error('初始化模型显示失败:', error);
-            showStatus(`初始化失败: ${error.message}`);
-            // 即使失败，也尝试加载模型列表
-            if (currentModelType === 'live2d') {
-                await loadLive2DModels();
-            } else {
-                await loadVRMModels();
-            }
-        }
 
-        // 加载 Live2D 模型列表的函数
-        async function loadLive2DModels() {
+            // 先加载模型列表
             try {
                 const response = await fetch('/api/live2d/models');
                 availableModels = await response.json();
@@ -752,9 +492,7 @@
                         option.value = model.name;
                         option.textContent = model.name;
                         // 使用data属性存储item_id，这样更容易在change事件中获取
-                        if (model.item_id) {
-                            option.dataset.itemId = model.item_id;
-                        }
+                        option.dataset.itemId = model.item_id;
                         console.log('添加模型选项:', model.name, 'item_id:', model.item_id);
                         modelSelect.appendChild(option);
                     });
@@ -766,728 +504,385 @@
             } catch (e) {
                 showStatus(t('live2d.modelListLoadFailed', '加载模型列表失败'));
             }
-        }
 
-        // 刷新 VRM 模型列表按钮
-        // 加载 VRM 模型列表的函数（自动扫描VRM文件夹）
-        async function loadVRMModels() {
-            try {
-                console.log('[VRM] 开始扫描VRM文件夹并加载模型列表...');
-                const response = await fetch('/api/vrm/models');
-                
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const vrmModels = await response.json();
-                
-                // 检查返回的数据格式
-                if (!Array.isArray(vrmModels)) {
-                    console.error('VRM 模型列表格式错误:', vrmModels);
-                    vrmModelSelect.innerHTML = `<option value="">${t('live2d.vrmModelListLoadFailed', '加载失败')}</option>`;
-                    showStatus(t('live2d.vrmModelListLoadFailed', '加载 VRM 模型列表失败：数据格式错误'));
-                    return;
-                }
-                
-                console.log(`[VRM] 扫描完成，找到 ${vrmModels.length} 个VRM模型`);
-                
-                if (vrmModels.length > 0) {
-                    vrmModelSelect.innerHTML = `<option value="">${t('live2d.pleaseSelectModel', '请选择一个模型')}</option>`;
-                    vrmModels.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model.path;
-                        option.textContent = model.name;
-                        // 添加来源信息（如果有）
-                        if (model.source) {
-                            option.textContent += ` (${model.source})`;
-                        }
-                        vrmModelSelect.appendChild(option);
-                    });
-                    showStatus(t('live2d.vrmModelListLoaded', `VRM 模型列表加载成功，找到 ${vrmModels.length} 个模型`));
-                } else {
-                    vrmModelSelect.innerHTML = `<option value="">${t('live2d.noVRMModelsFound', '未找到可用 VRM 模型')}</option>`;
-                    showStatus(t('live2d.noVRMModelsFound', '未找到可用 VRM 模型，请将.vrm文件放入 static/models/vrm 文件夹'));
-                }
-            } catch (e) {
-                console.error('[VRM] 加载模型列表失败:', e);
-                vrmModelSelect.innerHTML = `<option value="">${t('live2d.vrmModelListLoadFailed', '加载失败')}</option>`;
-                showStatus(t('live2d.vrmModelListLoadFailed', `加载 VRM 模型列表失败: ${e.message || e}`));
-            }
-        }
+            // 然后加载当前角色的模型（此时下拉框已经有选项了）
+            await loadCurrentCharacterModel();
 
-        // 初始加载 Live2D 模型列表
-        await loadLive2DModels();
-
-        // 然后加载当前角色的模型（此时下拉框已经有选项了）
-        await loadCurrentCharacterModel();
-
-        // 如果已自动加载了一个模型，确保在下拉框中选中它
-        // 这是双重保险：防止 loadCurrentCharacterModel() 内部设置失败
-        if (currentModelInfo && currentModelInfo.name) {
-            const exists = availableModels.some(m => m.name === currentModelInfo.name);
-            if (exists && modelSelect.value !== currentModelInfo.name) {
-                console.log('下拉框值未正确设置，执行补救:', currentModelInfo.name);
-                modelSelect.value = currentModelInfo.name;
-            }
-        }
-
-        // 获取 lanlan_name 的辅助函数
-        async function getLanlanName() {
-            // 优先从 URL 获取
-            const urlParams = new URLSearchParams(window.location.search);
-            let lanlanName = urlParams.get('lanlan_name') || '';
-            
-            // 如果 URL 中没有，从 API 获取
-            if (!lanlanName) {
-                try {
-                    const response = await fetch('/api/config/page_config');
-                    const data = await response.json();
-                    if (data.success) {
-                        lanlanName = data.lanlan_name || '';
-                    }
-                } catch (error) {
-                    console.error('获取 lanlan_name 失败:', error);
+            // 如果已自动加载了一个模型，确保在下拉框中选中它
+            // 这是双重保险：防止 loadCurrentCharacterModel() 内部设置失败
+            if (currentModelInfo && currentModelInfo.name) {
+                const exists = availableModels.some(m => m.name === currentModelInfo.name);
+                if (exists && modelSelect.value !== currentModelInfo.name) {
+                    console.log('下拉框值未正确设置，执行补救:', currentModelInfo.name);
+                    modelSelect.value = currentModelInfo.name;
                 }
             }
-            
-            return lanlanName;
-        }
-        
-        // 保存模型设置到角色的函数
-        async function saveModelToCharacter(modelName, modelTypeOrItemId = 'live2d', itemId = null) {
-            try {
-                // 获取角色名称
-                const lanlanName = await getLanlanName();
-                
+
+            // 获取 lanlan_name 的辅助函数
+            async function getLanlanName() {
+                // 优先从 URL 获取
+                const urlParams = new URLSearchParams(window.location.search);
+                let lanlanName = urlParams.get('lanlan_name') || '';
+
+                // 如果 URL 中没有，从 API 获取
                 if (!lanlanName) {
-                    showStatus(t('live2d.cannotSaveNoCharacter', '无法保存：未指定角色名称'));
-                    return false;
-                }
-                
-                // 兼容两种调用方式：旧的方式传入modelType，新的方式传入itemId
-                let modelType = 'live2d';
-                let actualItemId = null;
-                
-                if (typeof modelTypeOrItemId === 'string' && (modelTypeOrItemId === 'live2d' || modelTypeOrItemId === 'vrm')) {
-                    // 旧的方式：第一个参数是modelType
-                    modelType = modelTypeOrItemId;
-                    actualItemId = itemId;
-                } else {
-                    // 新的方式：第一个参数是itemId（可能是null）
-                    actualItemId = modelTypeOrItemId;
-                }
-                
-                // 根据模型类型选择不同的 API 端点
-                let apiUrl, body;
-                if (modelType === 'vrm') {
-                    apiUrl = `/api/characters/catgirl/vrm/${encodeURIComponent(lanlanName)}`;
-                    body = { vrm: modelName };
-                } else {
-                    apiUrl = `/api/characters/catgirl/l2d/${encodeURIComponent(lanlanName)}`;
-                    body = { live2d: modelName };
-                    
-                    // 如果有item_id，也保存它
-                    if (actualItemId && actualItemId !== 'undefined') {
-                        body.item_id = actualItemId;
-                        console.log('保存模型设置时同时保存item_id:', actualItemId);
-                    }
-                }
-                
-                const response = await fetch(apiUrl, {
-                    method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(body)
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    showStatus(t('live2d.modelSettingsSaved', `已保存模型设置: ${lanlanName} -> ${modelName}`, {name: lanlanName, model: modelName}), 2000);
-                    return true;
-                } else {
-                    showStatus(t('live2d.saveFailed', `保存失败: ${result.error}`, {error: result.error}), 3000);
-                    return false;
-                }
-            } catch (error) {
-                console.error('保存模型设置失败:', error);
-                showStatus(t('live2d.saveModelSettingsFailed', '保存模型设置失败'), 3000);
-                return false;
-            }
-        }
-
-        // 修改模型选择事件，自动保存模型设置
-        modelSelect.addEventListener('change', async (e) => {
-            const modelName = e.target.value;
-            const modelId = e.target.dataset.itemId
-            console.log("id:", modelId)
-            if (!modelName) return;
-
-            currentModelInfo = availableModels.find(m => m.name === modelName);
-            if (currentModelInfo) {
-                // 设置item_id，确保从dataset中获取
-                currentModelInfo.item_id = modelId || currentModelInfo.item_id;
-            }
-            if (!currentModelInfo) return;
-
-            // 获取选中的option元素，从中获取item_id
-            const selectedOption = e.target[e.target.selectedIndex];
-            const modelSteamId = selectedOption ? selectedOption.dataset.itemId : currentModelInfo.item_id;
-            
-            await loadModel(modelName, currentModelInfo, modelSteamId);
-            
-            // 自动保存模型设置到角色，同时传入item_id
-            const saveSuccess = await saveModelToCharacter(modelName, 'live2d', modelSteamId);
-            if (!saveSuccess) {
-                // 如果自动保存失败，标记为有未保存的更改
-                window.hasUnsavedChanges = true;
-            }
-        });
-
-        // VRM 模型选择事件
-        vrmModelSelect.addEventListener('change', async (e) => {
-            const modelPath = e.target.value;
-            if (!modelPath) return;
-            
-            // 确保切换到VRM模式
-            if (currentModelType !== 'vrm') {
-                await switchModelDisplay('vrm');
-            }
-            
-            // 确保vrm-container可见
-            const vrmContainer = document.getElementById('vrm-container');
-            if (vrmContainer) {
-                vrmContainer.classList.remove('hidden');
-                vrmContainer.style.display = 'block';
-            }
-            
-            // 如果vrmManager未初始化，尝试初始化
-            if (!vrmManager) {
-                showStatus(t('live2d.waitingVRMLoader', '等待 VRM 加载器...'));
-                
-                // 等待 VRMManager 加载
-                if (typeof VRMManager === 'undefined') {
-                    // 等待加载事件或轮询检查
-                    const loadPromise = new Promise((resolve, reject) => {
-                        const timeout = setTimeout(() => {
-                            reject(new Error('VRMManager 加载超时'));
-                        }, 10000);
-                        
-                        const checkInterval = setInterval(() => {
-                            if (typeof VRMManager !== 'undefined') {
-                                clearInterval(checkInterval);
-                                clearTimeout(timeout);
-                                resolve();
-                            }
-                        }, 100);
-                        
-                        // 监听加载事件
-                        window.addEventListener('VRMManagerLoaded', () => {
-                            clearInterval(checkInterval);
-                            clearTimeout(timeout);
-                            resolve();
-                        }, { once: true });
-                    });
-                    
                     try {
-                        await loadPromise;
+                        const response = await fetch('/api/config/page_config');
+                        const data = await response.json();
+                        if (data.success) {
+                            lanlanName = data.lanlan_name || '';
+                        }
                     } catch (error) {
-                        console.error('等待 VRMManager 加载失败:', error);
-                        showStatus(t('live2d.vrmLoaderFailed', 'VRM 加载器未加载，请检查控制台并刷新页面'));
-                        return;
+                        console.error('获取 lanlan_name 失败:', error);
                     }
                 }
-                
-                if (typeof VRMManager === 'undefined') {
-                    throw new Error('VRMManager 仍未定义');
-                }
-                
+
+                return lanlanName;
+            }
+
+            // 保存模型设置到角色的函数
+            async function saveModelToCharacter(modelName, itemId = null) {
                 try {
-                    showStatus(t('live2d.waitingVRMLoader', '正在初始化 VRM 管理器...'));
-                    vrmManager = new VRMManager('vrm-container');
-                    await vrmManager.init();
-                    window.vrmManager = vrmManager;
-                    showStatus(t('live2d.vrmInitialized', 'VRM 管理器初始化成功'));
+                    // 获取角色名称
+                    const lanlanName = await getLanlanName();
+
+                    if (!lanlanName) {
+                        showStatus(t('live2d.cannotSaveNoCharacter', '无法保存：未指定角色名称'));
+                        return false;
+                    }
+
+                    // 构建保存数据，包含模型名称和可选的item_id
+                    const saveData = {
+                        live2d: modelName
+                    };
+
+                    // 如果有item_id，也保存它
+                    if (itemId && itemId !== 'undefined') {
+                        saveData.item_id = itemId;
+                        console.log('保存模型设置时同时保存item_id:', itemId);
+                    }
+
+                    const response = await fetch(`/api/characters/catgirl/l2d/${encodeURIComponent(lanlanName)}`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(saveData)
+                    });
+
+                    const result = await response.json();
+
+                    if (result.success) {
+                        showStatus(t('live2d.modelSettingsSaved', `已保存模型设置: ${lanlanName} -> ${modelName}`, { name: lanlanName, model: modelName }), 2000);
+                        return true;
+                    } else {
+                        showStatus(t('live2d.saveFailed', `保存失败: ${result.error}`, { error: result.error }), 3000);
+                        return false;
+                    }
                 } catch (error) {
-                    console.error('VRM 管理器初始化失败:', error);
-                    console.error('错误堆栈:', error.stack);
-                    showStatus(t('live2d.vrmInitFailed', `VRM 管理器初始化失败: ${error.message}`));
-                    return;
+                    console.error('保存模型设置失败:', error);
+                    showStatus(t('live2d.saveModelSettingsFailed', '保存模型设置失败'), 3000);
+                    return false;
                 }
             }
 
-            try {
-                showStatus(t('live2d.loadingVRMModel', `正在加载 VRM 模型...`));
-                
-                // 确保容器可见
-                const vrmContainer = document.getElementById('vrm-container');
-                if (vrmContainer) {
-                    vrmContainer.classList.remove('hidden');
-                    vrmContainer.style.display = 'block';
-                    vrmContainer.style.visibility = 'visible';
-                    vrmContainer.style.opacity = '1';
+            // 修改模型选择事件，自动保存模型设置
+            modelSelect.addEventListener('change', async (e) => {
+                const modelName = e.target.value;
+                const modelId = e.target.dataset.itemId
+                console.log("id:", modelId)
+                if (!modelName) return;
+
+                currentModelInfo = availableModels.find(m => m.name === modelName);
+                if (currentModelInfo) {
+                    // 设置item_id，确保从dataset中获取
+                    currentModelInfo.item_id = modelId || currentModelInfo.item_id;
                 }
-                
-                await vrmManager.loadModel(modelPath);
-                
-                // 从路径中提取模型名称
-                const modelName = modelPath.split('/').pop().replace('.vrm', '');
-                
-                // 自动保存模型设置到角色
-                const saveSuccess = await saveModelToCharacter(modelPath, 'vrm');
-                if (!saveSuccess) {
-                    window.hasUnsavedChanges = true;
-                    showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelName} 加载成功，但保存失败`, {model: modelName}), 2000);
-                } else {
-                    showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelName} 加载成功`, {model: modelName}), 2000);
-                }
-                
-                // 加载 VRM 动画列表（包括VRMA和VMD）并显示菜单
-                await loadVRMAAnimations();
-                vrmAnimationGroup.style.display = 'block';
-            } catch (error) {
-                console.error('加载 VRM 模型失败:', error);
-                showStatus(t('live2d.vrmModelLoadFailed', `加载 VRM 模型失败: ${error.message}`), 3000);
-            }
-        });
+                if (!currentModelInfo) return;
 
-        // 加载模型的函数
-        async function loadModel(modelName, modelInfo, steam_id) {
-            if (!modelName || !modelInfo) return;
-            
-            // 确保获取正确的steam_id，优先使用传入的，然后从modelInfo中获取
-            let finalSteamId = steam_id || modelInfo.item_id;
-            console.log('modelInfo:', modelInfo);
-            console.log('finalSteamId:', finalSteamId);
-            showStatus(t('live2d.loadingModel', `正在加载模型: ${modelName}...`, {model: modelName}));
-            setControlsDisabled(true);
+                // 获取选中的option元素，从中获取item_id
+                const selectedOption = e.target[e.target.selectedIndex];
+                const modelSteamId = selectedOption ? selectedOption.dataset.itemId : currentModelInfo.item_id;
 
-            try {
-                // 1. Fetch files list
-                let filesRes;
-                // 根据modelInfo的source字段和finalSteamId决定使用哪个API端点
-                if (modelInfo.source === 'user_mods') {
-                    // 对于用户mod模型，使用modelName构建URL
-                    console.log('Fetching model files for user mod:', modelName);
-                    filesRes = await fetch(`/api/live2d/model_files/${encodeURIComponent(modelName)}`);
-                } else if (finalSteamId && finalSteamId !== 'undefined') {
-                    // 如果提供了finalSteamId，调用专门的API端点
-                    filesRes = await fetch(`/api/live2d/model_files_by_id/${finalSteamId}`);
-                } else {
-                    // 否则使用原来的API端点
-                    filesRes = await fetch(`/api/live2d/model_files/${encodeURIComponent(modelName)}`);
-                }
-                const filesData = await filesRes.json();
-                if (!filesData.success) throw new Error(t('live2d.modelFilesFetchFailed', '无法获取模型文件列表'));
-                currentModelFiles = filesData;
+                await loadModel(modelName, currentModelInfo, modelSteamId);
 
-                // 2. Fetch model config
-                let modelJsonUrl;
-                // 优先使用后端返回的model_config_url（如果有）
-                if (filesData.model_config_url) {
-                    modelJsonUrl = filesData.model_config_url;
-                    console.log('使用后端返回的模型配置URL:', modelJsonUrl);
-                } else if (modelInfo.source === 'user_mods') {
-                    // 对于用户mod模型，直接使用modelInfo.path（已经包含/user_mods/路径）
-                    modelJsonUrl = modelInfo.path;
-                    console.log('使用用户mod模型路径:', modelJsonUrl);
-                } else if (finalSteamId && finalSteamId !== 'undefined') {
-                    // 如果提供了finalSteamId但没有model_config_url，使用原来的方式构建URL（兼容模式）
-                    modelJsonUrl = `/workshop/${finalSteamId}/${modelName}.model3.json`;
-                    console.log('兼容模式 - 构建的模型URL(带steam_id):', modelJsonUrl);
-                } else {
-                    // 否则使用原来的路径
-                    modelJsonUrl = modelInfo.path;
-                    console.log('构建的模型URL(本地):', modelJsonUrl);
-                }
-                const modelConfigRes = await fetch(modelJsonUrl);
-                if (!modelConfigRes.ok) throw new Error(t('live2d.modelConfigFetchFailed', `无法获取模型配置: ${modelConfigRes.statusText}`, {status: modelConfigRes.statusText}));
-                const modelConfig = await modelConfigRes.json();
-                
-                // 3. Add URL context for the loader
-                modelConfig.url = modelJsonUrl;
+                // 不自动保存模型到角色，改为标记为有未保存更改，用户需手动点击“保存设置”
+                window.hasUnsavedChanges = true;
+                console.log('已标记为未保存更改（模型切换），请点击 保存设置 持久化到角色配置。');
+            });
 
-                // 4. Inject PreviewAll motion group AND ensure all expressions are referenced
-                if (!modelConfig.FileReferences) modelConfig.FileReferences = {};
+            // 加载模型的函数
+            async function loadModel(modelName, modelInfo, steam_id) {
+                if (!modelName || !modelInfo) return;
 
-                // Motions
-                if (!modelConfig.FileReferences.Motions) modelConfig.FileReferences.Motions = {};
-                // 只有当模型有动作文件时才添加PreviewAll组
-                if (currentModelFiles.motion_files.length > 0) {
-                    modelConfig.FileReferences.Motions.PreviewAll = currentModelFiles.motion_files.map(file => ({
+                // 确保获取正确的steam_id，优先使用传入的，然后从modelInfo中获取
+                let finalSteamId = steam_id || modelInfo.item_id;
+                console.log('modelInfo:', modelInfo);
+                console.log('finalSteamId:', finalSteamId);
+                showStatus(t('live2d.loadingModel', `正在加载模型: ${modelName}...`, { model: modelName }));
+                setControlsDisabled(true);
+
+                try {
+                    // 1. Fetch files list
+                    let filesRes;
+                    // 根据modelInfo的source字段和finalSteamId决定使用哪个API端点
+                    if (modelInfo.source === 'user_mods') {
+                        // 对于用户mod模型，使用modelName构建URL
+                        console.log('Fetching model files for user mod:', modelName);
+                        filesRes = await fetch(`/api/live2d/model_files/${encodeURIComponent(modelName)}`);
+                    } else if (finalSteamId && finalSteamId !== 'undefined') {
+                        // 如果提供了finalSteamId，调用专门的API端点
+                        filesRes = await fetch(`/api/live2d/model_files_by_id/${finalSteamId}`);
+                    } else {
+                        // 否则使用原来的API端点
+                        filesRes = await fetch(`/api/live2d/model_files/${encodeURIComponent(modelName)}`);
+                    }
+                    const filesData = await filesRes.json();
+                    if (!filesData.success) throw new Error(t('live2d.modelFilesFetchFailed', '无法获取模型文件列表'));
+                    currentModelFiles = filesData;
+
+                    // 2. Fetch model config
+                    let modelJsonUrl;
+                    // 优先使用后端返回的model_config_url（如果有）
+                    if (filesData.model_config_url) {
+                        modelJsonUrl = filesData.model_config_url;
+                        console.log('使用后端返回的模型配置URL:', modelJsonUrl);
+                    } else if (modelInfo.source === 'user_mods') {
+                        // 对于用户mod模型，直接使用modelInfo.path（已经包含/user_mods/路径）
+                        modelJsonUrl = modelInfo.path;
+                        console.log('使用用户mod模型路径:', modelJsonUrl);
+                    } else if (finalSteamId && finalSteamId !== 'undefined') {
+                        // 如果提供了finalSteamId但没有model_config_url，使用原来的方式构建URL（兼容模式）
+                        modelJsonUrl = `/workshop/${finalSteamId}/${modelName}.model3.json`;
+                        console.log('兼容模式 - 构建的模型URL(带steam_id):', modelJsonUrl);
+                    } else {
+                        // 否则使用原来的路径
+                        modelJsonUrl = modelInfo.path;
+                        console.log('构建的模型URL(本地):', modelJsonUrl);
+                    }
+                    const modelConfigRes = await fetch(modelJsonUrl);
+                    if (!modelConfigRes.ok) throw new Error(t('live2d.modelConfigFetchFailed', `无法获取模型配置: ${modelConfigRes.statusText}`, { status: modelConfigRes.statusText }));
+                    const modelConfig = await modelConfigRes.json();
+
+                    // 3. Add URL context for the loader
+                    modelConfig.url = modelJsonUrl;
+
+                    // 4. Inject PreviewAll motion group AND ensure all expressions are referenced
+                    if (!modelConfig.FileReferences) modelConfig.FileReferences = {};
+
+                    // Motions
+                    if (!modelConfig.FileReferences.Motions) modelConfig.FileReferences.Motions = {};
+                    // 只有当模型有动作文件时才添加PreviewAll组
+                    if (currentModelFiles.motion_files.length > 0) {
+                        modelConfig.FileReferences.Motions.PreviewAll = currentModelFiles.motion_files.map(file => ({
+                            File: file  // 直接使用API返回的完整路径
+                        }));
+                    }
+
+                    // Expressions: Overwrite with all available expression files for preview purposes.
+                    modelConfig.FileReferences.Expressions = currentModelFiles.expression_files.map(file => ({
+                        Name: file.split('/').pop().replace('.exp3.json', ''),  // 从路径中提取文件名作为名称
                         File: file  // 直接使用API返回的完整路径
                     }));
+
+                    // 5. Load preferences
+                    const preferences = await window.live2dManager.loadUserPreferences();
+                    console.log('加载的偏好设置:', preferences);
+                    console.log('当前模型路径:', modelInfo.path);
+                    const modelPreferences = preferences.find(p => p && p.model_path === modelInfo.path) || null;
+                    console.log('匹配的模型偏好:', modelPreferences);
+
+                    // 6. Load model FROM THE MODIFIED OBJECT
+                    await window.live2dManager.loadModel(modelConfig, {
+                        loadEmotionMapping: true,
+                        dragEnabled: true,
+                        wheelEnabled: true,
+                        preferences: modelPreferences
+                    });
+                    live2dModel = window.live2dManager.getCurrentModel();
+
+                    // 添加模型交互监听器，跟踪位置和缩放变化
+                    if (live2dModel && live2dModel.internalModel) {
+                        const canvas = document.getElementById('live2d-canvas');
+                        if (canvas) {
+                            // 位置和缩放的自动保存现在由 live2d-interaction.js 处理
+                        }
+                    }
+
+                    updateSelectWithOptions(motionSelect, currentModelFiles.motion_files, t('live2d.selectMotion', '选择动作'), 'motion');
+                    updateSelectWithOptions(expressionSelect, currentModelFiles.expression_files, t('live2d.selectExpression', '选择表情'), 'expression');
+
+                    // 更新常驻表情选择框（只显示 .exp3.json 文件）
+                    await updatePersistentExpressionSelect();
+
+                    // 7. Load current emotion mapping for this model
+                    await loadEmotionMappingForModel(modelName);
+
+                    // 加载并显示已配置的常驻表情
+                    await loadPersistentExpressions();
+
+                    // 如果没有动作文件，禁用动作相关控件
+                    if (currentModelFiles.motion_files.length === 0) {
+                        motionSelect.disabled = true;
+                        playMotionBtn.disabled = true;
+                        motionSelect.innerHTML = `<option value="">${t('live2d.noMotionFiles', '没有动作文件')}</option>`;
+                    }
+                    setControlsDisabled(false);
+                    showStatus(t('live2d.modelLoadSuccess', `模型 ${modelName} 加载成功`, { model: modelName }));
+
+                } catch (error) {
+                    showStatus(t('live2d.modelLoadFailed', `加载模型 ${modelName} 失败`, { model: modelName }));
+                    console.error(error);
+                    setControlsDisabled(false);
+                }
+            }
+
+            playMotionBtn.addEventListener('click', () => {
+                if (!live2dModel || !motionSelect.value) return;
+
+                // 检查是否有动作文件
+                if (currentModelFiles.motion_files.length === 0) {
+                    showStatus(t('live2d.noMotionFilesStatus', '没有动作文件'), 2000);
+                    return;
                 }
 
-                // Expressions: Overwrite with all available expression files for preview purposes.
-                modelConfig.FileReferences.Expressions = currentModelFiles.expression_files.map(file => ({
-                    Name: file.split('/').pop().replace('.exp3.json', ''),  // 从路径中提取文件名作为名称
-                    File: file  // 直接使用API返回的完整路径
-                }));
-                
-                // 5. Load preferences
-                const preferences = await window.live2dManager.loadUserPreferences();
-                const modelPreferences = preferences.find(p => p && p.model_path === modelInfo.path) || null;
+                const motionIndex = currentModelFiles.motion_files.indexOf(motionSelect.value);
+                if (motionIndex > -1) {
+                    try {
+                        live2dModel.motion('PreviewAll', motionIndex, 3);
+                        showStatus(t('live2d.playingMotion', `播放动作: ${motionSelect.value}`, { motion: motionSelect.value }), 1000);
+                    } catch (error) {
+                        console.error('播放动作失败:', error);
+                        showStatus(t('live2d.playMotionFailed', `播放动作失败: ${motionSelect.value}`, { motion: motionSelect.value }), 2000);
+                    }
+                } else {
+                    showStatus(t('live2d.motionFileNotExists', '动作文件不存在'), 2000);
+                }
+            });
 
-                // 6. Load model FROM THE MODIFIED OBJECT
-                await window.live2dManager.loadModel(modelConfig, {
-                    loadEmotionMapping: true,
-                    dragEnabled: true,
-                    wheelEnabled: true,
-                    preferences: modelPreferences
-                });
-                live2dModel = window.live2dManager.getCurrentModel();
-                
-                // 添加模型交互监听器，跟踪位置和缩放变化
-                if (live2dModel && live2dModel.internalModel) {
-                    const canvas = document.getElementById('live2d-canvas');
-                    if (canvas) {
-                        // 监听拖动和滚轮事件
-                        const markChanged = () => { 
-                            window.hasUnsavedChanges = true; 
-                        };
-                        canvas.addEventListener('mouseup', markChanged);
-                        canvas.addEventListener('wheel', markChanged);
-                        canvas.addEventListener('touchend', markChanged);
+            playExpressionBtn.addEventListener('click', () => {
+                if (!live2dModel || !expressionSelect.value) return;
+                // 从完整路径中提取表情名称（去掉路径和扩展名）
+                const expressionName = expressionSelect.value.split('/').pop().replace('.exp3.json', '');
+                console.log('播放表情:', expressionName); // 添加调试信息
+                try {
+                    live2dModel.expression(expressionName);
+                    showStatus(t('live2d.playingExpression', `播放表情: ${expressionName}`, { expression: expressionName }), 1000);
+                } catch (error) {
+                    console.error('播放表情失败:', error);
+                    showStatus(t('live2d.playExpressionFailed', `播放表情失败: ${expressionName}`, { expression: expressionName }), 2000);
+                }
+            });
+
+            emotionManagerBtn.addEventListener('click', () => {
+                if (!currentModelInfo) return;
+                openModal('/live2d_emotion_manager');
+            });
+
+            savePositionBtn.addEventListener('click', async () => {
+                if (!currentModelInfo || !live2dModel) return;
+                showStatus(t('live2d.savingSettings', '正在保存设置...'));
+
+                // 添加调试信息
+                console.log('保存设置 - 模型路径:', currentModelInfo.path);
+                console.log('保存设置 - 当前位置:', { x: live2dModel.x, y: live2dModel.y });
+                console.log('保存设置 - 当前缩放:', { x: live2dModel.scale.x, y: live2dModel.scale.y });
+
+                // 保存位置和缩放
+                const positionSuccess = await window.live2dManager.saveUserPreferences(
+                    currentModelInfo.path,
+                    { x: live2dModel.x, y: live2dModel.y },
+                    { x: live2dModel.scale.x, y: live2dModel.scale.y }
+                );
+
+                // 保存模型设置到角色，同时传入item_id
+                const modelSuccess = await saveModelToCharacter(currentModelInfo.name, currentModelInfo.item_id);
+
+                if (positionSuccess && modelSuccess) {
+                    showStatus(t('live2d.settingsSaved', '位置和模型设置保存成功!'), 2000);
+                    window.hasUnsavedChanges = false; // 保存成功后重置标志
+                } else if (positionSuccess) {
+                    showStatus(t('live2d.positionSavedModelFailed', '位置保存成功，模型设置保存失败!'), 2000);
+                } else if (modelSuccess) {
+                    showStatus(t('live2d.modelSavedPositionFailed', '模型设置保存成功，位置保存失败!'), 2000);
+                } else {
+                    showStatus(t('live2d.saveFailedGeneral', '保存失败!'), 2000);
+                }
+            });
+
+            // 返回主页/关闭按钮
+            backToMainBtn.addEventListener('click', async () => {
+                // 检查是否有未保存的更改
+                if (window.hasUnsavedChanges) {
+                    const message = t('dialogs.unsavedChanges', '您有未保存的设置，确定要离开吗？');
+                    const title = t('dialogs.confirmLeave', '确认离开');
+                    const confirmLeave = await showConfirm(message, title, { danger: true });
+                    console.log('用户选择:', confirmLeave ? '确定离开' : '取消');
+                    if (!confirmLeave) {
+                        return; // 用户取消，不离开
+                    }
+                    // 用户确认离开，重置未保存状态，避免被 beforeunload 拦截
+                    window.hasUnsavedChanges = false;
+                } else {
+                    console.log('没有未保存的更改，直接返回');
+                }
+
+                // 如果处于全屏状态，先退出全屏
+                if (isFullscreen()) {
+                    try {
+                        await exitFullscreen();
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    } catch (e) {
+                        console.log('退出全屏失败:', e);
                     }
                 }
 
-                updateSelectWithOptions(motionSelect, currentModelFiles.motion_files, t('live2d.selectMotion', '选择动作'), 'motion');
-                updateSelectWithOptions(expressionSelect, currentModelFiles.expression_files, t('live2d.selectExpression', '选择表情'), 'expression');
-
-                // 7. Load current emotion mapping for this model
-                await loadEmotionMappingForModel(modelName);
-                renderPersistentUI();
-                
-                // 如果没有动作文件，禁用动作相关控件
-                if (currentModelFiles.motion_files.length === 0) {
-                    motionSelect.disabled = true;
-                    playMotionBtn.disabled = true;
-                    motionSelect.innerHTML = `<option value="">${t('live2d.noMotionFiles', '该模型没有动作文件')}</option>`;
-                }
-                setControlsDisabled(false);
-                showStatus(t('live2d.modelLoadSuccess', `模型 ${modelName} 加载成功`, {model: modelName}));
-
-            } catch (error) {
-                showStatus(t('live2d.modelLoadFailed', `加载模型 ${modelName} 失败`, {model: modelName}));
-                console.error(error);
-                setControlsDisabled(false);
-            }
-        }
-
-        playMotionBtn.addEventListener('click', () => {
-            if (!live2dModel || !motionSelect.value) return;
-            
-            // 检查是否有动作文件
-            if (currentModelFiles.motion_files.length === 0) {
-                showStatus(t('live2d.noMotionFilesStatus', '该模型没有动作文件'), 2000);
-                return;
-            }
-            
-            const motionIndex = currentModelFiles.motion_files.indexOf(motionSelect.value);
-            if (motionIndex > -1) {
-                try {
-                    live2dModel.motion('PreviewAll', motionIndex, 3);
-                    showStatus(t('live2d.playingMotion', `播放动作: ${motionSelect.value}`, {motion: motionSelect.value}), 1000);
-                } catch (error) {
-                    console.error('播放动作失败:', error);
-                    showStatus(t('live2d.playMotionFailed', `播放动作失败: ${motionSelect.value}`, {motion: motionSelect.value}), 2000);
-                }
-            } else {
-                showStatus(t('live2d.motionFileNotExists', '动作文件不存在'), 2000);
-            }
-        });
-
-        // VRMA 动画相关元素
-        const vrmAnimationGroup = document.getElementById('vrm-animation-group');
-        const vrmaAnimationSelect = document.getElementById('vrma-animation-select');
-        const playVrmaAnimationBtn = document.getElementById('play-vrma-animation-btn');
-        
-        // 当下拉菜单打开时自动刷新列表
-        if (vrmaAnimationSelect) {
-            // 点击时加载列表
-            vrmaAnimationSelect.addEventListener('click', async () => {
-                // 如果下拉菜单是空的或只有默认选项，则加载列表
-                if (vrmaAnimationSelect.options.length <= 1) {
-                    await loadVRMAAnimations();
+                // 根据窗口类型执行不同的操作
+                if (isPopupWindow) {
+                    // 如果是弹出窗口，直接关闭
+                    window.close();
+                } else {
+                    // 如果是主窗口跳转，直接跳转即可，新页面会自动加载最新配置
+                    window.location.href = '/';
                 }
             });
-            // focus时也加载列表
-            vrmaAnimationSelect.addEventListener('focus', async () => {
-                if (vrmaAnimationSelect.options.length <= 1) {
-                    await loadVRMAAnimations();
-                }
+
+            // 上传模型功能
+            uploadBtn.addEventListener('click', () => {
+                modelUpload.click();
             });
-        }
-        
-        // 加载 VRMA 动画文件列表（从服务器动态获取）
-        async function loadVRMAAnimations() {
-            // 检查元素是否存在
-            if (!vrmaAnimationSelect || !playVrmaAnimationBtn) {
-                console.error('[VRMA] 动画控件元素未找到');
-                return;
-            }
-            
-            // 先设置为加载状态
-            vrmaAnimationSelect.innerHTML = `<option value="">加载中...</option>`;
-            vrmaAnimationSelect.disabled = true;
-            playVrmaAnimationBtn.disabled = true;
-            
-            try {
-                console.log('[VRM动画] 开始加载动画列表...');
-                const response = await fetch('/api/vrm/animations');
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                const data = await response.json();
-                console.log('[VRM动画] API 返回数据:', data);
-                
-                if (!data.success) {
-                    throw new Error(data.error || '未知错误');
-                }
-                
-                if (data.success && Array.isArray(data.animations) && data.animations.length > 0) {
-                    console.log(`[VRM动画] 找到 ${data.animations.length} 个动画文件`);
-                    vrmaAnimationSelect.innerHTML = `<option value="">选择 VRM 动画</option>`;
-                    data.animations.forEach(file => {
-                        const option = document.createElement('option');
-                        option.value = file.path;
-                        // 显示文件名和类型
-                        const typeLabel = file.type === 'vmd' ? ' [VMD]' : file.type === 'vrma' ? ' [VRMA]' : ' [ANIM]';
-                        option.textContent = file.name + typeLabel;
-                        option.dataset.type = file.type; // 保存文件类型
-                        vrmaAnimationSelect.appendChild(option);
-                    });
-                    vrmaAnimationSelect.disabled = false;
-                    playVrmaAnimationBtn.disabled = false;
-                    console.log('[VRM动画] 动画列表加载成功');
-                } else {
-                    console.warn('[VRM动画] 未找到动画文件');
-                    vrmaAnimationSelect.innerHTML = `<option value="">未找到 VRM 动画</option>`;
-                    vrmaAnimationSelect.disabled = true;
-                    playVrmaAnimationBtn.disabled = true;
-                }
-            } catch (error) {
-                console.error('[VRM动画] 加载动画列表失败:', error);
-                vrmaAnimationSelect.innerHTML = `<option value="">加载失败: ${error.message || error}</option>`;
-                vrmaAnimationSelect.disabled = true;
-                playVrmaAnimationBtn.disabled = true;
-            }
-        }
-        
-        // 播放 VRM 动画（支持VRMA和VMD）
-        playVrmaAnimationBtn.addEventListener('click', async () => {
-            if (!window.vrmManager || !window.vrmManager.vrm || !vrmaAnimationSelect.value) {
-                showStatus('请先加载 VRM 模型', 2000);
-                return;
-            }
-            
-            try {
-                const animationPath = vrmaAnimationSelect.value;
-                const fileName = animationPath.split('/').pop();
-                
-                // 获取选中的文件类型
-                const selectedOption = vrmaAnimationSelect.options[vrmaAnimationSelect.selectedIndex];
-                const fileType = selectedOption ? selectedOption.dataset.type : null;
-                
-                showStatus(`正在播放: ${fileName}`, 1000);
-                
-                // 根据文件类型选择播放方法
-                if (fileType === 'vmd') {
-                    // 播放VMD动画
-                    await window.vrmManager.playVMDAnimation(animationPath, {
-                        loop: true,
-                        timeScale: 1.0
-                    });
-                    console.log('[VMD] 动画播放成功:', fileName);
-                } else {
-                    // 播放VRMA/ANIM动画
-                    await window.vrmManager.playVRMAAnimation(animationPath, {
-                        loop: true,
-                        timeScale: 1.0
-                    });
-                    console.log('[VRMA] 动画播放成功:', fileName);
-                }
-                
-                showStatus(`播放成功: ${fileName}`, 2000);
-            } catch (error) {
-                console.error('播放 VRM 动画失败:', error);
-                showStatus(`播放失败: ${error.message}`, 3000);
-            }
-        });
 
-        playExpressionBtn.addEventListener('click', () => {
-            if (!live2dModel || !expressionSelect.value) return;
-            // 从完整路径中提取表情名称（去掉路径和扩展名）
-            const expressionName = expressionSelect.value.split('/').pop().replace('.exp3.json', '');
-            console.log('播放表情:', expressionName); // 添加调试信息
-            try {
-                live2dModel.expression(expressionName);
-                showStatus(t('live2d.playingExpression', `播放表情: ${expressionName}`, {expression: expressionName}), 1000);
-            } catch (error) {
-                console.error('播放表情失败:', error);
-                showStatus(t('live2d.playExpressionFailed', `播放表情失败: ${expressionName}`, {expression: expressionName}), 2000);
-            }
-        });
+            modelUpload.addEventListener('change', async (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
 
-        emotionManagerBtn.addEventListener('click', () => {
-            if (!currentModelInfo) return;
-            openModal('/live2d_emotion_manager');
-        });
+                uploadStatus.textContent = t('live2d.uploadingModel', '正在上传模型...');
+                uploadStatus.style.color = '#4f8cff';
+                uploadBtn.disabled = true;
 
-        savePositionBtn.addEventListener('click', async () => {
-            if (!currentModelInfo || !live2dModel) return;
-            showStatus(t('live2d.savingSettings', '正在保存设置...'));
-            
-            // 添加调试信息
-            console.log('保存设置 - 当前位置:', { x: live2dModel.x, y: live2dModel.y });
-            console.log('保存设置 - 当前缩放:', { x: live2dModel.scale.x, y: live2dModel.scale.y });
-            
-            // 保存位置和缩放
-            const positionSuccess = await window.live2dManager.saveUserPreferences(
-                currentModelInfo.path,
-                { x: live2dModel.x, y: live2dModel.y },
-                { x: live2dModel.scale.x, y: live2dModel.scale.y }
-            );
-            
-            // 保存模型设置到角色，同时传入item_id
-            const modelSuccess = await saveModelToCharacter(currentModelInfo.name, 'live2d', currentModelInfo.item_id);
-            
-            if (positionSuccess && modelSuccess) {
-                showStatus(t('live2d.settingsSaved', '位置和模型设置保存成功!'), 2000);
-                window.hasUnsavedChanges = false; // 保存成功后重置标志
-            } else if (positionSuccess) {
-                showStatus(t('live2d.positionSavedModelFailed', '位置保存成功，模型设置保存失败!'), 2000);
-            } else if (modelSuccess) {
-                showStatus(t('live2d.modelSavedPositionFailed', '模型设置保存成功，位置保存失败!'), 2000);
-            } else {
-                showStatus(t('live2d.saveFailedGeneral', '保存失败!'), 2000);
-            }
-        });
-        
-        // 返回主页/关闭按钮
-        backToMainBtn.addEventListener('click', async () => {
-            // 检查是否有未保存的更改
-            if (window.hasUnsavedChanges) {
-                const message = t('dialogs.unsavedChanges', '您有未保存的设置，确定要离开吗？');
-                const title = t('dialogs.confirmLeave', '确认离开');
-                const confirmLeave = await showConfirm(message, title, { danger: true });
-                console.log('用户选择:', confirmLeave ? '确定离开' : '取消');
-                if (!confirmLeave) {
-                    return; // 用户取消，不离开
-                }
-                // 用户确认离开，重置未保存状态，避免被 beforeunload 拦截
-                window.hasUnsavedChanges = false;
-            } else {
-                console.log('没有未保存的更改，直接返回');
-            }
-            
-            // 如果处于全屏状态，先退出全屏
-            if (isFullscreen()) {
                 try {
-                    await exitFullscreen();
-                    await new Promise(resolve => setTimeout(resolve, 100));
-                } catch (e) {
-                    console.log('退出全屏失败:', e);
-                }
-            }
-            
-            // 根据窗口类型执行不同的操作
-            if (isPopupWindow) {
-                // 如果是弹出窗口，直接关闭
-                window.close();
-            } else {
-                // 如果是主窗口跳转，直接跳转即可，新页面会自动加载最新配置
-                window.location.href = '/';
-            }
-        });
+                    const formData = new FormData();
 
-        // 上传模型功能
-        uploadBtn.addEventListener('click', () => {
-            modelUpload.click();
-        });
+                    // 添加所有文件到FormData
+                    for (const file of files) {
+                        // 保留文件的相对路径
+                        formData.append('files', file, file.webkitRelativePath || file.name);
+                    }
 
-        modelUpload.addEventListener('change', async (e) => {
-            const files = Array.from(e.target.files);
-            if (files.length === 0) return;
+                    const response = await fetch('/api/live2d/upload_model', {
+                        method: 'POST',
+                        body: formData
+                    });
 
-            // 根据当前模型类型选择不同的上传API
-            const uploadApi = currentModelType === 'vrm' ? '/api/vrm/upload_model' : '/api/live2d/upload_model';
-            
-            uploadStatus.textContent = t('live2d.uploadingModel', '正在上传模型...');
-            uploadStatus.style.color = '#4f8cff';
-            uploadBtn.disabled = true;
+                    const result = await response.json();
 
-            try {
-                const formData = new FormData();
-                
-                // 添加所有文件到FormData
-                for (const file of files) {
-                    // 保留文件的相对路径
-                    formData.append('files', file, file.webkitRelativePath || file.name);
-                }
+                    if (result.success) {
+                        uploadStatus.textContent = t('live2d.uploadSuccess', `✓ ${result.message}`, { message: result.message });
+                        uploadStatus.style.color = '#28a745';
 
-                const response = await fetch(uploadApi, {
-                    method: 'POST',
-                    body: formData
-                });
-
-                const result = await response.json();
-
-                if (result.success) {
-                    uploadStatus.textContent = t('live2d.uploadSuccess', `✓ ${result.message}`, {message: result.message});
-                    uploadStatus.style.color = '#28a745';
-                    
-                    // 根据模型类型重新加载对应的模型列表
-                    setTimeout(async () => {
-                        try {
-                            if (currentModelType === 'vrm') {
-                                // 重新加载VRM模型列表
-                                await loadVRMModels();
-                                
-                                // 自动选择新上传的模型并加载
-                                if (result.model_path && vrmModelSelect) {
-                                    // 确保在VRM模式
-                                    if (currentModelType !== 'vrm') {
-                                        await switchModelDisplay('vrm');
-                                        await new Promise(resolve => setTimeout(resolve, 500));
-                                    }
-                                    
-                                    // 等待VRM管理器初始化
-                                    let retryCount = 0;
-                                    while (!vrmManager && retryCount < 10) {
-                                        await new Promise(resolve => setTimeout(resolve, 200));
-                                        retryCount++;
-                                    }
-                                    
-                                    if (vrmManager && result.model_path) {
-                                        // 设置下拉框值
-                                        vrmModelSelect.value = result.model_path;
-                                        
-                                        // 自动保存到角色配置
-                                        await saveModelToCharacter(result.model_path, 'vrm');
-                                        
-                                        // 直接加载模型（不通过change事件，避免重复保存）
-                                        try {
-                                            showStatus(t('live2d.loadingVRMModel', '正在加载 VRM 模型...'));
-                                            await vrmManager.loadModel(result.model_path);
-                                            
-                                            // 从路径中提取模型名称
-                                            const modelName = result.model_path.split('/').pop().replace('.vrm', '');
-                                            showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelName} 加载成功`, {model: modelName}), 2000);
-                                        } catch (error) {
-                                            console.error('加载 VRM 模型失败:', error);
-                                            showStatus(t('live2d.vrmModelLoadFailed', '加载 VRM 模型失败'), 3000);
-                                        }
-                                    } else {
-                                        // 如果管理器未初始化，使用change事件触发
-                                        vrmModelSelect.value = result.model_path;
-                                        vrmModelSelect.dispatchEvent(new Event('change'));
-                                    }
-                                }
-                            } else {
-                                // 重新加载Live2D模型列表
+                        // 重新加载模型列表
+                        setTimeout(async () => {
+                            try {
                                 const modelsResponse = await fetch('/api/live2d/models');
                                 availableModels = await modelsResponse.json();
                                 modelSelect.innerHTML = `<option value="">${t('live2d.pleaseSelectModel', '请选择一个模型')}</option>`;
@@ -1497,349 +892,356 @@
                                     option.textContent = model.name;
                                     modelSelect.appendChild(option);
                                 });
-                                
+
                                 // 自动选择新上传的模型
                                 if (result.model_name) {
                                     modelSelect.value = result.model_name;
                                     modelSelect.dispatchEvent(new Event('change'));
                                 }
+
+                                uploadStatus.textContent = '';
+                            } catch (e) {
+                                console.error('重新加载模型列表失败:', e);
                             }
-                            
+                        }, 1500);
+                    } else {
+                        uploadStatus.textContent = t('live2d.uploadFailed', `✗ ${result.error}`, { error: result.error });
+                        uploadStatus.style.color = '#dc3545';
+                        setTimeout(() => {
                             uploadStatus.textContent = '';
-                        } catch (e) {
-                            console.error('重新加载模型列表失败:', e);
-                        }
-                    }, 1500);
-                } else {
-                    uploadStatus.textContent = t('live2d.uploadFailed', `✗ ${result.error}`, {error: result.error});
+                        }, 5000);
+                    }
+                } catch (error) {
+                    console.error('上传失败:', error);
+                    uploadStatus.textContent = t('live2d.uploadError', `✗ 上传失败: ${error.message}`, { error: error.message });
                     uploadStatus.style.color = '#dc3545';
                     setTimeout(() => {
                         uploadStatus.textContent = '';
                     }, 5000);
+                } finally {
+                    uploadBtn.disabled = false;
+                    // 重置file input以允许重新选择同一个文件夹
+                    modelUpload.value = '';
                 }
-            } catch (error) {
-                console.error('上传失败:', error);
-                uploadStatus.textContent = t('live2d.uploadError', `✗ 上传失败: ${error.message}`, {error: error.message});
-                uploadStatus.style.color = '#dc3545';
-                setTimeout(() => {
-                    uploadStatus.textContent = '';
-                }, 5000);
-            } finally {
-                uploadBtn.disabled = false;
-                // 重置file input以允许重新选择同一个文件夹
-                modelUpload.value = '';
-            }
-        });
-
-        // Helper functions
-        function setControlsDisabled(disabled) {
-            motionSelect.disabled = disabled;
-            expressionSelect.disabled = disabled;
-            playMotionBtn.disabled = disabled;
-            playExpressionBtn.disabled = disabled;
-            emotionManagerBtn.disabled = disabled;
-            savePositionBtn.disabled = disabled;
-            persistentSelect.disabled = disabled;
-            addPersistentBtn.disabled = disabled;
-            savePersistentBtn.disabled = disabled;
-        }
-
-        function updateSelectWithOptions(select, options, defaultText, type) {
-            select.innerHTML = `<option value="">${defaultText}</option>`;
-            options.forEach(opt => {
-                const option = document.createElement('option');
-                option.value = opt;
-                
-                if (type === 'expression') {
-                    const displayName = opt.split('/').pop().replace('.exp3.json', '');
-                    option.textContent = displayName;
-                } else if (type === 'motion') {
-                    const displayName = opt.split('/').pop().replace('.motion3.json', '');
-                    option.textContent = displayName;
-                } else {
-                    option.textContent = opt;
-                }
-                select.appendChild(option);
             });
-        }
 
-        function openModal(url) {
-            const modal = document.createElement('div');
-            modal.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; justify-content: center; align-items: center;`;
-            
-            const iframeContainer = document.createElement('div');
-            iframeContainer.style.cssText = `background: white; border-radius: 15px; width: 95%; height: 95%; max-width: 1500px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); display: flex; flex-direction: column; overflow: hidden;`;
+            // 更新常驻表情选择框
+            async function updatePersistentExpressionSelect() {
+                const persistentSelect = document.getElementById('persistent-expression-select');
 
-            const header = document.createElement('div');
-            header.style.cssText = `padding: 12px 20px; background: #f1f3f5; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center;`;
-            
-            const title = document.createElement('h3');
-            title.textContent = t('emotion.manager', '情感配置管理器');
-            title.style.cssText = 'margin: 0;';
+                if (!currentModelFiles || !currentModelFiles.expression_files) {
+                    persistentSelect.disabled = true;
+                    return;
+                }
 
-            const closeButton = document.createElement('button');
-            closeButton.textContent = '×';
-            closeButton.style.cssText = `background: none; border: none; font-size: 24px; cursor: pointer;`;
+                // 只显示 .exp3.json 文件
+                const exp3Files = currentModelFiles.expression_files.filter(file => file.endsWith('.exp3.json'));
 
-            const iframe = document.createElement('iframe');
-            iframe.src = url;
-            iframe.style.cssText = 'width: 100%; height: 100%; border: none;';
+                persistentSelect.innerHTML = `<option value="" data-i18n="live2d.selectPersistentExpression">${t('live2d.selectPersistentExpression', '选择常驻表情')}</option>`;
+                exp3Files.forEach(file => {
+                    const option = document.createElement('option');
+                    option.value = file;
+                    const displayName = file.split('/').pop().replace('.exp3.json', '');
+                    option.textContent = displayName;
+                    persistentSelect.appendChild(option);
+                });
 
-            const closeModal = () => {
-                modal.remove();
-                if (currentModelInfo) {
-                    modelSelect.value = currentModelInfo.name;
-                    modelSelect.dispatchEvent(new Event('change'));
+                persistentSelect.disabled = false;
+            }
+
+            // 加载已配置的常驻表情
+            async function loadPersistentExpressions() {
+                const persistentList = document.getElementById('persistent-list');
+                if (!currentModelInfo) {
+                    persistentList.style.display = 'none';
+                    return;
+                }
+
+                try {
+                    const res = await fetch(`/api/live2d/emotion_mapping/${encodeURIComponent(currentModelInfo.name)}`);
+                    const data = await res.json();
+
+                    if (data && data.success && data.config && data.config.expressions && data.config.expressions['常驻']) {
+                        const persistentExpressions = data.config.expressions['常驻'];
+                        if (persistentExpressions && persistentExpressions.length > 0) {
+                            persistentList.innerHTML = '';
+                            persistentExpressions.forEach(file => {
+                                const item = document.createElement('div');
+                                item.style.cssText = 'padding: 4px 8px; margin: 2px 0; background: #f0f0f0; border-radius: 4px; font-size: 12px; display: flex; justify-content: space-between; align-items: center;';
+                                const fileName = file.split('/').pop().replace('.exp3.json', '');
+                                const nameSpan = document.createElement('span');
+                                nameSpan.textContent = fileName;
+                                const deleteBtn = document.createElement('button');
+                                deleteBtn.textContent = t('live2d.delete', '删除');
+                                deleteBtn.style.cssText = 'background: #dc3545; color: white; border: none; border-radius: 4px; padding: 2px 8px; cursor: pointer; font-size: 11px;';
+                                deleteBtn.addEventListener('click', () => removePersistentExpression(file));
+                                item.appendChild(nameSpan);
+                                item.appendChild(deleteBtn);
+                                persistentList.appendChild(item);
+                            });
+                            persistentList.style.display = 'block';
+                        } else {
+                            persistentList.style.display = 'none';
+                        }
+                    } else {
+                        persistentList.style.display = 'none';
+                    }
+                } catch (e) {
+                    console.error('加载常驻表情失败:', e);
+                    persistentList.style.display = 'none';
+                }
+            }
+
+            // 添加常驻表情
+            const persistentSelect = document.getElementById('persistent-expression-select');
+            persistentSelect.addEventListener('change', async () => {
+                const selectedFile = persistentSelect.value;
+                if (!selectedFile || !currentModelInfo) return;
+
+                // 防止重复操作
+                if (persistentSelect.disabled) return;
+                persistentSelect.disabled = true;
+
+                try {
+                    // 获取当前配置
+                    const res = await fetch(`/api/live2d/emotion_mapping/${encodeURIComponent(currentModelInfo.name)}`);
+                    const data = await res.json();
+
+                    const currentConfig = data && data.success ? (data.config || { motions: {}, expressions: {} }) : { motions: {}, expressions: {} };
+
+                    // 确保expressions对象存在
+                    if (!currentConfig.expressions) {
+                        currentConfig.expressions = {};
+                    }
+
+                    // 确保常驻表情数组存在
+                    if (!currentConfig.expressions['常驻']) {
+                        currentConfig.expressions['常驻'] = [];
+                    }
+
+                    // 检查是否已存在
+                    if (currentConfig.expressions['常驻'].includes(selectedFile)) {
+                        showStatus(t('live2d.persistentExpressionExists', '该表情已添加为常驻表情'), 2000);
+                        persistentSelect.value = '';
+                        return; // 注意：这里return后会在finally中恢复disabled状态
+                    }
+
+                    // 添加到常驻表情列表
+                    currentConfig.expressions['常驻'].push(selectedFile);
+
+                    // 保存配置
+                    const saveRes = await fetch(`/api/live2d/emotion_mapping/${encodeURIComponent(currentModelInfo.name)}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(currentConfig)
+                    });
+
+                    const saveData = await saveRes.json();
+                    if (saveData.success) {
+                        showStatus(t('live2d.persistentExpressionAdded', '常驻表情已添加'), 2000);
+                        await loadPersistentExpressions();
+                        persistentSelect.value = '';
+                    } else {
+                        showStatus(t('live2d.persistentExpressionAddFailed', '添加常驻表情失败'), 2000);
+                        persistentSelect.value = '';
+                    }
+                } catch (e) {
+                    console.error('添加常驻表情失败:', e);
+                    showStatus(t('live2d.persistentExpressionAddFailed', '添加常驻表情失败'), 2000);
+                    persistentSelect.value = '';
+                } finally {
+                    persistentSelect.disabled = false;
+                }
+            });
+
+            // 删除常驻表情
+            window.removePersistentExpression = async function (file) {
+                if (!currentModelInfo) return;
+
+                try {
+                    const res = await fetch(`/api/live2d/emotion_mapping/${encodeURIComponent(currentModelInfo.name)}`);
+                    const data = await res.json();
+
+                    const currentConfig = data && data.success ? (data.config || { motions: {}, expressions: {} }) : { motions: {}, expressions: {} };
+
+                    if (currentConfig.expressions && currentConfig.expressions['常驻']) {
+                        const index = currentConfig.expressions['常驻'].indexOf(file);
+                        if (index > -1) {
+                            currentConfig.expressions['常驻'].splice(index, 1);
+
+                            const saveRes = await fetch(`/api/live2d/emotion_mapping/${encodeURIComponent(currentModelInfo.name)}`, {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify(currentConfig)
+                            });
+
+                            const saveData = await saveRes.json();
+                            if (saveData.success) {
+                                showStatus(t('live2d.persistentExpressionRemoved', '常驻表情已删除'), 2000);
+                                await loadPersistentExpressions();
+                            } else {
+                                showStatus(t('live2d.persistentExpressionRemoveFailed', '删除常驻表情失败'), 2000);
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('删除常驻表情失败:', e);
+                    showStatus(t('live2d.persistentExpressionRemoveFailed', '删除常驻表情失败'), 2000);
                 }
             };
-            
-            closeButton.onclick = closeModal;
-            header.appendChild(title);
-            header.appendChild(closeButton);
-            iframeContainer.appendChild(header);
-            iframeContainer.appendChild(iframe);
-            modal.appendChild(iframeContainer);
-            document.body.appendChild(modal);
-        }
 
-        // ===== 常驻表情 管理 =====
-        async function loadEmotionMappingForModel(modelName) {
-            currentEmotionMapping = null;
-            currentPersistent = [];
-            try {
-                const res = await fetch(`/api/live2d/emotion_mapping/${encodeURIComponent(modelName)}`);
-                const data = await res.json();
-                if (data && data.success && data.config) {
-                    currentEmotionMapping = data.config;
-                } else {
+            // 保存按钮已移除，因为表情在添加/删除时已自动保存
+
+            // Helper functions
+            function setControlsDisabled(disabled) {
+                motionSelect.disabled = disabled;
+                expressionSelect.disabled = disabled;
+                playMotionBtn.disabled = disabled;
+                playExpressionBtn.disabled = disabled;
+                emotionManagerBtn.disabled = disabled;
+                savePositionBtn.disabled = disabled;
+                const persistentSelect = document.getElementById('persistent-expression-select');
+                if (persistentSelect) persistentSelect.disabled = disabled;
+            }
+
+            function updateSelectWithOptions(select, options, defaultText, type) {
+                select.innerHTML = `<option value="">${defaultText}</option>`;
+                options.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt;
+
+                    if (type === 'expression') {
+                        const displayName = opt.split('/').pop().replace('.exp3.json', '');
+                        option.textContent = displayName;
+                    } else if (type === 'motion') {
+                        const displayName = opt.split('/').pop().replace('.motion3.json', '');
+                        option.textContent = displayName;
+                    } else {
+                        option.textContent = opt;
+                    }
+                    select.appendChild(option);
+                });
+            }
+
+            function openModal(url) {
+                const modal = document.createElement('div');
+                modal.style.cssText = `position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 10000; display: flex; justify-content: center; align-items: center;`;
+
+                const iframeContainer = document.createElement('div');
+                iframeContainer.style.cssText = `background: white; border-radius: 15px; width: 95%; height: 95%; max-width: 1500px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); display: flex; flex-direction: column; overflow: hidden;`;
+
+                const header = document.createElement('div');
+                header.style.cssText = `padding: 12px 20px; background: #f1f3f5; border-bottom: 1px solid #dee2e6; display: flex; justify-content: space-between; align-items: center;`;
+
+                const title = document.createElement('h3');
+                title.textContent = t('emotion.manager', '情感配置管理器');
+                title.style.cssText = 'margin: 0;';
+
+                const closeButton = document.createElement('button');
+                closeButton.textContent = '×';
+                closeButton.style.cssText = `background: none; border: none; font-size: 24px; cursor: pointer;`;
+
+                const iframe = document.createElement('iframe');
+                iframe.src = url;
+                iframe.style.cssText = 'width: 100%; height: 100%; border: none;';
+
+                const closeModal = () => {
+                    modal.remove();
+                    if (currentModelInfo) {
+                        modelSelect.value = currentModelInfo.name;
+                        modelSelect.dispatchEvent(new Event('change'));
+                    }
+                };
+
+                closeButton.onclick = closeModal;
+                header.appendChild(title);
+                header.appendChild(closeButton);
+                iframeContainer.appendChild(header);
+                iframeContainer.appendChild(iframe);
+                modal.appendChild(iframeContainer);
+                document.body.appendChild(modal);
+            }
+
+            // ===== 情绪映射加载 =====
+            async function loadEmotionMappingForModel(modelName) {
+                currentEmotionMapping = null;
+                try {
+                    const res = await fetch(`/api/live2d/emotion_mapping/${encodeURIComponent(modelName)}`);
+                    const data = await res.json();
+                    if (data && data.success && data.config) {
+                        currentEmotionMapping = data.config;
+                    } else {
+                        currentEmotionMapping = { motions: {}, expressions: {} };
+                    }
+                } catch (e) {
                     currentEmotionMapping = { motions: {}, expressions: {} };
                 }
-            } catch (e) {
-                currentEmotionMapping = { motions: {}, expressions: {} };
             }
-            const expr = (currentEmotionMapping.expressions || {});
-            currentPersistent = Array.isArray(expr['常驻']) ? [...expr['常驻']] : [];
-            // 将后端映射应用到前端 Live2D 管理器并启用常驻
-            try {
-                if (window.live2dManager) {
-                    const mgr = window.live2dManager;
-                    if (!mgr.emotionMapping) mgr.emotionMapping = { motions: {}, expressions: {} };
-                    if (!mgr.emotionMapping.expressions) mgr.emotionMapping.expressions = {};
-                    mgr.emotionMapping.expressions['常驻'] = [...currentPersistent];
-                    await mgr.setupPersistentExpressions();
-                }
-            } catch (e) { console.warn('应用常驻表情失败:', e); }
-        }
 
-        function renderPersistentUI() {
-            persistentBox.style.display = '';
-            // 可选：所有表达式 - 已选（常驻）
-            const unused = (currentModelFiles.expression_files || []).filter(f => !currentPersistent.includes(f));
-            updateSelectWithOptions(persistentSelect, unused, t('live2d.selectPersistentExpression', '选择常驻表情'), 'expression');
+            // 加载当前角色模型的函数
+            async function loadCurrentCharacterModel() {
+                try {
+                    // 获取角色名称
+                    const lanlanName = await getLanlanName();
 
-            // 列表
-            if (!currentPersistent.length) {
-                persistentList.innerHTML = `<div style="color:#999;">${t('live2d.noPersistentExpressions', '尚未添加常驻表情')}</div>`;
-            } else {
-                persistentList.innerHTML = currentPersistent.map(f => {
-                    const name = f.split('/').pop().replace('.exp3.json','');
-                    const removeLabel = t('common.delete', '移除');
-                    return `<div style="display:flex; align-items:center; justify-content:space-between; padding:4px 6px; border-bottom:1px dashed #eee;">
-                        <span>${name}</span>
-                        <button data-file="${f}" class="btn btn-secondary" style="padding:4px 8px; font-size:12px;">${removeLabel}</button>
-                    </div>`;
-                }).join('');
-                // 绑定移除
-                Array.from(persistentList.querySelectorAll('button[data-file]')).forEach(btn => {
-                    btn.onclick = async () => {
-                        const file = btn.getAttribute('data-file');
-                        const idx = currentPersistent.indexOf(file);
-                        if (idx > -1) currentPersistent.splice(idx, 1);
-                        window.hasUnsavedChanges = true; // 标记为有未保存的更改
-                        renderPersistentUI();
-                        // 即时同步到前端并应用
-                        try {
-                            if (window.live2dManager) {
-                                const mgr = window.live2dManager;
-                                if (!mgr.emotionMapping) mgr.emotionMapping = { motions: {}, expressions: {} };
-                                if (!mgr.emotionMapping.expressions) mgr.emotionMapping.expressions = {};
-                                mgr.emotionMapping.expressions['常驻'] = [...currentPersistent];
-                                await mgr.setupPersistentExpressions();
-                                showStatus(t('live2d.updatedPersistentExpression', '已更新常驻表情'), 1200);
-                            }
-                        } catch (e) { console.warn('应用常驻表情失败:', e); }
-                    };
-                });
-            }
-            // 启用相关控件
-            persistentSelect.disabled = false;
-            addPersistentBtn.disabled = false;
-            savePersistentBtn.disabled = false;
-        }
+                    // 构建API URL，支持可选的item_id参数
+                    let apiUrl = '/api/characters/current_live2d_model';
+                    const params = new URLSearchParams();
 
-        addPersistentBtn.addEventListener('click', async () => {
-            const file = persistentSelect.value;
-            if (!file) return;
-            if (!currentPersistent.includes(file)) {
-                currentPersistent.push(file);
-                window.hasUnsavedChanges = true; // 标记为有未保存的更改
-            }
-            renderPersistentUI();
-            // 即时同步到前端并应用
-            try {
-                if (window.live2dManager) {
-                    const mgr = window.live2dManager;
-                    if (!mgr.emotionMapping) mgr.emotionMapping = { motions: {}, expressions: {} };
-                    if (!mgr.emotionMapping.expressions) mgr.emotionMapping.expressions = {};
-                    mgr.emotionMapping.expressions['常驻'] = [...currentPersistent];
-                    await mgr.setupPersistentExpressions();
-                    showStatus(t('live2d.appliedPersistentExpression', '常驻表情已应用'), 1200);
-                }
-            } catch (e) { console.warn('应用常驻表情失败:', e); }
-        });
-
-        savePersistentBtn.addEventListener('click', async () => {
-            if (!currentModelInfo) return;
-            showStatus(t('live2d.savingPersistentExpression', '正在保存常驻表情...'));
-            try {
-                // 合并旧映射：保留 motions，保留 expressions 其他组，仅替换 常驻 组
-                const motions = (currentEmotionMapping && currentEmotionMapping.motions) ? currentEmotionMapping.motions : {};
-                const expressions = Object.assign({}, (currentEmotionMapping && currentEmotionMapping.expressions) ? currentEmotionMapping.expressions : {});
-                expressions['常驻'] = [...currentPersistent];
-
-                const body = { motions, expressions };
-                const resp = await fetch(`/api/live2d/emotion_mapping/${encodeURIComponent(currentModelInfo.name)}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(body)
-                });
-                const result = await resp.json();
-                if (result && result.success) {
-                    showStatus(t('live2d.persistentExpressionSaved', '常驻表情保存成功'), 1500);
-                    window.hasUnsavedChanges = false; // 保存成功后重置标志
-                    // 通知前端管理器重新应用常驻，无需重载模型
-                    if (window.live2dManager && window.live2dManager.setupPersistentExpressions) {
-                        await window.live2dManager.setupPersistentExpressions();
+                    if (lanlanName) {
+                        params.append('catgirl_name', lanlanName);
                     }
-                } else {
-                    showStatus(t('live2d.persistentExpressionSaveFailed', '保存常驻表情失败'), 2000);
-                }
-            } catch (e) {
-                console.error(e);
-                showStatus(t('live2d.persistentExpressionSaveFailed', '保存常驻表情失败'), 2000);
-            }
-        });
 
-        // 加载当前角色模型的函数
-        async function loadCurrentCharacterModel() {
-            try {
-                // 获取角色名称
-                const lanlanName = await getLanlanName();
-                
-                // 先检查是否有 VRM 模型
-                let vrmApiUrl = '/api/characters/current_vrm_model';
-                if (lanlanName) {
-                    vrmApiUrl += `?catgirl_name=${encodeURIComponent(lanlanName)}`;
-                }
-                
-                const vrmModelResponse = await fetch(vrmApiUrl);
-                const vrmModelData = await vrmModelResponse.json();
-                
-                if (vrmModelData.success && vrmModelData.model_name && vrmModelData.model_info) {
-                    // 如果有 VRM 模型，切换到 VRM 模式
-                    if (currentModelType !== 'vrm') {
-                        await switchModelDisplay('vrm');
+                    // 如果有item_id，添加到参数中
+                    // 注意：这里的item_id需要从适当的地方获取
+                    // 例如从全局变量、DOM元素或其他逻辑中获取
+                    // 这里只是示例，实际实现可能需要根据具体情况调整
+                    const itemId = currentModelInfo ? currentModelInfo.item_id : null;
+                    if (itemId) {
+                        params.append('item_id', itemId);
                     }
-                    
-                    // 等待 VRM 管理器初始化（最多等待3秒）
-                    let retryCount = 0;
-                    while (!vrmManager && retryCount < 15) {
-                        await new Promise(resolve => setTimeout(resolve, 200));
-                        retryCount++;
+
+                    // 添加参数到URL
+                    const paramsString = params.toString();
+                    if (paramsString) {
+                        apiUrl += `?${paramsString}`;
                     }
-                    
-                    // 设置并加载 VRM 模型
-                    if (vrmManager && vrmModelData.model_info.path) {
-                        vrmModelSelect.value = vrmModelData.model_info.path;
-                        try {
-                            showStatus(t('live2d.loadingVRMModel', `正在加载角色 ${vrmModelData.catgirl_name} 的VRM模型: ${vrmModelData.model_name}...`, {name: vrmModelData.catgirl_name, model: vrmModelData.model_name}));
-                            await vrmManager.loadModel(vrmModelData.model_info.path);
-                            showStatus(t('live2d.vrmModelLoaded', `已加载角色 ${vrmModelData.catgirl_name} 的VRM模型: ${vrmModelData.model_name}`, {name: vrmModelData.catgirl_name, model: vrmModelData.model_name}));
-                        } catch (error) {
-                            console.error('加载 VRM 模型失败:', error);
-                            showStatus(t('live2d.vrmModelLoadFailed', `加载 VRM 模型失败: ${error.message}`), 3000);
-                        }
-                    } else if (vrmModelData.model_info.path) {
-                        // 如果管理器未初始化，设置下拉框值
-                        vrmModelSelect.value = vrmModelData.model_info.path;
-                        showStatus(t('live2d.waitingVRMLoader', '等待 VRM 管理器初始化，请稍候...'));
+
+                    const currentModelResponse = await fetch(apiUrl);
+                    const currentModelData = await currentModelResponse.json();
+
+                    if (!currentModelData.success) {
+                        console.log('无法获取当前角色模型信息:', currentModelData.error);
+                        return;
+                    }
+
+                    const { catgirl_name, model_name, model_info } = currentModelData;
+
+                    if (model_name && model_info) {
+                        // 如果角色有设置的模型，自动加载
+                        console.log(`自动加载角色 ${catgirl_name} 的模型: ${model_name}`);
+                        showStatus(t('live2d.loadingCharacterModel', `正在加载角色 ${catgirl_name} 的模型: ${model_name}...`, { name: catgirl_name, model: model_name }));
+
+                        // 设置模型选择器
+                        currentModelInfo = model_info;
+                        modelSelect.value = model_name;
+
+                        // 加载模型
+                        await loadModel(model_name, model_info, model_info.item_id);
+
+                        showStatus(t('live2d.modelLoaded', `已加载角色 ${catgirl_name} 的模型: ${model_name}`, { name: catgirl_name, model: model_name }));
                     } else {
-                        showStatus(t('live2d.vrmModelListLoaded', 'VRM 模型列表已加载，请选择模型'));
+                        // 如果角色没有设置模型，显示提示信息
+                        console.log(`角色 ${catgirl_name} 未设置Live2D模型`);
+                        showStatus(t('live2d.modelNotSet', `角色 ${catgirl_name} 未设置模型，请手动选择`, { name: catgirl_name }));
                     }
-                    return;
+                } catch (error) {
+                    console.error('加载当前角色模型失败:', error);
+                    showStatus(t('live2d.loadCurrentModelFailed', '加载当前角色模型失败'));
                 }
-                
-                // 如果没有 VRM 模型，检查 Live2D 模型
-                // 构建API URL，支持可选的item_id参数
-                let apiUrl = '/api/characters/current_live2d_model';
-                const params = new URLSearchParams();
-                
-                if (lanlanName) {
-                    params.append('catgirl_name', lanlanName);
-                }
-                
-                // 如果有item_id，添加到参数中
-                const itemId = currentModelInfo ? currentModelInfo.item_id : null;
-                if (itemId) {
-                    params.append('item_id', itemId);
-                }
-                
-                // 添加参数到URL
-                const paramsString = params.toString();
-                if (paramsString) {
-                    apiUrl += `?${paramsString}`;
-                }
-                
-                const currentModelResponse = await fetch(apiUrl);
-                const currentModelData = await currentModelResponse.json();
-                
-                if (!currentModelData.success) {
-                    console.log('无法获取当前角色模型信息:', currentModelData.error);
-                    return;
-                }
-                
-                const { catgirl_name, model_name, model_info } = currentModelData;
-                
-                if (model_name && model_info) {
-                    // 如果角色有设置的模型，自动加载
-                    console.log(`自动加载角色 ${catgirl_name} 的模型: ${model_name}`);
-                    showStatus(t('live2d.loadingCharacterModel', `正在加载角色 ${catgirl_name} 的模型: ${model_name}...`, {name: catgirl_name, model: model_name}));
-                    
-                    // 确保在 Live2D 模式
-                    if (currentModelType !== 'live2d') {
-                        await switchModelDisplay('live2d');
-                        await new Promise(resolve => setTimeout(resolve, 300));
-                    }
-                    
-                    // 设置模型选择器
-                    currentModelInfo = model_info;
-                    modelSelect.value = model_name;
-                    
-                    // 加载模型
-                    await loadModel(model_name, model_info, model_info.item_id);
-                    
-                    showStatus(t('live2d.modelLoaded', `已加载角色 ${catgirl_name} 的模型: ${model_name}`, {name: catgirl_name, model: model_name}));
-                } else {
-                    // 如果角色没有设置模型，显示提示信息
-                    console.log(`角色 ${catgirl_name} 未设置模型`);
-                    showStatus(t('live2d.modelNotSet', `角色 ${catgirl_name} 未设置模型，请手动选择`, {name: catgirl_name}));
-                }
-            } catch (error) {
-                console.error('加载当前角色模型失败:', error);
-                showStatus(t('live2d.loadCurrentModelFailed', '加载当前角色模型失败'));
             }
-        }
-        
+        });
+
         // 监听页面卸载事件，确保返回时主界面可见
         window.addEventListener('beforeunload', (e) => {
             // 尝试退出全屏
@@ -1850,11 +1252,11 @@
                     console.log('退出全屏失败:', err);
                 }
             }
-            
+
             if (window.opener) {
                 sendMessageToMainPage('show_main_ui');
             }
-            
+
             // 如果有未保存的更改，本应阻止页面关闭并显示确认对话框
             // 但在Electron中可能导致无法关闭窗口，且无法使用自定义模态窗替代系统默认弹窗
             // 因此直接允许关闭，不再拦截
@@ -1866,22 +1268,13 @@
             }
             */
         });
-        
+
         // 确保在页面关闭时也恢复主界面
         window.addEventListener('unload', () => {
             // 页面卸载时不需要再次发送消息
         });
-        
-        } catch (error) {
-            console.error('页面初始化失败:', error);
-            const statusDiv = document.getElementById('status');
-            if (statusDiv) {
-                statusDiv.textContent = `错误：${error.message}`;
-                statusDiv.style.color = '#dc3545';
-            }
-        }
-    });
-        </script>
+    </script>
 
 </body>
+
 </html>

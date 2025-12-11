@@ -360,6 +360,7 @@
     "persistentExpression": "Persistent Expression (expression only):",
     "pleaseLoadModel": "Please load a model first",
     "add": "Add",
+    "delete": "Delete",
     "savePersistent": "Save Persistent Expression",
     "persistentHint": "Persistent expressions will always be active and cannot be cleared or overridden; only .exp3.json files can be selected here.",
     "backToMain": "← Back to Main",
@@ -409,6 +410,11 @@
     "savingPersistentExpression": "Saving persistent expression...",
     "persistentExpressionSaved": "Persistent expression saved successfully",
     "persistentExpressionSaveFailed": "Failed to save persistent expression",
+    "persistentExpressionAdded": "Persistent expression added",
+    "persistentExpressionAddFailed": "Failed to add persistent expression",
+    "persistentExpressionRemoved": "Persistent expression removed",
+    "persistentExpressionRemoveFailed": "Failed to remove persistent expression",
+    "persistentExpressionExists": "This expression is already added as persistent expression",
     "modelType": "Model Type:",
     "selectLive2DModel": "Select Live2D Model:",
     "selectVRMModel": "Select VRM Model:",
@@ -421,12 +427,47 @@
     "waitingVRMLoader": "Waiting for VRM loader...",
     "vrmLoaderFailed": "VRM loader not loaded, please refresh the page",
     "vrmInitialized": "VRM manager initialized successfully",
-    "vrmInitFailed": "Failed to initialize VRM manager"
+    "vrmInitFailed": "Failed to initialize VRM manager",
+    "parameterEditor": {
+      "title": "Live2D Parameter Editor",
+      "backToMain": "← Back to L2D Settings",
+      "backToL2DManager": "← Back to L2D Manager",
+      "selectModel": "Select Model:",
+      "loading": "Loading...",
+      "resetAll": "Reset All",
+      "saveParameters": "Save",
+      "parameterList": "Parameters:",
+      "pleaseSelectAndLoadModel": "Select a model first",
+      "pleaseSelectModel": "Select model",
+      "ready": "Ready",
+      "pleaseSelectModelOption": "Select model",
+      "noModels": "No models",
+      "noModelsFound": "No models",
+      "modelListLoaded": "Loaded",
+      "modelListLoadFailed": "Load failed: {{error}}",
+      "loadingModel": "Loading...",
+      "modelLoadSuccess": "Loaded",
+      "modelLoadFailed": "Load failed: {{error}}",
+      "noParametersFound": "No parameters",
+      "other": "Other",
+      "reset": "Reset",
+      "resetAllParameters": "Reset",
+      "savingParameters": "Saving...",
+      "parametersSaved": "Saved!",
+      "parametersSavePartialFailed": "Save failed: {{errors}}",
+      "parametersSaveFailed": "Save failed: {{error}}",
+      "modelDirectorySaveFailed": "File save failed",
+      "userPreferencesSaveFailed": "Prefs save failed",
+      "modelNotFound": "Model not found",
+      "cannotGetModelFiles": "Cannot get model files",
+      "cannotGetModelConfig": "Cannot get model config"
+    }
   },
   "voice": {
     "title": "Voice Registration",
     "selectFile": "Select local audio file (15~20 seconds recommended, max 45 seconds, wav/mp3 format)",
     "customPrefix": "Custom Prefix (Required for Alibaba Cloud)",
+    "customPrefixNote": "Maximum 10 characters, numbers and English letters only",
     "prefixPlaceholder": "Maximum 10 characters, numbers and English letters only",
     "register": "Register Voice",
     "pleaseUploadFile": "Please upload an audio file and fill in the prefix",
@@ -526,6 +567,7 @@
     "renameCatgirlTitle": "Rename Catgirl",
     "profileNameExists": "This profile name already exists",
     "renameFailed": "Rename failed",
+    "cannotRenameInVoiceMode": "Cannot rename character in voice mode, please stop voice conversation first",
     "confirmUnregisterVoice": "Are you sure you want to unregister the voice for catgirl \"{{name}}\"?",
     "unregisterVoiceTitle": "Unregister Voice",
     "voiceUnregistered": "Voice registration unregistered",
@@ -577,6 +619,7 @@
     "clickToClosePreview": "💡 Click blank area to close preview"
   },
   "app": {
+    "welcomeBack": "{{name}} is back!",
     "title": "Project N.E.K.O.",
     "catgirlResting": "{{name}} is resting...",
     "textChatting": "Text chatting...",
@@ -629,7 +672,8 @@
     "voiceSystemPreparing": "Voice system preparing...",
     "textSystemPreparing": "Text system preparing, please wait...",
     "connectingToServer": "Connecting to server...",
-    "readyToSpeak": "Ready to speak!"
+    "readyToSpeak": "Ready to speak!",
+    "screenShareRequiresVoice": "Screen sharing is only available during voice calls"
   },
   "buttons": {
     "voiceControl": "Voice Control",
@@ -646,6 +690,7 @@
       "characterManage": "Character Management",
       "voiceClone": "Voice Clone",
       "memoryBrowser": "Memory Browser",
+      "steamWorkshop": "Steam Workshop",
       "memoryManage": "📝 Memory Management",
       "characterSettings": "👤 Character Settings",
       "live2dManage": "🎨 Live2D Management",
@@ -664,7 +709,13 @@
       "keyboardControl": "Keyboard & Mouse Control",
       "mcpTools": "MCP Tools",
       "focusMode": "🎯 Allow Interrupt",
-      "unavailable": "{{name}} Unavailable"
+      "unavailable": "{{name}} Unavailable",
+      "checking": "Checking...",
+      "serverOffline": "Agent server is offline",
+      "masterRequired": "Please enable Agent Master Switch first",
+      "enabled": "{{name}} Enabled",
+      "disabled": "{{name}} Disabled",
+      "enableFailed": "Failed to enable {{name}}"
     }
   },
   "subtitle": {
@@ -674,6 +725,16 @@
     "title": "Viewer - Project N.E.K.O."
   },
   "agent": {
+    "status": {
+      "connecting": "Connecting to Agent server...",
+      "ready": "Agent server is ready",
+      "enabled": "Agent mode enabled",
+      "disabled": "Agent mode disabled",
+      "disabledError": "Agent mode disabled (partial cleanup failed)",
+      "enableFailed": "Enable failed",
+      "disconnected": "Server connection disconnected",
+      "agentDisconnected": "Agent server connection disconnected"
+    },
     "taskHud": {
       "title": "Agent Tasks",
       "running": "Running",

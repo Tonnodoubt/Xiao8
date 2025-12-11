@@ -32,14 +32,18 @@ class Live2DManager {
         this.isEmotionChanging = false;
         this.dragEnabled = false;
         this.isFocusing = false;
-        this.isLocked = true;
+        this.isLocked = false;
         this.onModelLoaded = null;
         this.onStatusUpdate = null;
         this.modelName = null; // 记录当前模型目录名
         this.modelRootPath = null; // 记录当前模型根路径，如 /static/<modelName>
+        this.savedModelParameters = null; // 保存的模型参数（从parameters.json加载），供定时器定期应用
+        this._shouldApplySavedParams = false; // 是否应该应用保存的参数
+        this._savedParamsTimer = null; // 保存参数应用的定时器
         
         // 常驻表情：使用官方 expression 播放并在清理后自动重放
         this.persistentExpressionNames = [];
+        this.persistentExpressionParamsByName = {};
 
         // UI/Ticker 资源句柄（便于在切换模型时清理）
         this._lockIconTicker = null;
@@ -60,15 +64,18 @@ class Live2DManager {
         this.mouthValue = 0; // 0~1
         this.mouthParameterId = null; // 例如 'ParamMouthOpenY' 或 'ParamO'
         this._mouthOverrideInstalled = false;
+        this._origMotionManagerUpdate = null; // 保存原始的 motionManager.update 方法
         this._origCoreModelUpdate = null; // 保存原始的 coreModel.update 方法
         this._mouthTicker = null;
         
         // 记录最后一次加载模型的原始路径（用于保存偏好时使用）
         this._lastLoadedModelPath = null;
 
-        // ⚠️ 已禁用自动保存功能：
-        // 不再在窗口关闭/刷新时自动保存模型位置
-        // 只有在模型设置页面手动点击"保存设置"按钮时才会保存位置和缩放
+        // 防抖定时器（用于滚轮缩放等连续操作后保存位置）
+        this._savePositionDebounceTimer = null;
+
+        // ⚠️ 已启用自动保存功能：
+        // 在拖动或缩放模型后自动保存位置和缩放
     }
 
     // 从 FileReferences 推导 EmotionMapping（用于兼容历史数据）
@@ -142,7 +149,7 @@ class Live2DManager {
     }
 
     // 保存用户偏好
-    async saveUserPreferences(modelPath, position, scale) {
+    async saveUserPreferences(modelPath, position, scale, parameters) {
         try {
             // 验证位置和缩放值是否为有效的有限数值
             if (!position || typeof position !== 'object' || 
@@ -168,6 +175,12 @@ class Live2DManager {
                 position: position,
                 scale: scale
             };
+            
+            // 如果有参数，添加到偏好中
+            if (parameters && typeof parameters === 'object') {
+                preferences.parameters = parameters;
+            }
+            
             const response = await fetch('/api/preferences', {
                 method: 'POST',
                 headers: {
@@ -268,6 +281,77 @@ class Live2DManager {
         } catch (error) {
             console.error('复位模型位置时出错:', error);
         }
+    }
+
+    /**
+     * 【统一状态管理】设置锁定状态并同步更新所有相关 UI
+     * @param {boolean} locked - 是否锁定
+     * @param {Object} options - 可选配置
+     * @param {boolean} options.updateFloatingButtons - 是否同时控制浮动按钮显示（默认 true）
+     */
+    setLocked(locked, options = {}) {
+        const { updateFloatingButtons = true } = options;
+        
+        // 1. 更新状态
+        this.isLocked = locked;
+        
+        // 2. 更新锁图标样式（使用存储的引用，避免每次 querySelector）
+        if (this._lockIconImages) {
+            const { locked: imgLocked, unlocked: imgUnlocked } = this._lockIconImages;
+            if (imgLocked) imgLocked.style.opacity = locked ? '1' : '0';
+            if (imgUnlocked) imgUnlocked.style.opacity = locked ? '0' : '1';
+        }
+        
+        // 3. 更新 canvas 的 pointerEvents
+        const container = document.getElementById('live2d-canvas');
+        if (container) {
+            container.style.pointerEvents = locked ? 'none' : 'auto';
+        }
+        
+        // 4. 控制浮动按钮显示（可选）
+        if (updateFloatingButtons) {
+            const floatingButtons = document.getElementById('live2d-floating-buttons');
+            if (floatingButtons) {
+                floatingButtons.style.display = locked ? 'none' : 'flex';
+            }
+        }
+    }
+
+    /**
+     * 【统一状态管理】更新浮动按钮的激活状态和图标
+     * @param {string} buttonId - 按钮ID（如 'mic', 'screen', 'agent' 等）
+     * @param {boolean} active - 是否激活
+     */
+    setButtonActive(buttonId, active) {
+        const buttonData = this._floatingButtons && this._floatingButtons[buttonId];
+        if (!buttonData || !buttonData.button) return;
+        
+        // 更新 dataset
+        buttonData.button.dataset.active = active ? 'true' : 'false';
+        
+        // 更新背景色
+        buttonData.button.style.background = active 
+            ? 'rgba(68, 183, 254, 0.3)' 
+            : 'rgba(255, 255, 255, 0.65)';
+        
+        // 更新图标
+        if (buttonData.imgOff) {
+            buttonData.imgOff.style.opacity = active ? '0' : '1';
+        }
+        if (buttonData.imgOn) {
+            buttonData.imgOn.style.opacity = active ? '1' : '0';
+        }
+    }
+
+    /**
+     * 【统一状态管理】重置所有浮动按钮到默认状态
+     */
+    resetAllButtons() {
+        if (!this._floatingButtons) return;
+        
+        Object.keys(this._floatingButtons).forEach(btnId => {
+            this.setButtonActive(btnId, false);
+        });
     }
 }
 
