@@ -458,7 +458,7 @@ def find_vrm_models():
 
 def find_vrma_animations():
     """
-    递归扫描 'static/models/vrm/animations' 文件夹，查找所有 .vrma、.anim 和 .vmd 文件。
+    递归扫描 'static/models/vrm/animations' 文件夹，查找所有 .vrma 和 .anim 文件。
     正确处理 Windows 上的文件名编码。
     """
     import sys
@@ -472,11 +472,11 @@ def find_vrma_animations():
         return found_animations
     
     try:
-        # 递归遍历目录查找所有 .vrma、.anim 和 .vmd 文件
+        # 递归遍历目录查找所有 .vrma 和 .anim 文件
         for root, dirs, files in os.walk(animations_dir):
                 
                 for file in files:
-                    if file.endswith('.vrma') or file.endswith('.anim') or file.endswith('.vmd'):
+                    if file.endswith('.vrma') or file.endswith('.anim'):
                         # 获取文件名（去掉扩展名）
                         if file.endswith('.vrma'):
                             file_name_display = file.replace('.vrma', '')
@@ -484,9 +484,6 @@ def find_vrma_animations():
                         elif file.endswith('.anim'):
                             file_name_display = file.replace('.anim', '')
                             file_type = 'anim'
-                        elif file.endswith('.vmd'):
-                            file_name_display = file.replace('.vmd', '')
-                            file_type = 'vmd'
                         else:
                             continue
                         
