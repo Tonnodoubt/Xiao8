@@ -133,8 +133,9 @@
         .fold.open > .fold-content {
             display: block;
         }
-        /* 限制live2d-link的可点击区域，只在文字部分可点击，不占据整行 */
-        .fold-content .live2d-link {
+        /* 限制live2d-link和vrm-link的可点击区域，只在文字部分可点击，不占据整行 */
+        .fold-content .live2d-link,
+        .fold-content .vrm-link {
             display: inline-block;
             flex: 0 0 auto;
             max-width: fit-content;
@@ -888,7 +889,8 @@ function showCatgirlForm(key, container) {
     form.appendChild(baseRow);
     // 渲染自定义项
     Object.keys(cat).forEach(k => {
-        if (!["live2d", "voice_id", "system_prompt", "档案名"].includes(k)) {
+        // 隐藏系统内部使用的VRM配置字段
+        if (!["live2d", "voice_id", "system_prompt", "档案名", "vrm", "model_type", "vrm_animation"].includes(k)) {
             const row = document.createElement('div');
             row.className = 'field-row custom-row';
             const deleteFieldText = window.t ? window.t('character.deleteField') : '删除设定';
@@ -904,13 +906,17 @@ function showCatgirlForm(key, container) {
             textareaEl.value = cat[k];
             row.appendChild(textareaEl);
 
-            const delBtn = document.createElement('button');
-            delBtn.type = 'button';
-            delBtn.className = 'btn sm delete';
-            delBtn.style.marginLeft = '8px';
-            delBtn.textContent = deleteFieldText;
-            delBtn.addEventListener('click', function() { deleteCatgirlField(this); });
-            row.appendChild(delBtn);
+            // VRM相关字段不允许删除
+            const protectedFields = ['vrm', 'model_type', 'vrm_animation'];
+            if (!protectedFields.includes(k)) {
+                const delBtn = document.createElement('button');
+                delBtn.type = 'button';
+                delBtn.className = 'btn sm delete';
+                delBtn.style.marginLeft = '8px';
+                delBtn.textContent = deleteFieldText;
+                delBtn.addEventListener('click', function() { deleteCatgirlField(this); });
+                row.appendChild(delBtn);
+            }
 
             form.appendChild(row);
 
@@ -936,18 +942,49 @@ function showCatgirlForm(key, container) {
     const foldContent = document.createElement('div');
     foldContent.className = 'fold-content';
 
-    // live2d row
-    const live2dRow = document.createElement('div');
-    live2dRow.className = 'field-row';
-    const live2dLabel = document.createElement('label');
-    live2dLabel.textContent = 'live2d';
-    live2dRow.appendChild(live2dLabel);
-    const live2dLink = document.createElement('span');
-    live2dLink.className = 'live2d-link';
-    live2dLink.title = window.t ? window.t('character.manageLive2D') : '点击管理Live2D模型';
-    live2dLink.textContent = cat['live2d'] ? cat['live2d'] : (window.t ? window.t('character.live2dNotSet') : '未设置');
-    live2dRow.appendChild(live2dLink);
-    foldContent.appendChild(live2dRow);
+    // 根据模型类型决定显示哪个
+    const modelType = cat['model_type'] || (cat['vrm'] ? 'vrm' : (cat['live2d'] ? 'live2d' : null));
+    
+    // 如果是VRM模式，只显示VRM行
+    if (modelType === 'vrm') {
+        // vrm row
+        const vrmRow = document.createElement('div');
+        vrmRow.className = 'field-row';
+        const vrmLabel = document.createElement('label');
+        vrmLabel.textContent = 'vrm';
+        vrmRow.appendChild(vrmLabel);
+        const vrmLink = document.createElement('span');
+        vrmLink.className = 'vrm-link';
+        vrmLink.style.cursor = 'pointer';
+        vrmLink.style.color = '#4f8cff';
+        vrmLink.title = window.t ? window.t('character.manageVRM') : '点击管理VRM模型';
+        // 显示VRM模型路径（如果有），否则显示"未设置"
+        if (cat['vrm']) {
+            // 从路径中提取模型名称
+            const vrmPath = cat['vrm'];
+            const vrmName = vrmPath.split('/').pop().replace('.vrm', '') || vrmPath;
+            vrmLink.textContent = vrmName;
+        } else {
+            vrmLink.textContent = window.t ? window.t('character.vrmNotSet') : '未设置';
+        }
+        vrmRow.appendChild(vrmLink);
+        foldContent.appendChild(vrmRow);
+    } 
+    // 如果是Live2D模式或未设置，只显示Live2D行
+    else {
+        // live2d row
+        const live2dRow = document.createElement('div');
+        live2dRow.className = 'field-row';
+        const live2dLabel = document.createElement('label');
+        live2dLabel.textContent = 'live2d';
+        live2dRow.appendChild(live2dLabel);
+        const live2dLink = document.createElement('span');
+        live2dLink.className = 'live2d-link';
+        live2dLink.title = window.t ? window.t('character.manageLive2D') : '点击管理Live2D模型';
+        live2dLink.textContent = cat['live2d'] ? cat['live2d'] : (window.t ? window.t('character.live2dNotSet') : '未设置');
+        live2dRow.appendChild(live2dLink);
+        foldContent.appendChild(live2dRow);
+    }
 
     // voice_id row
     const voiceRow = document.createElement('div');
@@ -1095,6 +1132,64 @@ function showCatgirlForm(key, container) {
             }, 500);
         };
     }
+    
+    // vrm弹窗逻辑（与live2d相同，都打开模型设置页面）
+    const vrmLinkEl = form.querySelector('.vrm-link');
+    if (vrmLinkEl) {
+        vrmLinkEl.onclick = async function() {
+            const catgirlName = form.querySelector('[name="档案名"]').value;
+            if (!catgirlName) {
+                await showAlert(window.t ? window.t('character.fillProfileNameFirst') : '请先填写猫娘档案名，然后再设置VRM模型');
+                return;
+            }
+            const url = `/l2d?lanlan_name=${encodeURIComponent(catgirlName)}`;
+            
+            // 检查是否已有该URL的窗口打开
+            if (!window._openSettingsWindows) {
+                window._openSettingsWindows = {};
+            }
+            
+            if (window._openSettingsWindows[url]) {
+                const existingWindow = window._openSettingsWindows[url];
+                // 检查窗口是否仍然打开
+                if (existingWindow && !existingWindow.closed) {
+                    // 聚焦到已存在的窗口
+                    existingWindow.focus();
+                    return;
+                } else {
+                    // 窗口已关闭，清除引用
+                    delete window._openSettingsWindows[url];
+                }
+            }
+            
+            const popup = window.open(
+                url,
+                '_blank',
+                'toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,width=' + screen.availWidth + ',height=' + screen.availHeight + ',top=0,left=0'
+            );
+            if (!popup) {
+                await showAlert(window.t ? window.t('character.allowPopups') : '请允许弹窗！');
+                return;
+            }
+            
+            // 保存窗口引用
+            window._openSettingsWindows[url] = popup;
+            
+            popup.moveTo(0, 0);
+            popup.resizeTo(screen.availWidth, screen.availHeight);
+            const timer = setInterval(() => {
+                if (popup.closed) {
+                    clearInterval(timer);
+                    // 清除窗口引用
+                    if (window._openSettingsWindows[url] === popup) {
+                        delete window._openSettingsWindows[url];
+                    }
+                    // 重新加载角色数据以更新显示
+                    loadCharacterData();
+                }
+            }, 500);
+        };
+    }
     // 表单特定的showActionButtons封装
     const formShowActionButtons = function() {
         showActionButtons(form);
@@ -1136,7 +1231,7 @@ function showCatgirlForm(key, container) {
             '', 
             window.t ? window.t('character.addCatgirlFieldTitle') : '新增猫娘设定'
         );
-        if (!key || ["档案名", "live2d", "voice_id", "system_prompt"].includes(key)) return;
+        if (!key || ["档案名", "live2d", "voice_id", "system_prompt", "vrm", "model_type", "vrm_animation"].includes(key)) return;
         if (form.querySelector(`[name='${key}']`)) { 
             await showAlert(window.t ? window.t('character.fieldExists') : '该设定已存在'); 
             return; 
@@ -1184,6 +1279,26 @@ function showCatgirlForm(key, container) {
     // 设置删除字段的全局函数
     window.deleteCatgirlField = function(btn) {
         const fieldRow = btn.parentNode;
+        const labelEl = fieldRow.querySelector('label');
+        
+        // 检查是否是VRM相关字段，如果是则不允许删除
+        if (labelEl) {
+            const fieldName = labelEl.textContent.trim();
+            const protectedFields = ['vrm', 'model_type', 'vrm_animation'];
+            
+            if (protectedFields.includes(fieldName)) {
+                let alertMsg;
+                if (window.t) {
+                    const translated = window.t('character.cannotDeleteVRMField', { field: fieldName });
+                    alertMsg = translated.includes('{{field}}') ? `无法删除 "${fieldName}" 字段，这是VRM模型的必需配置，删除会导致模型无法正常工作。` : translated;
+                } else {
+                    alertMsg = `无法删除 "${fieldName}" 字段，这是VRM模型的必需配置，删除会导致模型无法正常工作。`;
+                }
+                showAlert(alertMsg);
+                return;
+            }
+        }
+        
         const form = fieldRow.closest('form');
         fieldRow.remove();
         showActionButtons(form); // 删除字段后显示操作按钮

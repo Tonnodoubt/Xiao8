@@ -38,6 +38,7 @@ class VRMManager {
         this.modelScale = 1.0;
         this.dragHandler = null;
         this.wheelHandler = null;
+        this.isLocked = false; // 锁定状态，锁定时不响应拖拽和缩放
         
         // 拖拽相关事件处理器引用（用于清理）
         this.mouseDownHandler = null;
@@ -211,17 +212,50 @@ class VRMManager {
     applyPerformanceSettings() {
         if (!this.renderer) return;
         
-        // 根据性能模式调整像素比
+        // 根据性能模式调整像素比（提高最小像素比以提高清晰度）
         let pixelRatio = window.devicePixelRatio || 1;
         if (this.performanceMode === 'low') {
-            pixelRatio = Math.min(pixelRatio, 1.0); // 低性能模式：最多1倍像素比
+            pixelRatio = Math.max(1.5, Math.min(pixelRatio, 2.0)); // 低性能模式：至少1.5倍，最多2倍像素比
         } else if (this.performanceMode === 'medium') {
-            pixelRatio = Math.min(pixelRatio, 1.5); // 中等性能模式：最多1.5倍像素比
+            pixelRatio = Math.max(2.0, Math.min(pixelRatio, 2.5)); // 中等性能模式：至少2倍，最多2.5倍像素比
+        } else {
+            // 高性能模式：至少2倍像素比，或使用完整设备像素比
+            pixelRatio = Math.max(2.0, pixelRatio);
         }
-        // 高性能模式：使用完整像素比
         
         this.renderer.setPixelRatio(pixelRatio);
         console.log(`[VRM] 像素比设置为: ${pixelRatio} (设备像素比: ${window.devicePixelRatio || 1})`);
+    }
+    
+    /**
+     * 优化材质设置（根据性能模式）
+     */
+    optimizeMaterials() {
+        if (!this.vrm || !this.vrm.scene) return;
+        
+        // 遍历模型中的所有材质，根据性能模式优化
+        this.vrm.scene.traverse((object) => {
+            if (object.material) {
+                const materials = Array.isArray(object.material) ? object.material : [object.material];
+                
+                materials.forEach(material => {
+                    // 禁用阴影以提高性能
+                    material.castShadow = false;
+                    material.receiveShadow = false;
+                    
+                    // 根据性能模式调整材质设置
+                    if (this.performanceMode === 'low') {
+                        // 低性能模式：简化材质
+                        if (material.map) {
+                            // 可以降低纹理分辨率或禁用某些纹理
+                            // 这里暂时只禁用阴影
+                        }
+                    }
+                });
+            }
+        });
+        
+        console.log('[VRM] 材质优化完成');
     }
 
     async init() {
@@ -261,13 +295,18 @@ class VRMManager {
             this.camera.position.set(0, 1.2, 1.8);
             this.camera.lookAt(0, 1, 0);
 
-            // 创建渲染器 - 根据性能模式调整设置
-            const antialias = this.performanceMode !== 'low'; // 低性能模式关闭抗锯齿
+            // 创建渲染器 - 提高渲染质量设置
+            // 始终启用抗锯齿以提高清晰度
+            const antialias = true;
+            // 始终使用高精度以提高渲染质量
+            const precision = 'highp';
             this.renderer = new THREE.WebGLRenderer({ 
                 alpha: true, 
                 antialias: antialias,
                 powerPreference: 'high-performance', // 优先使用独立显卡
-                precision: this.performanceMode === 'low' ? 'mediump' : 'highp' // 低性能模式使用中等精度
+                precision: precision,
+                preserveDrawingBuffer: false, // 不保留绘制缓冲区以提高性能
+                stencil: false // 不使用模板缓冲区以提高性能
             });
             this.renderer.setSize(width, height);
             this.applyPerformanceSettings(); // 应用性能设置（像素比等）
@@ -530,19 +569,17 @@ class VRMManager {
                 console.warn('[VRM] 口型同步可能不可用，模型可能没有嘴巴相关表情');
             }
 
-            // 自动播放idle.vrma待机动画（如果文件存在）
-            // 延迟一小段时间确保模型完全加载
+            // 自动播放wait03.vrma动作
             setTimeout(async () => {
                 try {
-                    const idleAnimationPath = '/static/models/vrm/animations/idle.vrma';
-                    await this.playVRMAAnimation(idleAnimationPath, {
+                    const wait03Path = '/static/models/vrm/animations/wait03.vrma';
+                    await this.playVRMAAnimation(wait03Path, {
                         loop: true,
                         timeScale: 1.0
                     });
-                    console.log('[VRM] 已自动播放idle.vrma待机动画');
+                    console.log('[VRM] 已自动播放wait03.vrma动作');
                 } catch (animError) {
-                    // 静默失败，idle.vrma文件可能不存在
-                    console.log('[VRM] idle.vrma文件不存在，跳过自动播放');
+                    console.warn('[VRM] 播放wait03.vrma动作失败:', animError.message);
                 }
             }, 100);
 
@@ -788,6 +825,11 @@ class VRMManager {
         
         // 鼠标按下事件
         this.mouseDownHandler = (e) => {
+            // 检查锁定状态（同步Live2D管理器的锁定状态）
+            if (this.checkLocked()) {
+                return;
+            }
+            
             if (e.button === 0) { // 左键：旋转
                 this.isDragging = true;
                 this.dragMode = 'rotate';
@@ -807,6 +849,16 @@ class VRMManager {
 
         // 鼠标移动事件
         this.dragHandler = (e) => {
+            // 如果锁定，停止拖拽
+            if (this.checkLocked()) {
+                if (this.isDragging) {
+                    this.isDragging = false;
+                    this.dragMode = null;
+                    canvas.style.cursor = 'grab';
+                }
+                return;
+            }
+            
             if (!this.isDragging || !this.vrm) return;
 
             const deltaX = e.clientX - this.previousMousePosition.x;
@@ -870,7 +922,10 @@ class VRMManager {
 
         // 滚轮缩放
         this.wheelHandler = (e) => {
-            if (!this.vrm) return;
+            // 如果锁定，不响应缩放
+            if (this.checkLocked() || !this.vrm) {
+                return;
+            }
             
             e.preventDefault();
             e.stopPropagation();
@@ -899,6 +954,18 @@ class VRMManager {
         canvas.addEventListener('mouseenter', this.mouseEnterHandler);
         canvas.addEventListener('wheel', this.wheelHandler, { passive: false });
         canvas.addEventListener('auxclick', this.auxClickHandler);
+    }
+    
+    /**
+     * 检查锁定状态（同步Live2D管理器的锁定状态）
+     * @returns {boolean} 是否锁定
+     */
+    checkLocked() {
+        // 同步Live2D管理器的锁定状态
+        if (window.live2dManager && typeof window.live2dManager.isLocked !== 'undefined') {
+            this.isLocked = window.live2dManager.isLocked;
+        }
+        return this.isLocked;
     }
 
     // 渲染循环 - 带帧率限制
@@ -969,9 +1036,127 @@ class VRMManager {
             }
         }
 
+        // 更新浮动按钮位置（跟随模型）
+        this.updateFloatingButtonsPosition();
+
         // 渲染场景
         if (this.renderer && this.scene && this.camera) {
             this.renderer.render(this.scene, this.camera);
+        }
+    }
+
+    /**
+     * 更新浮动按钮位置，使其跟随VRM模型
+     */
+    updateFloatingButtonsPosition() {
+        try {
+            // 检查是否在主页面（有chat-container）
+            if (!document.getElementById('chat-container')) {
+                return;
+            }
+
+            // 检查是否有VRM模型
+            if (!this.vrm || !this.vrm.scene || !this.camera || !this.renderer) {
+                return;
+            }
+
+            // 获取浮动按钮容器
+            const floatingButtons = document.getElementById('live2d-floating-buttons');
+            if (!floatingButtons) {
+                return;
+            }
+
+            // 移动端固定位置，不随模型移动
+            const isMobile = window.innerWidth <= 768;
+            if (isMobile) {
+                return;
+            }
+
+            // 计算模型的边界框（使用世界坐标）
+            const box = new THREE.Box3().setFromObject(this.vrm.scene);
+            
+            // 获取边界框的8个顶点（局部坐标）
+            const localCorners = [
+                new THREE.Vector3(box.min.x, box.min.y, box.min.z),
+                new THREE.Vector3(box.max.x, box.min.y, box.min.z),
+                new THREE.Vector3(box.min.x, box.max.y, box.min.z),
+                new THREE.Vector3(box.max.x, box.max.y, box.min.z),
+                new THREE.Vector3(box.min.x, box.min.y, box.max.z),
+                new THREE.Vector3(box.max.x, box.min.y, box.max.z),
+                new THREE.Vector3(box.min.x, box.max.y, box.max.z),
+                new THREE.Vector3(box.max.x, box.max.y, box.max.z)
+            ];
+
+            // 将3D坐标转换为屏幕坐标
+            const screenCorners = localCorners.map(localCorner => {
+                // 转换为世界坐标
+                const worldPos = localCorner.clone();
+                this.vrm.scene.localToWorld(worldPos);
+                
+                // 投影到屏幕坐标（NDC坐标，范围-1到1）
+                const screenPos = worldPos.clone().project(this.camera);
+                
+                // 转换为像素坐标（屏幕坐标）
+                const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+                const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+                
+                return { x, y };
+            });
+
+            // 计算屏幕边界框
+            let minX = Infinity, maxX = -Infinity;
+            let minY = Infinity, maxY = -Infinity;
+            screenCorners.forEach(corner => {
+                minX = Math.min(minX, corner.x);
+                maxX = Math.max(maxX, corner.x);
+                minY = Math.min(minY, corner.y);
+                maxY = Math.max(maxY, corner.y);
+            });
+
+            // 计算模型实际高度（屏幕像素）
+            const modelHeight = maxY - minY;
+
+            // 基准按钮尺寸和工具栏高度（用于计算缩放）
+            const baseButtonSize = 48;
+            const baseGap = 12;
+            const buttonCount = 5;
+            const baseToolbarHeight = baseButtonSize * buttonCount + baseGap * (buttonCount - 1); // 288px
+
+            // 计算目标工具栏高度（模型高度的一半）
+            const targetToolbarHeight = modelHeight / 2;
+
+            // 计算缩放比例（限制在合理范围内，防止按钮太小或太大）
+            const minScale = 0.5;  // 最小缩放50%
+            const maxScale = 1.0;  // 最大缩放100%
+            const rawScale = targetToolbarHeight / baseToolbarHeight;
+            const scale = Math.max(minScale, Math.min(maxScale, rawScale));
+
+            // 应用缩放到容器（使用 transform-origin: left top 确保从左上角缩放）
+            floatingButtons.style.transformOrigin = 'left top';
+            floatingButtons.style.transform = `scale(${scale})`;
+
+            // X轴：定位在角色右侧（与Live2D类似的横向位置）
+            const screenWidth = window.innerWidth;
+            const targetX = maxX * 0.8 + minX * 0.2;
+
+            // Y轴：工具栏中心与模型中心对齐
+            const modelCenterY = (minY + maxY) / 2;
+            // 使用缩放后的实际工具栏高度
+            const actualToolbarHeight = baseToolbarHeight * scale;
+            // 让工具栏的中心位于模型中间，所以top = 中间 - 高度/2
+            const targetY = modelCenterY - actualToolbarHeight / 2;
+
+            // 边界限制：确保不超出屏幕顶部和底部
+            const screenHeight = window.innerHeight;
+            const minYBound = 20; // 距离屏幕顶部的最小距离
+            const maxYBound = screenHeight - actualToolbarHeight - 20; // 距离屏幕底部的最小距离
+            const boundedY = Math.max(minYBound, Math.min(targetY, maxYBound));
+
+            floatingButtons.style.left = `${Math.min(targetX, screenWidth - 80 * scale)}px`;
+            floatingButtons.style.top = `${boundedY}px`;
+        } catch (error) {
+            // 忽略单帧异常，避免影响渲染循环
+            // console.warn('[VRM] 更新浮动按钮位置失败:', error);
         }
     }
 
@@ -1005,15 +1190,16 @@ class VRMManager {
         const dataArray = new Uint8Array(bufferLength);
         const frequencyData = new Uint8Array(bufferLength);
 
-        // 优化后的口型同步参数 - 更自然、更平滑的对口型
-        const smoothingFactor = 0.2; // 权重平滑因子（进一步降低，让变化更平滑自然）
-        const volumeThreshold = 0.001; // 音量阈值
-        const volumeSensitivity = 4.0; // 音量敏感度（稍微降低，避免过度反应）
-        const minMouthOpen = 0.1; // 最小嘴巴张开度（降低，更自然）
-        const maxMouthOpen = 0.85; // 最大嘴巴张开度（降低，避免过度张开）
+        // 优化后的口型同步参数 - 更自然、更快速响应的对口型
+        const smoothingFactor = 0.35; // 权重平滑因子（提高响应速度，同时保持平滑）
+        const volumeThreshold = 0.0008; // 音量阈值（降低，更敏感）
+        const volumeSensitivity = 5.5; // 音量敏感度（提高，更明显）
+        const minMouthOpen = 0.05; // 最小嘴巴张开度（降低，更自然）
+        const maxMouthOpen = 0.9; // 最大嘴巴张开度（提高，更明显）
         
-        // 音量平滑处理（避免突然变化）
+        // 音量平滑处理（使用更快的响应）
         let smoothedVolume = 0;
+        let volumeHistory = []; // 音量历史记录（用于动态阈值）
 
         const animate = () => {
             if (!this.lipSyncActive) return;
@@ -1022,9 +1208,11 @@ class VRMManager {
             analyser.getByteFrequencyData(frequencyData);
             analyser.getByteTimeDomainData(dataArray);
 
-            // 计算 RMS（均方根）音量 - 更准确的音量计算
+            // 改进的音量计算 - 更准确、更快速响应
             let sum = 0;
             let maxAmplitude = 0;
+            let peakCount = 0; // 峰值计数，用于检测语音活动
+            
             for (let i = 0; i < dataArray.length; i++) {
                 const normalized = (dataArray[i] - 128) / 128;
                 const absValue = Math.abs(normalized);
@@ -1032,24 +1220,39 @@ class VRMManager {
                 if (absValue > maxAmplitude) {
                     maxAmplitude = absValue;
                 }
+                // 检测峰值（超过阈值的样本）
+                if (absValue > 0.1) {
+                    peakCount++;
+                }
             }
+            
             const rms = Math.sqrt(sum / dataArray.length);
-            // 结合RMS和最大振幅，更准确地反映音量
-            const rawVolume = (rms * 0.7 + maxAmplitude * 0.3) * volumeSensitivity;
-            // 对音量进行平滑处理，避免突然变化（使用指数移动平均）
-            smoothedVolume = smoothedVolume * 0.7 + Math.min(1, rawVolume) * 0.3;
+            // 结合RMS、最大振幅和峰值密度，更准确地反映音量
+            const peakDensity = peakCount / dataArray.length; // 峰值密度（0-1）
+            const rawVolume = (rms * 0.6 + maxAmplitude * 0.25 + peakDensity * 0.15) * volumeSensitivity;
+            
+            // 动态音量阈值（基于历史音量）
+            volumeHistory.push(rawVolume);
+            if (volumeHistory.length > 10) {
+                volumeHistory.shift(); // 保持最近10帧
+            }
+            const avgVolume = volumeHistory.reduce((a, b) => a + b, 0) / volumeHistory.length;
+            const dynamicThreshold = Math.max(volumeThreshold, avgVolume * 0.3);
+            
+            // 对音量进行平滑处理（使用更快的响应速度）
+            smoothedVolume = smoothedVolume * 0.6 + Math.min(1, rawVolume) * 0.4;
             const volume = smoothedVolume;
 
-            // 如果音量太低，逐渐关闭嘴巴（但保持最小张开度，更平滑）
-            if (volume < volumeThreshold) {
+            // 如果音量太低，逐渐关闭嘴巴（但保持最小张开度）
+            if (volume < dynamicThreshold) {
                 if (this.currentMouthExpression) {
                     this.targetMouthWeight = minMouthOpen;
-                    // 使用更平滑的衰减
-                    this.currentMouthWeight += (this.targetMouthWeight - this.currentMouthWeight) * 0.12;
+                    // 使用更快的衰减速度
+                    this.currentMouthWeight += (this.targetMouthWeight - this.currentMouthWeight) * 0.2;
                     const expr = this.vrm.expressionManager.expressions[this.currentMouthExpression.index];
                     if (expr) {
                         // 平滑过渡到最小张开度
-                        expr.weight += (Math.max(minMouthOpen, this.currentMouthWeight) - expr.weight) * 0.12;
+                        expr.weight += (Math.max(minMouthOpen, this.currentMouthWeight) - expr.weight) * 0.2;
                         expr.weight = Math.max(minMouthOpen, expr.weight);
                     }
                 }
@@ -1075,57 +1278,77 @@ class VRMManager {
             let primaryExpression = null;
             let primaryWeight = 0;
 
+            // 改进的频率分析 - 更准确地识别元音
             // 优先使用音量来决定口型张开度，频率只用于选择表情类型
-            // 如果音量足够，根据频率选择表情；否则使用默认'aa'
-            if (volume > volumeThreshold) {
-                // 根据频率特征判断元音（简化判断条件）
-                if (normalizedLow > 0.65 && normalizedLow >= normalizedMid && normalizedLow >= normalizedHigh) {
-                    // 'aa' (あ) - 低频为主
+            if (volume > dynamicThreshold) {
+                // 改进的元音判断逻辑
+                const lowRatio = normalizedLow / (normalizedMid + normalizedHigh + 0.01);
+                const highRatio = normalizedHigh / (normalizedLow + normalizedMid + 0.01);
+                const midRatio = normalizedMid / (normalizedLow + normalizedHigh + 0.01);
+                
+                // 根据频率特征判断元音（更精确的判断）
+                if (normalizedLow > 0.7 && lowRatio > 1.3) {
+                    // 'aa' (あ) - 低频明显占优
                     primaryExpression = this.mouthExpressions['aa'];
                     primaryWeight = normalizedLow;
                 }
-                else if (normalizedHigh > 0.6 && normalizedHigh > normalizedLow * 1.15) {
-                    // 'ee' (え) 或 'ih' (い) - 高频为主
-                    primaryExpression = this.mouthExpressions['ee'] || this.mouthExpressions['ih'] || this.mouthExpressions['aa'];
+                else if (normalizedHigh > 0.65 && highRatio > 1.2) {
+                    // 'ee' (え) 或 'ih' (い) - 高频明显占优
+                    if (this.mouthExpressions['ee']) {
+                        primaryExpression = this.mouthExpressions['ee'];
+                    } else if (this.mouthExpressions['ih']) {
+                        primaryExpression = this.mouthExpressions['ih'];
+                    } else {
+                        primaryExpression = this.mouthExpressions['aa'];
+                    }
                     primaryWeight = normalizedHigh;
                 }
-                else if (normalizedMid > 0.55) {
-                    // 'ou' (う) 或 'oh' (お) - 中频为主
-                    primaryExpression = this.mouthExpressions['ou'] || this.mouthExpressions['oh'] || this.mouthExpressions['aa'];
+                else if (normalizedMid > 0.6 && midRatio > 1.1) {
+                    // 'ou' (う) 或 'oh' (お) - 中频占优
+                    if (this.mouthExpressions['ou']) {
+                        primaryExpression = this.mouthExpressions['ou'];
+                    } else if (this.mouthExpressions['oh']) {
+                        primaryExpression = this.mouthExpressions['oh'];
+                    } else {
+                        primaryExpression = this.mouthExpressions['aa'];
+                    }
                     primaryWeight = normalizedMid;
                 }
                 else {
-                    // 默认使用'aa'（嘴巴张开）
+                    // 默认使用'aa'（嘴巴张开），但根据音量调整
                     primaryExpression = this.mouthExpressions['aa'];
-                    primaryWeight = Math.max(normalizedLow, normalizedMid, normalizedHigh, 0.5);
+                    primaryWeight = Math.max(normalizedLow, normalizedMid, normalizedHigh, 0.4);
                 }
             } else {
                 // 音量太低，使用默认表情但保持最小张开度
                 primaryExpression = this.mouthExpressions['aa'];
-                primaryWeight = 0.3;
+                primaryWeight = 0.2;
             }
 
             // 如果找到了主要表情
             if (primaryExpression !== null && primaryExpression !== undefined) {
-                // 简化权重计算 - 主要基于音量，频率作为辅助
-                // 音量是主要因素，频率只影响表情选择
-                const volumeBasedWeight = Math.max(minMouthOpen, Math.min(maxMouthOpen, volume * 0.9));
-                // 结合频率强度（但影响较小）
-                const frequencyBoost = Math.min(0.15, primaryWeight * 0.2);
+                // 改进的权重计算 - 更精确的音量到嘴巴张开度映射
+                // 使用非线性映射，让低音量更敏感，高音量更平滑
+                const normalizedVolume = Math.min(1, volume);
+                const volumeCurve = Math.pow(normalizedVolume, 0.75); // 非线性曲线，低音量更敏感
+                const volumeBasedWeight = minMouthOpen + (maxMouthOpen - minMouthOpen) * volumeCurve;
+                
+                // 结合频率强度（影响适中）
+                const frequencyBoost = Math.min(0.2, primaryWeight * 0.25);
                 this.targetMouthWeight = Math.min(maxMouthOpen, volumeBasedWeight + frequencyBoost);
 
-                // 使用更平滑的过渡
+                // 使用更快的响应速度，同时保持平滑
                 this.currentMouthWeight += (this.targetMouthWeight - this.currentMouthWeight) * smoothingFactor;
                 this.currentMouthWeight = Math.max(minMouthOpen, Math.min(maxMouthOpen, this.currentMouthWeight));
 
-                // 如果切换到新的表情，平滑关闭其他表情
+                // 如果切换到新的表情，快速平滑关闭其他表情
                 if (!this.currentMouthExpression || this.currentMouthExpression.index !== primaryExpression) {
-                    // 平滑关闭之前的表情
+                    // 快速关闭之前的表情
                     if (this.currentMouthExpression) {
                         const oldExpr = this.vrm.expressionManager.expressions[this.currentMouthExpression.index];
                         if (oldExpr) {
-                            // 更平滑的衰减
-                            oldExpr.weight += (0 - oldExpr.weight) * 0.25;
+                            // 更快的衰减速度
+                            oldExpr.weight += (0 - oldExpr.weight) * 0.35;
                             if (oldExpr.weight < 0.01) {
                                 oldExpr.weight = 0;
                             }
@@ -1139,22 +1362,22 @@ class VRMManager {
                     };
                 }
 
-                // 应用权重到当前表情（使用平滑过渡）
+                // 应用权重到当前表情（使用更快的响应速度）
                 const expr = this.vrm.expressionManager.expressions[primaryExpression];
                 if (expr) {
-                    // 平滑过渡到目标权重
+                    // 快速过渡到目标权重
                     expr.weight += (this.currentMouthWeight - expr.weight) * smoothingFactor;
                     expr.weight = Math.max(minMouthOpen, Math.min(maxMouthOpen, expr.weight));
                 }
 
-                // 平滑关闭其他表情
+                // 快速关闭其他表情
                 Object.keys(this.mouthExpressions).forEach(key => {
                     const exprIndex = this.mouthExpressions[key];
                     if (exprIndex !== null && exprIndex !== primaryExpression) {
                         const expr = this.vrm.expressionManager.expressions[exprIndex];
                         if (expr) {
-                            // 更平滑的衰减
-                            expr.weight += (0 - expr.weight) * 0.25;
+                            // 更快的衰减速度
+                            expr.weight += (0 - expr.weight) * 0.35;
                             if (expr.weight < 0.01) {
                                 expr.weight = 0;
                             }
@@ -1415,6 +1638,7 @@ class VRMManager {
         this.vrmaIsPlaying = false;
         console.log('[VRMA] 动画已停止');
     }
+    
 
     /**
      * 暂停/恢复 VRMA 动画

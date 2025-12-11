@@ -1622,12 +1622,31 @@
     
     // 页面可见性变化时检查参数更新（用户从其他页面返回时）
     let lastParameterCheckTime = 0;
+    // 记录上次检查的角色名称，用于检测角色切换
+    let lastCheckedCharacterName = null;
+    
     document.addEventListener('visibilitychange', async () => {
         const now = Date.now();
         // 防止在初始加载时（3秒内）触发
         if (document.visibilityState === 'visible' && now - pageLoadTime > 3000 && now - lastParameterCheckTime > 1000) {
             lastParameterCheckTime = now;
             await reloadModelParameters();
+            
+            // 检查角色是否切换
+            try {
+                const charResponse = await fetch('/api/characters');
+                if (charResponse.ok) {
+                    const charactersData = await charResponse.json();
+                    const currentCharacterName = charactersData['当前猫娘'];
+                    if (lastCheckedCharacterName && lastCheckedCharacterName !== currentCharacterName) {
+                        console.log(`[角色切换] 检测到角色切换: ${lastCheckedCharacterName} -> ${currentCharacterName}`);
+                        await loadModelBasedOnCharacterConfig();
+                    }
+                    lastCheckedCharacterName = currentCharacterName;
+                }
+            } catch (error) {
+                console.error('[角色切换] 检查角色切换失败:', error);
+            }
         }
     });
     
@@ -1638,6 +1657,22 @@
         if (now - pageLoadTime > 3000 && now - lastParameterCheckTime > 1000) {
             lastParameterCheckTime = now;
             await reloadModelParameters();
+            
+            // 检查角色是否切换
+            try {
+                const charResponse = await fetch('/api/characters');
+                if (charResponse.ok) {
+                    const charactersData = await charResponse.json();
+                    const currentCharacterName = charactersData['当前猫娘'];
+                    if (lastCheckedCharacterName && lastCheckedCharacterName !== currentCharacterName) {
+                        console.log(`[角色切换] 检测到角色切换: ${lastCheckedCharacterName} -> ${currentCharacterName}`);
+                        await loadModelBasedOnCharacterConfig();
+                    }
+                    lastCheckedCharacterName = currentCharacterName;
+                }
+            } catch (error) {
+                console.error('[角色切换] 检查角色切换失败:', error);
+            }
         }
     });
     
@@ -1692,6 +1727,8 @@
     // 根据角色配置自动加载模型
     async function loadModelBasedOnCharacterConfig() {
         try {
+            console.log('[模型加载] 开始根据角色配置加载模型...');
+            
             // 获取角色配置
             const charResponse = await fetch('/api/characters');
             if (!charResponse.ok) {
@@ -1700,6 +1737,8 @@
             }
             const charactersData = await charResponse.json();
             const currentLanlanName = charactersData['当前猫娘'];
+            
+            console.log('[模型加载] 当前角色:', currentLanlanName);
             
             if (!currentLanlanName) {
                 console.warn('未找到当前角色，使用默认 Live2D 模型');
@@ -1712,13 +1751,19 @@
                 return;
             }
             
+            console.log('[模型加载] 角色配置:', catgirlConfig);
+            
             // 检查是否有 VRM 模型配置
             const vrmModelPath = catgirlConfig.vrm;
             const modelType = catgirlConfig.model_type || (vrmModelPath ? 'vrm' : 'live2d');
             
+            console.log('[模型加载] 模型类型:', modelType, 'VRM路径:', vrmModelPath);
+            
             if (modelType === 'vrm' && vrmModelPath) {
-                // 加载 VRM 模型
-                await loadVRMModelFromConfig(vrmModelPath);
+                // 加载 VRM 模型（传递完整配置以支持动作播放）
+                console.log('[模型加载] 开始加载VRM模型:', vrmModelPath);
+                await loadVRMModelFromConfig(vrmModelPath, catgirlConfig);
+                return; // 重要：加载VRM后直接返回，不继续加载Live2D
             } else {
                 // 加载 Live2D 模型
                 const live2dModelName = catgirlConfig.live2d;
@@ -1769,7 +1814,7 @@
     }
     
     // 从配置加载 VRM 模型
-    async function loadVRMModelFromConfig(modelPath) {
+    async function loadVRMModelFromConfig(modelPath, catgirlConfig = null) {
         const live2dContainer = document.getElementById('live2d-container');
         const vrmContainer = document.getElementById('vrm-container');
         
@@ -1886,34 +1931,8 @@
             // 设置模型类型为VRM，确保口型同步能正确启动
             localStorage.setItem('modelType', 'vrm');
             
-            // 播放保存的动作（如果存在），否则播放默认的idle.vrma待机动画
-            try {
-                // 检查是否有保存的动作路径
-                let savedAnimation = null;
-                if (catgirlConfig && catgirlConfig.vrm_animation) {
-                    savedAnimation = catgirlConfig.vrm_animation;
-                }
-                
-                let animationPath = null;
-                
-                if (savedAnimation) {
-                    animationPath = savedAnimation;
-                    console.log('使用保存的动作:', animationPath);
-                } else {
-                    // 如果没有保存的动作，使用默认的idle.vrma
-                    animationPath = '/static/models/vrm/animations/idle.vrma';
-                    console.log('使用默认待机动作: idle.vrma');
-                }
-                
-                // 播放动作
-                await vrmManager.playVRMAAnimation(animationPath, {
-                    loop: true,
-                    timeScale: 1.0
-                });
-                console.log('已自动播放动作:', animationPath);
-            } catch (animError) {
-                console.warn('自动播放动作失败（文件可能不存在）:', animError.message);
-            }
+            // VRM动作已改为自动循环播放wait动作，模型加载时会自动启动
+            console.log('VRM模型加载完成，将自动循环播放wait动作');
             
         } catch (error) {
             console.error('加载 VRM 模型失败:', error);
@@ -1956,12 +1975,45 @@
     }
     
     // 页面加载完成后，根据角色配置自动加载模型
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
         // 延迟执行，确保其他脚本已加载
-        setTimeout(() => {
-            loadModelBasedOnCharacterConfig();
+        setTimeout(async () => {
+            // 初始化当前角色名称记录
+            try {
+                const charResponse = await fetch('/api/characters');
+                if (charResponse.ok) {
+                    const charactersData = await charResponse.json();
+                    lastCheckedCharacterName = charactersData['当前猫娘'];
+                    console.log('[初始化] 当前角色:', lastCheckedCharacterName);
+                }
+            } catch (error) {
+                console.error('[初始化] 获取当前角色失败:', error);
+            }
+            
+            await loadModelBasedOnCharacterConfig();
         }, 1000);
     });
+    
+    // 定期检查角色是否切换（每5秒检查一次）
+    setInterval(async () => {
+        try {
+            const charResponse = await fetch('/api/characters');
+            if (charResponse.ok) {
+                const charactersData = await charResponse.json();
+                const currentCharacterName = charactersData['当前猫娘'];
+                if (lastCheckedCharacterName && lastCheckedCharacterName !== currentCharacterName) {
+                    console.log(`[角色切换] 检测到角色切换: ${lastCheckedCharacterName} -> ${currentCharacterName}`);
+                    await loadModelBasedOnCharacterConfig();
+                    lastCheckedCharacterName = currentCharacterName;
+                } else if (!lastCheckedCharacterName) {
+                    // 首次设置
+                    lastCheckedCharacterName = currentCharacterName;
+                }
+            }
+        } catch (error) {
+            console.error('[角色切换] 定期检查失败:', error);
+        }
+    }, 5000); // 每5秒检查一次
 </script>
 <script src="/static/libs/live2d.min.js"></script>  <!-- Cubism 2.1核心库（支持旧模型） -->
 <script src="/static/libs/pixi.min.js"></script>  <!-- PixiJS v7 CDN -->
