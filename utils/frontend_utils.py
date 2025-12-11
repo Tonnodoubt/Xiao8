@@ -474,40 +474,41 @@ def find_vrma_animations():
     try:
         # 递归遍历目录查找所有 .vrma、.anim 和 .vmd 文件
         for root, dirs, files in os.walk(animations_dir):
-            for file in files:
-                if file.endswith('.vrma') or file.endswith('.anim') or file.endswith('.vmd'):
-                    # 获取文件名（去掉扩展名）
-                    if file.endswith('.vrma'):
-                        file_name_display = file.replace('.vrma', '')
-                        file_type = 'vrma'
-                    elif file.endswith('.anim'):
-                        file_name_display = file.replace('.anim', '')
-                        file_type = 'anim'
-                    elif file.endswith('.vmd'):
-                        file_name_display = file.replace('.vmd', '')
-                        file_type = 'vmd'
-                    else:
-                        continue
-                    
-                    # 构建可被浏览器访问的URL路径
-                    # 使用原始文件名构建路径（需要 URL 编码）
-                    relative_path = os.path.relpath(os.path.join(root, file), animations_dir)
-                    # 将本地路径分隔符 (如'\') 替换为URL分隔符 ('/')
-                    file_path = relative_path.replace(os.path.sep, '/')
-                    
-                    # URL 编码路径的每个部分
-                    path_parts = file_path.split('/')
-                    encoded_parts = []
-                    for part in path_parts:
-                        # 对每个路径部分进行 URL 编码
-                        encoded_parts.append(urllib.parse.quote(part, safe=''))
-                    encoded_file_path = '/'.join(encoded_parts)
-                    
-                    found_animations.append({
-                        "name": file_name_display,
-                        "path": f"/static/models/vrm/animations/{encoded_file_path}",
-                        "type": file_type
-                    })
+                
+                for file in files:
+                    if file.endswith('.vrma') or file.endswith('.anim') or file.endswith('.vmd'):
+                        # 获取文件名（去掉扩展名）
+                        if file.endswith('.vrma'):
+                            file_name_display = file.replace('.vrma', '')
+                            file_type = 'vrma'
+                        elif file.endswith('.anim'):
+                            file_name_display = file.replace('.anim', '')
+                            file_type = 'anim'
+                        elif file.endswith('.vmd'):
+                            file_name_display = file.replace('.vmd', '')
+                            file_type = 'vmd'
+                        else:
+                            continue
+                        
+                        # 构建可被浏览器访问的URL路径
+                        # 使用原始文件名构建路径（需要 URL 编码）
+                        relative_path = os.path.relpath(os.path.join(root, file), animations_dir)
+                        # 将本地路径分隔符 (如'\') 替换为URL分隔符 ('/')
+                        file_path = relative_path.replace(os.path.sep, '/')
+                        
+                        # URL 编码路径的每个部分
+                        path_parts = file_path.split('/')
+                        encoded_parts = []
+                        for part in path_parts:
+                            # 对每个路径部分进行 URL 编码
+                            encoded_parts.append(urllib.parse.quote(part, safe=''))
+                        encoded_file_path = '/'.join(encoded_parts)
+                        
+                        found_animations.append({
+                            "name": file_name_display,
+                            "path": f"/static/models/vrm/animations/{encoded_file_path}",
+                            "type": file_type
+                        })
     except Exception as e:
         logging.error(f"搜索animations目录时出错: {e}")
     

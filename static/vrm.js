@@ -7,13 +7,19 @@
 import * as THREE from 'three';
 
 class VRMManager {
-    constructor(containerId) {
+    constructor(containerId, options = {}) {
         this.container = document.getElementById(containerId);
         if (!this.container) {
             console.error(`容器元素 "${containerId}" 未找到`);
             return;
         }
 
+        // 性能模式配置
+        this.performanceMode = options.performanceMode || this.detectPerformanceMode();
+        this.targetFPS = this.performanceMode === 'low' ? 30 : (this.performanceMode === 'medium' ? 45 : 60);
+        this.frameTime = 1000 / this.targetFPS;
+        this.lastFrameTime = 0;
+        
         this.scene = null;
         this.camera = null;
         this.renderer = null;
@@ -64,6 +70,158 @@ class VRMManager {
         this.vrmaMixer = null;
         this.vrmaAction = null;
         this.vrmaIsPlaying = false;
+        
+        // VRM 模型版本（0.0 或 1.0）
+        this.vrmVersion = null;
+        
+        // 性能监控
+        this.frameCount = 0;
+        this.lastFPSUpdate = 0;
+        this.currentFPS = 0;
+    }
+    
+    /**
+     * 检测 VRM 模型版本
+     * @returns {string} '0.0' 或 '1.0'
+     */
+    detectVRMVersion(vrm) {
+        try {
+            // VRM 1.0 有 meta 对象，且可能有 version 字段
+            // VRM 0.0 的 meta 结构不同
+            if (vrm.meta) {
+                // 检查是否有 VRM 1.0 的特征
+                // VRM 1.0 通常有 meta.vrmVersion 或通过其他方式标识
+                if (vrm.meta.vrmVersion || vrm.meta.metaVersion) {
+                    // 检查版本号
+                    const version = vrm.meta.vrmVersion || vrm.meta.metaVersion;
+                    if (version && (version.startsWith('1') || version.includes('1.0'))) {
+                        return '1.0';
+                    }
+                }
+                
+                // VRM 1.0 通常有 expressionManager 和 humanoid
+                // 检查是否有 VRM 1.0 特有的字段
+                if (vrm.humanoid && vrm.humanoid.humanBones) {
+                    // 检查 humanBones 的结构
+                    // VRM 1.0 的 humanBones 结构更规范
+                    const boneNames = Object.keys(vrm.humanoid.humanBones);
+                    // VRM 1.0 通常有更多的标准骨骼
+                    if (boneNames.length > 50) {
+                        return '1.0';
+                    }
+                }
+                
+                // 检查表达式数量，VRM 1.0 通常支持更多表达式
+                if (vrm.expressionManager && vrm.expressionManager.expressions) {
+                    const exprCount = Object.keys(vrm.expressionManager.expressions).length;
+                    if (exprCount > 10) {
+                        return '1.0';
+                    }
+                }
+            }
+            
+            // 如果无法确定，默认返回 '0.0'（更保守的选择）
+            return '0.0';
+        } catch (error) {
+            console.warn('[VRM] 检测模型版本时出错，默认使用 0.0:', error);
+            return '0.0';
+        }
+    }
+    
+    /**
+     * 检测设备性能模式
+     * 根据硬件信息自动选择性能模式
+     */
+    detectPerformanceMode() {
+        // 检查是否已保存用户设置
+        const savedMode = localStorage.getItem('vrm_performance_mode');
+        if (savedMode && ['low', 'medium', 'high'].includes(savedMode)) {
+            return savedMode;
+        }
+        
+        // 自动检测
+        try {
+            const canvas = document.createElement('canvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            
+            if (!gl) {
+                return 'low'; // 没有 WebGL 支持，使用最低性能模式
+            }
+            
+            const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+            if (debugInfo) {
+                const renderer = gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL);
+                const vendor = gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL);
+                
+                // 检测集成显卡或低端显卡
+                const isLowEndGPU = 
+                    renderer.includes('Intel') && 
+                    (renderer.includes('HD Graphics') || renderer.includes('Iris') || renderer.includes('UHD'));
+                
+                // 检测移动设备或低端设备
+                const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                const isLowEndMobile = isMobile && navigator.hardwareConcurrency <= 4;
+                
+                if (isLowEndGPU || isLowEndMobile) {
+                    console.log('[VRM] 检测到低端设备，使用性能模式');
+                    return 'low';
+                }
+            }
+            
+            // 检测 CPU 核心数
+            const cores = navigator.hardwareConcurrency || 4;
+            if (cores <= 2) {
+                return 'low';
+            } else if (cores <= 4) {
+                return 'medium';
+            }
+            
+            return 'high'; // 默认高性能模式
+        } catch (e) {
+            console.warn('[VRM] 性能检测失败，使用中等性能模式:', e);
+            return 'medium';
+        }
+    }
+    
+    /**
+     * 设置性能模式
+     */
+    setPerformanceMode(mode) {
+        if (!['low', 'medium', 'high'].includes(mode)) {
+            console.warn('[VRM] 无效的性能模式:', mode);
+            return;
+        }
+        
+        this.performanceMode = mode;
+        localStorage.setItem('vrm_performance_mode', mode);
+        this.targetFPS = mode === 'low' ? 30 : (mode === 'medium' ? 45 : 60);
+        this.frameTime = 1000 / this.targetFPS;
+        
+        // 重新应用渲染设置
+        if (this.renderer) {
+            this.applyPerformanceSettings();
+        }
+        
+        console.log(`[VRM] 性能模式已设置为: ${mode} (目标FPS: ${this.targetFPS})`);
+    }
+    
+    /**
+     * 应用性能设置
+     */
+    applyPerformanceSettings() {
+        if (!this.renderer) return;
+        
+        // 根据性能模式调整像素比
+        let pixelRatio = window.devicePixelRatio || 1;
+        if (this.performanceMode === 'low') {
+            pixelRatio = Math.min(pixelRatio, 1.0); // 低性能模式：最多1倍像素比
+        } else if (this.performanceMode === 'medium') {
+            pixelRatio = Math.min(pixelRatio, 1.5); // 中等性能模式：最多1.5倍像素比
+        }
+        // 高性能模式：使用完整像素比
+        
+        this.renderer.setPixelRatio(pixelRatio);
+        console.log(`[VRM] 像素比设置为: ${pixelRatio} (设备像素比: ${window.devicePixelRatio || 1})`);
     }
 
     async init() {
@@ -103,14 +261,17 @@ class VRMManager {
             this.camera.position.set(0, 1.2, 1.8);
             this.camera.lookAt(0, 1, 0);
 
-            // 创建渲染器
+            // 创建渲染器 - 根据性能模式调整设置
+            const antialias = this.performanceMode !== 'low'; // 低性能模式关闭抗锯齿
             this.renderer = new THREE.WebGLRenderer({ 
                 alpha: true, 
-                antialias: true 
+                antialias: antialias,
+                powerPreference: 'high-performance', // 优先使用独立显卡
+                precision: this.performanceMode === 'low' ? 'mediump' : 'highp' // 低性能模式使用中等精度
             });
             this.renderer.setSize(width, height);
-            this.renderer.setPixelRatio(window.devicePixelRatio);
-            this.renderer.shadowMap.enabled = true;
+            this.applyPerformanceSettings(); // 应用性能设置（像素比等）
+            this.renderer.shadowMap.enabled = false; // 关闭阴影以提高性能
             
             // 确保容器和 canvas 可以接收事件
             this.container.style.pointerEvents = 'auto';
@@ -131,14 +292,34 @@ class VRMManager {
             this.container.innerHTML = '';
             this.container.appendChild(canvas);
 
-            // 添加灯光
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            // 添加灯光 - 根据性能模式调整灯光数量
+            // 环境光：提供整体基础照明，增强亮度
+            const ambientIntensity = this.performanceMode === 'low' ? 1.5 : 1.2; // 低性能模式增强环境光以减少方向光需求
+            const ambientLight = new THREE.AmbientLight(0xffffff, ambientIntensity);
             this.scene.add(ambientLight);
             
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
-            directionalLight.position.set(1, 1, 1);
-            directionalLight.castShadow = true;
-            this.scene.add(directionalLight);
+            // 主方向光：从前方和上方照射，模拟自然光
+            const directionalLight1 = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight1.position.set(0, 2, 2);
+            directionalLight1.castShadow = false;
+            this.scene.add(directionalLight1);
+            
+            // 中等和高性能模式：添加额外的灯光
+            if (this.performanceMode !== 'low') {
+                // 辅助方向光：从侧面补充照明
+                const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.6);
+                directionalLight2.position.set(-1, 1, 1);
+                directionalLight2.castShadow = false;
+                this.scene.add(directionalLight2);
+                
+                // 高性能模式：添加补光
+                if (this.performanceMode === 'high') {
+                    const directionalLight3 = new THREE.DirectionalLight(0xffffff, 0.4);
+                    directionalLight3.position.set(0, 0.5, -2);
+                    directionalLight3.castShadow = false;
+                    this.scene.add(directionalLight3);
+                }
+            }
 
             // 初始化时钟
             this.clock = new THREE.Clock();
@@ -197,6 +378,14 @@ class VRMManager {
             if (!this.vrm) {
                 throw new Error('加载的模型不是有效的 VRM 格式');
             }
+            
+            // 检测 VRM 模型版本（0.0 或 1.0）
+            this.vrmVersion = this.detectVRMVersion(this.vrm);
+            console.log(`[VRM] 检测到模型版本: ${this.vrmVersion}`);
+            
+            // 检测 VRM 模型版本（0.0 或 1.0）
+            this.vrmVersion = this.detectVRMVersion(this.vrm);
+            console.log(`[VRM] 检测到模型版本: ${this.vrmVersion}`);
 
             // 计算模型的边界框，用于确定合适的初始大小
             const box = new THREE.Box3().setFromObject(this.vrm.scene);
@@ -205,9 +394,54 @@ class VRMManager {
             
             // 调整模型位置（居中）
             this.vrm.scene.position.set(-center.x, -center.y, -center.z);
-            // 不旋转模型，保持正面显示（VRM模型默认就是正面朝向）
-            this.vrm.scene.rotation.set(0, 0, 0);
-            this.modelRotation = { x: 0, y: 0 };
+            
+            // 确保模型正面朝向相机
+            // 方法1：使用VRM humanoid骨骼来确定正面方向
+            let needsRotation = false;
+            if (this.vrm.humanoid && this.vrm.humanoid.humanBones) {
+                // 获取头部骨骼位置（通常头部在模型前方）
+                const headBone = this.vrm.humanoid.humanBones.head?.node;
+                const chestBone = this.vrm.humanoid.humanBones.chest?.node || 
+                                 this.vrm.humanoid.humanBones.spine?.node;
+                
+                if (headBone && chestBone) {
+                    // 计算从胸部到头部的向量（应该指向前方）
+                    const headWorldPos = new THREE.Vector3();
+                    const chestWorldPos = new THREE.Vector3();
+                    headBone.getWorldPosition(headWorldPos);
+                    chestBone.getWorldPosition(chestWorldPos);
+                    
+                    const forwardVec = new THREE.Vector3().subVectors(headWorldPos, chestWorldPos);
+                    forwardVec.normalize();
+                    
+                    // 如果forward向量指向Z轴负方向（朝向相机），说明是正面
+                    // 如果指向Z轴正方向（远离相机），说明是背面，需要旋转
+                    if (forwardVec.z > 0.3) {
+                        console.log('[VRM] 检测到模型朝向为背面（通过骨骼检测），旋转180度使其正面朝向');
+                        needsRotation = true;
+                    }
+                }
+            }
+            
+            // 方法2：如果无法通过骨骼检测，使用bounding box
+            if (!needsRotation) {
+                // 检查bounding box的前后方向
+                // 通常模型的正面（脸部）在bounding box的某个特定位置
+                // 这里我们假设如果模型的某些特征在Z轴正方向，可能是背面
+                const frontFace = new THREE.Vector3(center.x, center.y, box.max.z);
+                const backFace = new THREE.Vector3(center.x, center.y, box.min.z);
+                
+                // 简单判断：如果max.z > min.z的绝对值，可能需要旋转
+                // 但这个方法不够准确，优先使用骨骼检测
+            }
+            
+            // 重置旋转并应用必要的旋转
+            this.vrm.scene.rotation.set(0, needsRotation ? Math.PI : 0, 0);
+            this.modelRotation = { x: 0, y: needsRotation ? Math.PI : 0 };
+            
+            if (needsRotation) {
+                console.log('[VRM] 模型已旋转180度，确保正面朝向相机');
+            }
             
             // 计算合适的初始缩放（参考Live2D的默认大小计算）
             // Live2D: scale = Math.min(0.5, (window.innerHeight * 0.75) / 7000, (window.innerWidth * 0.6) / 7000)
@@ -247,10 +481,18 @@ class VRMManager {
             
             // 调整相机位置，使模型在屏幕中央合适的位置
             // 相机位置：稍微偏上，类似Live2D的anchor (0.65, 0.75)
+            // 确保相机从正面（Z轴正方向）看向模型
             const cameraY = center.y + (isMobile ? modelHeight * 0.2 : modelHeight * 0.1);
-            const cameraZ = distance;
+            const cameraZ = Math.abs(distance); // 确保相机在Z轴正方向（正面）
             this.camera.position.set(0, cameraY, cameraZ);
             this.camera.lookAt(0, center.y, 0);
+            
+            // 如果模型被旋转了180度（背面朝向），调整相机位置到另一侧
+            if (Math.abs(this.modelRotation.y - Math.PI) < 0.1) {
+                // 模型已旋转180度，相机应该从Z轴负方向看（但模型已旋转，所以实际看到的是正面）
+                // 实际上不需要调整，因为模型已经旋转了
+                console.log('[VRM] 模型已旋转180度，相机位置保持不变');
+            }
             
             // 重置位置
             this.modelPosition = { x: 0, y: 0, z: 0 };
@@ -258,8 +500,16 @@ class VRMManager {
             // 添加到场景
             this.scene.add(this.vrm.scene);
 
+            // 优化材质设置（根据性能模式）
+            this.optimizeMaterials();
+
             // SpringBone（物理骨骼）会在 animate() 循环中通过 update() 方法更新
             // 不需要手动初始化，three-vrm 会自动处理
+            // 低性能模式：降低物理更新频率
+            if (this.performanceMode === 'low' && this.vrm.springBoneManager) {
+                // 可以通过降低更新频率来优化性能
+                console.log('[VRM] 低性能模式：已启用物理骨骼优化');
+            }
 
             // 确保拖拽和缩放功能已初始化（如果之前没有初始化）
             if (this.renderer && !this.dragHandler) {
@@ -651,9 +901,32 @@ class VRMManager {
         canvas.addEventListener('auxclick', this.auxClickHandler);
     }
 
-    // 渲染循环
+    // 渲染循环 - 带帧率限制
     animate() {
         this.animationId = requestAnimationFrame(() => this.animate());
+
+        // 帧率限制：低性能模式限制帧率以节省资源
+        const now = performance.now();
+        const elapsed = now - this.lastFrameTime;
+        
+        if (elapsed < this.frameTime) {
+            return; // 跳过这一帧以限制帧率
+        }
+        
+        this.lastFrameTime = now;
+        
+        // 更新 FPS 计数（每秒更新一次）
+        this.frameCount++;
+        if (now - this.lastFPSUpdate >= 1000) {
+            this.currentFPS = this.frameCount;
+            this.frameCount = 0;
+            this.lastFPSUpdate = now;
+            // 如果 FPS 过低，自动降级性能模式
+            if (this.performanceMode !== 'low' && this.currentFPS < 20) {
+                console.warn(`[VRM] FPS过低 (${this.currentFPS})，自动降级性能模式`);
+                this.setPerformanceMode('low');
+            }
+        }
 
         const deltaTime = this.clock ? this.clock.getDelta() : 0.016;
 

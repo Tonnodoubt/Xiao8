@@ -49,6 +49,16 @@
             cursor: grabbing;
         }
 
+        #vrm-container {
+            position: fixed;
+            right: 0px;
+            bottom: 0px;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: auto;
+        }
+
         #sidebar {
             position: fixed;
             left: 20px;
@@ -178,10 +188,17 @@
         .action-group {
             display: flex;
             gap: 10px;
+            flex-wrap: wrap;
         }
 
         .action-group .control-select {
             flex-grow: 1;
+            min-width: 200px;
+        }
+        
+        .action-group .btn-icon {
+            flex-shrink: 0;
+            white-space: nowrap;
         }
 
         #persistent-list {
@@ -220,10 +237,70 @@
         </div>
 
         <div class="control-group">
-            <label for="model-select" class="control-label" data-i18n="live2d.selectModel">选择模型:</label>
+            <label for="model-type-select" class="control-label" data-i18n="live2d.modelType">模型类型:</label>
+            <select id="model-type-select" class="control-select">
+                <option value="live2d">Live2D</option>
+                <option value="vrm">VRM</option>
+            </select>
+        </div>
+
+        <div class="control-group" id="live2d-model-group">
+            <label for="model-select" class="control-label" id="live2d-model-label" data-i18n="live2d.selectLive2DModel">选择Live2D模型:</label>
             <select id="model-select" class="control-select">
                 <option data-i18n="common.loading">加载中...</option>
             </select>
+        </div>
+
+        <div class="control-group" id="vrm-model-group" style="display:none;">
+            <label for="vrm-model-select" class="control-label" id="vrm-model-label" data-i18n="live2d.selectVRMModel">选择VRM模型:</label>
+            <select id="vrm-model-select" class="control-select">
+                <option data-i18n="common.loading">加载中...</option>
+            </select>
+        </div>
+
+        <div class="control-group" id="vrm-animation-group" style="display:none;">
+            <label class="control-label" data-i18n="live2d.vrmAnimation.title">VRM 动作管理</label>
+            <div class="action-group">
+                <select id="vrm-animation-select" class="control-select" disabled>
+                    <option value="" data-i18n="live2d.vrmAnimation.selectAnimation">选择动作</option>
+                </select>
+                <button id="play-vrm-animation-btn" class="btn btn-primary btn-icon" disabled>
+                    <img src="/static/icons/play_icon.png" alt="播放" data-i18n-alt="live2d.vrmAnimation.play">
+                    <span data-i18n="live2d.vrmAnimation.play">播放</span>
+                </button>
+                <button id="stop-vrm-animation-btn" class="btn btn-secondary btn-icon" disabled>
+                    <img src="/static/icons/rest_off.png" alt="停止" data-i18n-alt="live2d.vrmAnimation.stop">
+                    <span data-i18n="live2d.vrmAnimation.stop">停止</span>
+                </button>
+            </div>
+            <div style="display: flex; gap: 10px; margin-top: 8px; align-items: center;">
+                <label style="font-size: 12px; color: #666;">
+                    <input type="checkbox" id="vrm-animation-loop" checked style="margin-right: 4px;">
+                    <span data-i18n="live2d.vrmAnimation.loop">循环播放</span>
+                </label>
+                <label style="font-size: 12px; color: #666; margin-left: auto;">
+                    <span data-i18n="live2d.vrmAnimation.speed">播放速度:</span>
+                    <input type="range" id="vrm-animation-speed" min="0.1" max="2" step="0.1" value="1" style="width: 80px; margin-left: 8px;">
+                    <span id="vrm-animation-speed-value" style="margin-left: 4px;">1.0x</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="control-group" id="vrm-performance-group" style="display:none;">
+            <label class="control-label" data-i18n="live2d.performance.title">性能设置</label>
+            <select id="vrm-performance-select" class="control-select">
+                <option value="low" data-i18n="live2d.performance.low">低性能模式 (适合低端显卡)</option>
+                <option value="medium" data-i18n="live2d.performance.medium">中等性能模式 (平衡)</option>
+                <option value="high" data-i18n="live2d.performance.high">高性能模式 (最佳画质)</option>
+            </select>
+            <div style="margin-top: 8px; font-size: 12px; color: #666;">
+                <span data-i18n="live2d.performance.description">自动检测: </span>
+                <span id="vrm-performance-detected" data-i18n="live2d.performance.autoDetected">已根据您的设备自动选择</span>
+            </div>
+            <div id="vrm-performance-fps" style="margin-top: 4px; font-size: 11px; color: #999; display: none;">
+                <span data-i18n="live2d.performance.currentFPS">当前FPS: </span>
+                <span id="vrm-performance-fps-value">--</span>
+            </div>
         </div>
 
         <div class="control-group">
@@ -276,7 +353,7 @@
             </div>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" id="parameter-editor-group">
             <a href="/live2d_parameter_editor" class="btn btn-secondary"
                 style="width:100%; text-decoration: none; display: block; text-align: center;"
                 data-i18n="live2d.parameterEditor.title">
@@ -289,6 +366,7 @@
     </div>
 
     <div id="live2d-container"><canvas id="live2d-canvas"></canvas></div>
+    <div id="vrm-container" class="hidden"></div>
 
     <script src="/static/libs/live2dcubismcore.min.js"></script>
     <script src="/static/libs/live2d.min.js"></script>
@@ -303,6 +381,18 @@
     <script src="/static/live2d-ui-hud.js"></script>
     <script src="/static/live2d-ui-drag.js"></script>
     <script src="/static/live2d-init.js"></script>
+    <!-- Three.js 和 three-vrm 的 importmap（用于动态导入 ES 模块） -->
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "/static/libs/three.module.js",
+            "three/addons/loaders/GLTFLoader.js": "/static/libs/three/addons/loaders/GLTFLoader.js",
+            "three/addons/utils/BufferGeometryUtils.js": "/static/libs/three/addons/utils/BufferGeometryUtils.js",
+            "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js"
+        }
+    }
+    </script>
+    <script type="module" src="/static/vrm.js?v=2"></script>
 
     <script>
         // 用于页面间通信的事件处理
@@ -370,7 +460,14 @@
             }
 
             const statusDiv = document.getElementById('status');
+            const modelTypeSelect = document.getElementById('model-type-select');
             const modelSelect = document.getElementById('model-select');
+            const vrmModelSelect = document.getElementById('vrm-model-select');
+            const live2dModelGroup = document.getElementById('live2d-model-group');
+            const vrmModelGroup = document.getElementById('vrm-model-group');
+            const vrmAnimationGroup = document.getElementById('vrm-animation-group');
+            const live2dContainer = document.getElementById('live2d-container');
+            const vrmContainer = document.getElementById('vrm-container');
             const motionSelect = document.getElementById('motion-select');
             const expressionSelect = document.getElementById('expression-select');
             const playMotionBtn = document.getElementById('play-motion-btn');
@@ -381,6 +478,16 @@
             const modelUpload = document.getElementById('model-upload');
             const uploadStatus = document.getElementById('upload-status');
             const backToMainBtn = document.getElementById('backToMainBtn');
+            const vrmAnimationSelect = document.getElementById('vrm-animation-select');
+            const playVrmAnimationBtn = document.getElementById('play-vrm-animation-btn');
+            const stopVrmAnimationBtn = document.getElementById('stop-vrm-animation-btn');
+            const vrmAnimationLoop = document.getElementById('vrm-animation-loop');
+            const vrmAnimationSpeed = document.getElementById('vrm-animation-speed');
+            const vrmAnimationSpeedValue = document.getElementById('vrm-animation-speed-value');
+            const vrmPerformanceGroup = document.getElementById('vrm-performance-group');
+            const vrmPerformanceSelect = document.getElementById('vrm-performance-select');
+            const vrmPerformanceFps = document.getElementById('vrm-performance-fps');
+            const vrmPerformanceFpsValue = document.getElementById('vrm-performance-fps-value');
 
 
             // 检测页面来源，设置返回按钮文本
@@ -466,6 +573,9 @@
             let currentModelFiles = { motion_files: [], expression_files: [] };
             let live2dModel = null;
             let currentEmotionMapping = null; // { motions: {...}, expressions: {...} }
+            let currentModelType = 'live2d'; // 'live2d' or 'vrm'
+            let vrmManager = null;
+            let vrmAnimations = []; // VRM 动作列表
 
             const showStatus = (msg, duration = 0) => {
                 statusDiv.textContent = msg;
@@ -506,6 +616,10 @@
             }
 
             // 然后加载当前角色的模型（此时下拉框已经有选项了）
+            // 初始化模型类型（从 localStorage 或默认值）
+            const savedModelType = localStorage.getItem('modelType') || 'live2d';
+            await switchModelDisplay(savedModelType);
+
             await loadCurrentCharacterModel();
 
             // 如果已自动加载了一个模型，确保在下拉框中选中它
@@ -541,7 +655,7 @@
             }
 
             // 保存模型设置到角色的函数
-            async function saveModelToCharacter(modelName, itemId = null) {
+            async function saveModelToCharacter(modelName, itemId = null, vrmAnimation = null) {
                 try {
                     // 获取角色名称
                     const lanlanName = await getLanlanName();
@@ -551,15 +665,29 @@
                         return false;
                     }
 
-                    // 构建保存数据，包含模型名称和可选的item_id
-                    const saveData = {
-                        live2d: modelName
-                    };
-
-                    // 如果有item_id，也保存它
-                    if (itemId && itemId !== 'undefined') {
-                        saveData.item_id = itemId;
-                        console.log('保存模型设置时同时保存item_id:', itemId);
+                    // 构建保存数据
+                    const saveData = {};
+                    
+                    // 根据当前模型类型保存不同的数据
+                    if (currentModelType === 'vrm') {
+                        // VRM 模式：保存 vrm 路径和 model_type
+                        saveData.vrm = modelName; // modelName 实际上是 VRM 模型路径
+                        saveData.model_type = 'vrm';
+                        // 如果有动作路径，也保存它
+                        if (vrmAnimation) {
+                            saveData.vrm_animation = vrmAnimation;
+                            console.log('保存 VRM 动作设置:', vrmAnimation);
+                        }
+                        console.log('保存 VRM 模型设置:', modelName);
+                    } else {
+                        // Live2D 模式：保存 live2d 模型名称
+                        saveData.live2d = modelName;
+                        saveData.model_type = 'live2d';
+                        // 如果有item_id，也保存它
+                        if (itemId && itemId !== 'undefined') {
+                            saveData.item_id = itemId;
+                            console.log('保存模型设置时同时保存item_id:', itemId);
+                        }
                     }
 
                     const response = await fetch(`/api/characters/catgirl/l2d/${encodeURIComponent(lanlanName)}`, {
@@ -573,7 +701,8 @@
                     const result = await response.json();
 
                     if (result.success) {
-                        showStatus(t('live2d.modelSettingsSaved', `已保存模型设置: ${lanlanName} -> ${modelName}`, { name: lanlanName, model: modelName }), 2000);
+                        const modelDisplayName = currentModelType === 'vrm' ? `VRM: ${modelName}` : modelName;
+                        showStatus(t('live2d.modelSettingsSaved', `已保存模型设置: ${lanlanName} -> ${modelDisplayName}`, { name: lanlanName, model: modelDisplayName }), 2000);
                         return true;
                     } else {
                         showStatus(t('live2d.saveFailed', `保存失败: ${result.error}`, { error: result.error }), 3000);
@@ -586,12 +715,438 @@
                 }
             }
 
+            // 模型类型切换处理
+            async function switchModelDisplay(type) {
+                currentModelType = type;
+                localStorage.setItem('modelType', type);
+                if (modelTypeSelect) modelTypeSelect.value = type;
+
+                if (type === 'live2d') {
+                    if (live2dModelGroup) live2dModelGroup.style.display = 'flex';
+                    if (vrmModelGroup) vrmModelGroup.style.display = 'none';
+                    if (live2dContainer) live2dContainer.style.display = 'block';
+                    if (vrmContainer) {
+                        vrmContainer.classList.add('hidden');
+                        vrmContainer.style.display = 'none';
+                    }
+                    // 显示 Live2D 特有的控件
+                    document.querySelectorAll('.control-group').forEach(group => {
+                        if (group.id !== 'live2d-model-group' && group.id !== 'vrm-model-group') {
+                            group.style.display = 'flex';
+                        }
+                    });
+                    // 显示参数编辑器按钮
+                    const parameterEditorGroup = document.getElementById('parameter-editor-group');
+                    if (parameterEditorGroup) parameterEditorGroup.style.display = 'flex';
+                    
+                    // 隐藏 VRM 性能设置
+                    if (vrmPerformanceGroup) vrmPerformanceGroup.style.display = 'none';
+                    
+                    if (!window.live2dManager.pixi_app) {
+                        await window.live2dManager.initPIXI('live2d-canvas', 'live2d-container');
+                        showStatus(t('live2d.pixiInitialized', 'PIXI 初始化完成'));
+                    }
+                } else { // VRM
+                    if (live2dModelGroup) live2dModelGroup.style.display = 'none';
+                    if (vrmModelGroup) vrmModelGroup.style.display = 'flex';
+                    if (live2dContainer) live2dContainer.style.display = 'none';
+                    if (vrmContainer) {
+                        vrmContainer.classList.remove('hidden');
+                        vrmContainer.style.display = 'block';
+                    }
+                    // 隐藏 Live2D 特有的控件
+                    const live2dOnlyControls = ['motion-select', 'expression-select', 'play-motion-btn', 'play-expression-btn', 'emotion-manager-btn'];
+                    live2dOnlyControls.forEach(id => {
+                        const elem = document.getElementById(id);
+                        if (elem) {
+                            const group = elem.closest('.control-group');
+                            if (group) group.style.display = 'none';
+                        }
+                    });
+                    // 显示 VRM 动作管理器
+                    if (vrmAnimationGroup) vrmAnimationGroup.style.display = 'flex';
+                    // 加载 VRM 动作列表
+                    await loadVRMAnimations();
+                    // 隐藏参数编辑器按钮（VRM 模式下不需要）
+                    const parameterEditorGroup = document.getElementById('parameter-editor-group');
+                    if (parameterEditorGroup) parameterEditorGroup.style.display = 'none';
+                    
+                    // 初始化 VRM 管理器
+                    if (!vrmManager) {
+                        try {
+                            // 等待 VRMManager 加载
+                            let retryCount = 0;
+                            while (typeof VRMManager === 'undefined' && retryCount < 50) {
+                                await new Promise(resolve => setTimeout(resolve, 100));
+                                retryCount++;
+                            }
+                            
+                            if (typeof VRMManager === 'undefined') {
+                                throw new Error('VRMManager 仍未定义');
+                            }
+                            
+                            // 获取保存的性能模式设置
+                            const savedMode = localStorage.getItem('vrm_performance_mode');
+                            const performanceOptions = savedMode ? { performanceMode: savedMode } : {};
+                            
+                            showStatus(t('live2d.waitingVRMLoader', '正在初始化 VRM 管理器...'));
+                            vrmManager = new VRMManager('vrm-container', performanceOptions);
+                            await vrmManager.init();
+                            window.vrmManager = vrmManager;
+                            
+                            // 更新性能设置下拉框
+                            if (vrmPerformanceSelect) {
+                                vrmPerformanceSelect.value = vrmManager.performanceMode;
+                            }
+                            
+                            showStatus(t('live2d.vrmInitialized', 'VRM 管理器初始化成功'));
+                        } catch (error) {
+                            console.error('VRM 管理器初始化失败:', error);
+                            showStatus(t('live2d.vrmInitFailed', `VRM 管理器初始化失败: ${error.message}`));
+                        }
+                    }
+                }
+            }
+
+            // 模型类型选择事件
+            if (modelTypeSelect) {
+                modelTypeSelect.addEventListener('change', async (e) => {
+                    const type = e.target.value;
+                    
+                    // 检查语音模式状态
+                    const voiceStatus = await checkVoiceModeStatus();
+                    if (voiceStatus.isCurrent && voiceStatus.isVoiceMode) {
+                        showStatus(t('live2d.cannotChangeModelInVoiceMode', '语音模式下无法切换模型类型，请先停止语音对话'), 3000);
+                        // 恢复之前的选择
+                        e.target.value = currentModelType;
+                        return;
+                    }
+                    
+                    await switchModelDisplay(type);
+                });
+            }
+
+            // 加载 VRM 模型列表
+            async function loadVRMModels() {
+                try {
+                    const response = await fetch('/api/vrm/models');
+                    const models = await response.json();
+                    if (vrmModelSelect && models.length > 0) {
+                        vrmModelSelect.innerHTML = `<option value="">${t('live2d.pleaseSelectModel', '请选择一个模型')}</option>`;
+                        models.forEach(model => {
+                            const option = document.createElement('option');
+                            option.value = model.path;
+                            option.textContent = model.name || model.path;
+                            vrmModelSelect.appendChild(option);
+                        });
+                        showStatus(t('live2d.vrmModelListLoaded', 'VRM 模型列表加载成功'));
+                    } else {
+                        showStatus(t('live2d.noVRMModelsFound', '未找到可用 VRM 模型'));
+                    }
+                } catch (error) {
+                    console.error('加载 VRM 模型列表失败:', error);
+                    showStatus(t('live2d.vrmModelListLoadFailed', '加载 VRM 模型列表失败'));
+                }
+            }
+
+            // VRM 模型选择事件
+            if (vrmModelSelect) {
+                vrmModelSelect.addEventListener('change', async (e) => {
+                    const modelPath = e.target.value;
+                    if (!modelPath) return;
+                    
+                    // 检查语音模式状态
+                    const voiceStatus = await checkVoiceModeStatus();
+                    if (voiceStatus.isCurrent && voiceStatus.isVoiceMode) {
+                        showStatus(t('live2d.cannotChangeModelInVoiceMode', '语音模式下无法切换模型，请先停止语音对话'), 3000);
+                        // 恢复之前的选择
+                        if (currentModelInfo && currentModelInfo.name) {
+                            e.target.value = currentModelInfo.name;
+                        } else {
+                            e.target.value = '';
+                        }
+                        return;
+                    }
+                    
+                    // 确保切换到VRM模式
+                    if (currentModelType !== 'vrm') {
+                        await switchModelDisplay('vrm');
+                    }
+                    
+                    // 确保vrm-container可见
+                    if (vrmContainer) {
+                        vrmContainer.classList.remove('hidden');
+                        vrmContainer.style.display = 'block';
+                    }
+                    
+                    // 如果vrmManager未初始化，尝试初始化
+                    if (!vrmManager) {
+                        try {
+                            let retryCount = 0;
+                            while (typeof VRMManager === 'undefined' && retryCount < 50) {
+                                await new Promise(resolve => setTimeout(resolve, 100));
+                                retryCount++;
+                            }
+                            
+                            if (typeof VRMManager === 'undefined') {
+                                throw new Error('VRMManager 仍未定义');
+                            }
+                            
+                            // 获取保存的性能模式设置
+                            const savedMode = localStorage.getItem('vrm_performance_mode');
+                            const performanceOptions = savedMode ? { performanceMode: savedMode } : {};
+                            
+                            showStatus(t('live2d.waitingVRMLoader', '正在初始化 VRM 管理器...'));
+                            vrmManager = new VRMManager('vrm-container', performanceOptions);
+                            await vrmManager.init();
+                            window.vrmManager = vrmManager;
+                            
+                            // 更新性能设置下拉框
+                            if (vrmPerformanceSelect) {
+                                vrmPerformanceSelect.value = vrmManager.performanceMode;
+                            }
+                            
+                            showStatus(t('live2d.vrmInitialized', 'VRM 管理器初始化成功'));
+                        } catch (error) {
+                            console.error('VRM 管理器初始化失败:', error);
+                            showStatus(t('live2d.vrmInitFailed', `VRM 管理器初始化失败: ${error.message}`));
+                            return;
+                        }
+                    }
+
+                    // 保存当前 VRM 模型信息，用于后续保存到角色配置（在加载前就设置，这样即使加载失败也能保存）
+                    currentModelInfo = {
+                        name: modelPath,
+                        path: modelPath,
+                        type: 'vrm'
+                    };
+                    
+                    // 选择模型后立即启用保存按钮（即使模型还未加载或加载失败）
+                    if (savePositionBtn) {
+                        savePositionBtn.disabled = false;
+                    }
+                    
+                    // 标记为有未保存更改
+                    window.hasUnsavedChanges = true;
+                    console.log('已标记为未保存更改（VRM模型切换），请点击 保存设置 持久化到角色配置。');
+                    
+                    try {
+                        showStatus(t('live2d.loadingVRMModel', `正在加载 VRM 模型...`));
+                        
+                        // 确保容器可见
+                        if (vrmContainer) {
+                            vrmContainer.classList.remove('hidden');
+                            vrmContainer.style.display = 'block';
+                        }
+                        
+                        await vrmManager.loadModel(modelPath);
+                        
+                        // 加载 VRM 动作列表并启用动作选择器
+                        await loadVRMAnimations();
+                        if (vrmAnimationSelect && vrmAnimations.length > 0) {
+                            vrmAnimationSelect.disabled = false;
+                        }
+                        
+                        showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelPath} 加载成功`, { model: modelPath }));
+                    } catch (error) {
+                        console.error('加载 VRM 模型失败:', error);
+                        showStatus(t('live2d.vrmModelLoadFailed', `加载 VRM 模型失败: ${error.message}。您仍可以保存模型设置。`));
+                        // 即使加载失败，也尝试加载动作列表（可能动作文件存在）
+                        try {
+                            await loadVRMAnimations();
+                            if (vrmAnimationSelect && vrmAnimations.length > 0) {
+                                vrmAnimationSelect.disabled = false;
+                            }
+                        } catch (animError) {
+                            console.warn('加载动作列表失败:', animError);
+                        }
+                    }
+                });
+            }
+
+            // 加载 VRM 动作列表
+            async function loadVRMAnimations() {
+                try {
+                    const response = await fetch('/api/vrm/animations');
+                    const data = await response.json();
+                    vrmAnimations = (data.success && data.animations) ? data.animations : [];
+                    
+                    if (vrmAnimationSelect && vrmAnimations.length > 0) {
+                        vrmAnimationSelect.innerHTML = `<option value="">${t('live2d.vrmAnimation.selectAnimation', '选择动作')}</option>`;
+                        vrmAnimations.forEach(anim => {
+                            const option = document.createElement('option');
+                            // 处理不同的返回格式：可能是字符串路径，也可能是对象
+                            const animPath = typeof anim === 'string' ? anim : (anim.path || anim);
+                            const animName = typeof anim === 'string' ? anim.split('/').pop() : (anim.name || anim.path || anim).split('/').pop();
+                            option.value = animPath;
+                            option.textContent = animName;
+                            vrmAnimationSelect.appendChild(option);
+                        });
+                        vrmAnimationSelect.disabled = false;
+                        showStatus(t('live2d.vrmAnimation.animationListLoaded', '动作列表加载成功'), 2000);
+                    } else {
+                        if (vrmAnimationSelect) {
+                            vrmAnimationSelect.innerHTML = `<option value="">${t('live2d.vrmAnimation.noAnimations', '未找到动作文件')}</option>`;
+                            vrmAnimationSelect.disabled = true;
+                        }
+                        if (vrmAnimations.length === 0) {
+                            showStatus(t('live2d.vrmAnimation.noAnimations', '未找到动作文件'), 2000);
+                        }
+                    }
+                } catch (error) {
+                    console.error('加载 VRM 动作列表失败:', error);
+                    if (vrmAnimationSelect) {
+                        vrmAnimationSelect.innerHTML = `<option value="">${t('live2d.vrmAnimation.animationListLoadFailed', '加载动作列表失败')}</option>`;
+                        vrmAnimationSelect.disabled = true;
+                    }
+                    showStatus(t('live2d.vrmAnimation.animationListLoadFailed', '加载动作列表失败'), 2000);
+                }
+            }
+
+            // VRM 动作选择事件
+            if (vrmAnimationSelect) {
+                vrmAnimationSelect.addEventListener('change', (e) => {
+                    const animationPath = e.target.value;
+                    if (animationPath && playVrmAnimationBtn) {
+                        playVrmAnimationBtn.disabled = false;
+                    } else {
+                        if (playVrmAnimationBtn) playVrmAnimationBtn.disabled = true;
+                        if (stopVrmAnimationBtn) stopVrmAnimationBtn.disabled = true;
+                    }
+                });
+            }
+
+            // 播放 VRM 动作
+            if (playVrmAnimationBtn) {
+                playVrmAnimationBtn.addEventListener('click', async () => {
+                    if (!vrmManager || !vrmAnimationSelect || !vrmAnimationSelect.value) {
+                        showStatus(t('live2d.vrmAnimation.selectAnimationFirst', '请先选择动作'), 2000);
+                        return;
+                    }
+
+                    const animationPath = vrmAnimationSelect.value;
+                    const loop = vrmAnimationLoop ? vrmAnimationLoop.checked : true;
+                    const speed = vrmAnimationSpeed ? parseFloat(vrmAnimationSpeed.value) : 1.0;
+
+                    try {
+                        showStatus(t('live2d.vrmAnimation.playingAnimation', `正在播放: ${animationPath}`, { name: animationPath }), 2000);
+                        await vrmManager.playVRMAAnimation(animationPath, {
+                            loop: loop,
+                            timeScale: speed
+                        });
+                        if (stopVrmAnimationBtn) stopVrmAnimationBtn.disabled = false;
+                        showStatus(t('live2d.vrmAnimation.playingAnimation', `正在播放: ${animationPath}`, { name: animationPath }), 2000);
+                    } catch (error) {
+                        console.error('播放 VRM 动作失败:', error);
+                        showStatus(t('live2d.vrmAnimation.animationPlayFailed', `播放动作失败: ${error.message}`, { error: error.message }), 3000);
+                    }
+                });
+            }
+
+            // 停止 VRM 动作
+            if (stopVrmAnimationBtn) {
+                stopVrmAnimationBtn.addEventListener('click', () => {
+                    if (vrmManager) {
+                        vrmManager.stopVRMAAnimation();
+                        showStatus(t('live2d.vrmAnimation.animationStopped', '动作已停止'), 2000);
+                        stopVrmAnimationBtn.disabled = true;
+                    }
+                });
+            }
+
+            // 播放速度滑块
+            if (vrmAnimationSpeed && vrmAnimationSpeedValue) {
+                vrmAnimationSpeed.addEventListener('input', (e) => {
+                    const speed = parseFloat(e.target.value);
+                    vrmAnimationSpeedValue.textContent = speed.toFixed(1) + 'x';
+                    // 如果正在播放动画，更新速度
+                    if (vrmManager && vrmManager.vrmaAction) {
+                        vrmManager.vrmaAction.timeScale = speed;
+                    }
+                });
+            }
+
+            // 性能设置
+            if (vrmPerformanceSelect) {
+                vrmPerformanceSelect.addEventListener('change', async (e) => {
+                    const mode = e.target.value;
+                    if (vrmManager) {
+                        vrmManager.setPerformanceMode(mode);
+                        showStatus(t('live2d.performance.modeChanged', `性能模式已设置为: ${mode}`, { mode }), 2000);
+                        
+                        // 如果模型已加载，需要重新应用设置
+                        if (vrmManager.vrm) {
+                            vrmManager.optimizeMaterials();
+                            vrmManager.applyPerformanceSettings();
+                        }
+                    } else {
+                        // 如果管理器还未初始化，先保存设置
+                        localStorage.setItem('vrm_performance_mode', mode);
+                    }
+                });
+            }
+
+            // 性能监控：定期更新 FPS 显示
+            if (vrmPerformanceFps && vrmPerformanceFpsValue) {
+                setInterval(() => {
+                    if (vrmManager && vrmManager.currentFPS > 0) {
+                        vrmPerformanceFps.style.display = 'block';
+                        vrmPerformanceFpsValue.textContent = vrmManager.currentFPS;
+                        
+                        // 根据 FPS 显示颜色提示
+                        if (vrmManager.currentFPS < 20) {
+                            vrmPerformanceFpsValue.style.color = '#ff4444';
+                        } else if (vrmManager.currentFPS < 30) {
+                            vrmPerformanceFpsValue.style.color = '#ffaa00';
+                        } else {
+                            vrmPerformanceFpsValue.style.color = '#44ff44';
+                        }
+                    } else {
+                        vrmPerformanceFps.style.display = 'none';
+                    }
+                }, 1000);
+            }
+
+            // 初始化时加载 VRM 模型列表
+            await loadVRMModels();
+
+            // 检查语音模式状态的辅助函数
+            async function checkVoiceModeStatus() {
+                try {
+                    const lanlanName = await getLanlanName();
+                    if (!lanlanName) return { isVoiceMode: false, isCurrent: false };
+                    
+                    const response = await fetch(`/api/characters/catgirl/${encodeURIComponent(lanlanName)}/voice_mode_status`);
+                    const data = await response.json();
+                    return {
+                        isVoiceMode: data.is_voice_mode || false,
+                        isCurrent: data.is_current || false
+                    };
+                } catch (error) {
+                    console.warn('检查语音模式状态失败:', error);
+                    return { isVoiceMode: false, isCurrent: false };
+                }
+            }
+
             // 修改模型选择事件，自动保存模型设置
             modelSelect.addEventListener('change', async (e) => {
                 const modelName = e.target.value;
                 const modelId = e.target.dataset.itemId
                 console.log("id:", modelId)
                 if (!modelName) return;
+
+                // 检查语音模式状态
+                const voiceStatus = await checkVoiceModeStatus();
+                if (voiceStatus.isCurrent && voiceStatus.isVoiceMode) {
+                    showStatus(t('live2d.cannotChangeModelInVoiceMode', '语音模式下无法切换模型，请先停止语音对话'), 3000);
+                    // 恢复之前的选择
+                    if (currentModelInfo && currentModelInfo.name) {
+                        e.target.value = currentModelInfo.name;
+                    } else {
+                        e.target.value = '';
+                    }
+                    return;
+                }
 
                 currentModelInfo = availableModels.find(m => m.name === modelName);
                 if (currentModelInfo) {
@@ -606,7 +1161,7 @@
 
                 await loadModel(modelName, currentModelInfo, modelSteamId);
 
-                // 不自动保存模型到角色，改为标记为有未保存更改，用户需手动点击“保存设置”
+                // 不自动保存模型到角色，改为标记为有未保存更改，用户需手动点击"保存设置"
                 window.hasUnsavedChanges = true;
                 console.log('已标记为未保存更改（模型切换），请点击 保存设置 持久化到角色配置。');
             });
@@ -780,33 +1335,86 @@
             });
 
             savePositionBtn.addEventListener('click', async () => {
-                if (!currentModelInfo || !live2dModel) return;
+                // VRM模式下，即使模型未加载，只要有选择的模型就可以保存
+                if (currentModelType === 'vrm') {
+                    const selectedModelPath = vrmModelSelect ? vrmModelSelect.value : null;
+                    if (!selectedModelPath) {
+                        showStatus(t('live2d.pleaseSelectModel', '请先选择一个VRM模型'), 2000);
+                        return;
+                    }
+                    // 如果没有currentModelInfo，使用当前选择的模型路径创建
+                    if (!currentModelInfo) {
+                        currentModelInfo = {
+                            name: selectedModelPath,
+                            path: selectedModelPath,
+                            type: 'vrm'
+                        };
+                    }
+                } else {
+                    // Live2D模式下需要currentModelInfo
+                    if (!currentModelInfo) return;
+                }
+                
                 showStatus(t('live2d.savingSettings', '正在保存设置...'));
 
-                // 添加调试信息
-                console.log('保存设置 - 模型路径:', currentModelInfo.path);
-                console.log('保存设置 - 当前位置:', { x: live2dModel.x, y: live2dModel.y });
-                console.log('保存设置 - 当前缩放:', { x: live2dModel.scale.x, y: live2dModel.scale.y });
+                let positionSuccess = false;
+                let modelSuccess = false;
 
-                // 保存位置和缩放
-                const positionSuccess = await window.live2dManager.saveUserPreferences(
-                    currentModelInfo.path,
-                    { x: live2dModel.x, y: live2dModel.y },
-                    { x: live2dModel.scale.x, y: live2dModel.scale.y }
-                );
-
-                // 保存模型设置到角色，同时传入item_id
-                const modelSuccess = await saveModelToCharacter(currentModelInfo.name, currentModelInfo.item_id);
-
-                if (positionSuccess && modelSuccess) {
-                    showStatus(t('live2d.settingsSaved', '位置和模型设置保存成功!'), 2000);
-                    window.hasUnsavedChanges = false; // 保存成功后重置标志
-                } else if (positionSuccess) {
-                    showStatus(t('live2d.positionSavedModelFailed', '位置保存成功，模型设置保存失败!'), 2000);
-                } else if (modelSuccess) {
-                    showStatus(t('live2d.modelSavedPositionFailed', '模型设置保存成功，位置保存失败!'), 2000);
+                // 根据模型类型保存不同的设置
+                if (currentModelType === 'vrm') {
+                    // VRM 模式：保存模型设置和动作设置
+                    // 获取当前选择的动作路径
+                    const currentAnimation = vrmAnimationSelect && vrmAnimationSelect.value ? vrmAnimationSelect.value : null;
+                    modelSuccess = await saveModelToCharacter(currentModelInfo.name, null, currentAnimation);
                 } else {
-                    showStatus(t('live2d.saveFailedGeneral', '保存失败!'), 2000);
+                    // Live2D 模式：保存位置、缩放和模型设置
+                    if (!live2dModel) {
+                        showStatus(t('live2d.pleaseLoadModel', '请先加载模型'), 2000);
+                        return;
+                    }
+
+                    // 添加调试信息
+                    console.log('保存设置 - 模型路径:', currentModelInfo.path);
+                    console.log('保存设置 - 当前位置:', { x: live2dModel.x, y: live2dModel.y });
+                    console.log('保存设置 - 当前缩放:', { x: live2dModel.scale.x, y: live2dModel.scale.y });
+
+                    // 保存位置和缩放
+                    positionSuccess = await window.live2dManager.saveUserPreferences(
+                        currentModelInfo.path,
+                        { x: live2dModel.x, y: live2dModel.y },
+                        { x: live2dModel.scale.x, y: live2dModel.scale.y }
+                    );
+
+                    // 保存模型设置到角色，同时传入item_id
+                    modelSuccess = await saveModelToCharacter(currentModelInfo.name, currentModelInfo.item_id);
+                }
+
+                if (currentModelType === 'vrm') {
+                    // VRM 模式：只显示模型保存结果
+                    if (modelSuccess) {
+                        showStatus(t('live2d.settingsSaved', '模型设置保存成功!'), 2000);
+                        window.hasUnsavedChanges = false;
+                        // 通知主页重新加载模型
+                        sendMessageToMainPage('reload_model');
+                    } else {
+                        showStatus(t('live2d.saveFailedGeneral', '保存失败!'), 2000);
+                    }
+                } else {
+                    // Live2D 模式：显示位置和模型保存结果
+                    if (positionSuccess && modelSuccess) {
+                        showStatus(t('live2d.settingsSaved', '位置和模型设置保存成功!'), 2000);
+                        window.hasUnsavedChanges = false; // 保存成功后重置标志
+                        // 通知主页重新加载模型
+                        sendMessageToMainPage('reload_model');
+                    } else if (positionSuccess) {
+                        showStatus(t('live2d.positionSavedModelFailed', '位置保存成功，模型设置保存失败!'), 2000);
+                    } else if (modelSuccess) {
+                        showStatus(t('live2d.modelSavedPositionFailed', '模型设置保存成功，位置保存失败!'), 2000);
+                        // 即使位置保存失败，模型设置成功也应该通知主页重新加载
+                        sendMessageToMainPage('reload_model');
+                    } else {
+                        showStatus(t('live2d.saveFailedGeneral', '保存失败!'), 2000);
+                    }
                 }
             });
 

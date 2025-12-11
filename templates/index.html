@@ -1260,6 +1260,11 @@
                             console.log('接收到重新加载模型参数命令');
                             await reloadModelParameters();
                             break;
+                        case 'reload_model':
+                            console.log('接收到重新加载模型命令');
+                            // 重新加载模型（根据角色配置）
+                            await loadModelBasedOnCharacterConfig();
+                            break;
                     }
                 }
             } catch (e) {
@@ -1342,8 +1347,8 @@
             const modelType = catgirlConfig.model_type || (vrmModelPath ? 'vrm' : 'live2d');
             
             if (modelType === 'vrm' && vrmModelPath) {
-                // 如果有 VRM 模型配置，加载 VRM 模型
-                await loadVRMModelFromConfig(vrmModelPath);
+                // 如果有 VRM 模型配置，加载 VRM 模型（会包含动作播放逻辑）
+                await loadVRMModelFromConfig(vrmModelPath, catgirlConfig);
                 return;
             }
             
@@ -1715,8 +1720,48 @@
                 // 加载 VRM 模型
                 await loadVRMModelFromConfig(vrmModelPath);
             } else {
-                // 默认使用 Live2D（已有现有逻辑处理）
-                console.log('使用 Live2D 模型');
+                // 加载 Live2D 模型
+                const live2dModelName = catgirlConfig.live2d;
+                if (live2dModelName) {
+                    console.log(`重新加载 Live2D 模型: ${live2dModelName}`);
+                    // 重新加载 Live2D 模型
+                    // 显示 Live2D 容器，隐藏 VRM 容器
+                    const live2dContainer = document.getElementById('live2d-container');
+                    const vrmContainer = document.getElementById('vrm-container');
+                    
+                    if (live2dContainer) {
+                        live2dContainer.style.display = 'block';
+                        live2dContainer.classList.remove('minimized');
+                        live2dContainer.style.visibility = 'visible';
+                        live2dContainer.style.opacity = '1';
+                    }
+                    if (vrmContainer) {
+                        vrmContainer.style.display = 'none';
+                        vrmContainer.classList.add('hidden');
+                    }
+                    
+                    // 触发 Live2D 模型重新加载
+                    // 通过重新获取当前模型配置来触发加载
+                    try {
+                        const modelResponse = await fetch(`/api/characters/current_live2d_model?catgirl_name=${encodeURIComponent(currentLanlanName)}`);
+                        if (modelResponse.ok) {
+                            const modelData = await modelResponse.json();
+                            if (modelData.model_name && window.live2dManager) {
+                                // 重新加载模型
+                                const modelPath = modelData.model_path || `/static/models/live2d/${modelData.model_name}`;
+                                await window.live2dManager.loadModel(modelPath, {
+                                    preferences: modelData.preferences || {},
+                                    isMobile: window.innerWidth <= 768
+                                });
+                                console.log('Live2D 模型重新加载成功');
+                            }
+                        }
+                    } catch (error) {
+                        console.error('重新加载 Live2D 模型失败:', error);
+                    }
+                } else {
+                    console.log('未设置 Live2D 模型');
+                }
             }
         } catch (error) {
             console.error('根据角色配置加载模型失败:', error);
@@ -1758,7 +1803,11 @@
                     return;
                 }
                 
-                vrmManager = new VRMManager('vrm-container');
+                // 获取保存的性能模式设置
+                const savedMode = localStorage.getItem('vrm_performance_mode');
+                const performanceOptions = savedMode ? { performanceMode: savedMode } : {};
+                
+                vrmManager = new VRMManager('vrm-container', performanceOptions);
                 await vrmManager.init();
                 window.vrmManager = vrmManager;
                 console.log('VRM 管理器初始化成功');
@@ -1837,16 +1886,33 @@
             // 设置模型类型为VRM，确保口型同步能正确启动
             localStorage.setItem('modelType', 'vrm');
             
-            // 自动播放idle.vrma待机动画
+            // 播放保存的动作（如果存在），否则播放默认的idle.vrma待机动画
             try {
-                const idleAnimationPath = '/static/models/vrm/animations/idle.vrma';
-                await vrmManager.playVRMAAnimation(idleAnimationPath, {
+                // 检查是否有保存的动作路径
+                let savedAnimation = null;
+                if (catgirlConfig && catgirlConfig.vrm_animation) {
+                    savedAnimation = catgirlConfig.vrm_animation;
+                }
+                
+                let animationPath = null;
+                
+                if (savedAnimation) {
+                    animationPath = savedAnimation;
+                    console.log('使用保存的动作:', animationPath);
+                } else {
+                    // 如果没有保存的动作，使用默认的idle.vrma
+                    animationPath = '/static/models/vrm/animations/idle.vrma';
+                    console.log('使用默认待机动作: idle.vrma');
+                }
+                
+                // 播放动作
+                await vrmManager.playVRMAAnimation(animationPath, {
                     loop: true,
                     timeScale: 1.0
                 });
-                console.log('已自动播放idle.vrma待机动画');
+                console.log('已自动播放动作:', animationPath);
             } catch (animError) {
-                console.warn('自动播放idle.vrma失败（文件可能不存在）:', animError.message);
+                console.warn('自动播放动作失败（文件可能不存在）:', animError.message);
             }
             
         } catch (error) {
