@@ -439,7 +439,7 @@
       "title": "VRM Animation Manager",
       "selectAnimation": "Select Animation:",
       "play": "Play",
-      "stop": "Stop",
+      "stop": "Stop Playback",
       "loop": "Loop",
       "speed": "Speed:",
       "noAnimations": "No animation files found",

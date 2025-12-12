@@ -259,7 +259,34 @@
             </select>
         </div>
 
-        <!-- VRM动作管理已移除，改为自动循环播放wait动作 -->
+        <!-- VRM动作预览 -->
+        <div class="control-group" id="vrm-animation-group" style="display:none;">
+            <label class="control-label" data-i18n="live2d.vrmAnimation.title">VRM动作预览:</label>
+            <div class="action-group">
+                <select id="vrm-animation-select" class="control-select" disabled>
+                    <option value="" data-i18n="live2d.vrmAnimation.selectAnimation">选择动作</option>
+                </select>
+                <button id="play-vrm-animation-btn" class="btn btn-primary btn-icon" disabled>
+                    <img src="/static/icons/play_icon.png" alt="播放" data-i18n-alt="live2d.play">
+                    <span data-i18n="live2d.play">播放</span>
+                </button>
+                <button id="stop-vrm-animation-btn" class="btn btn-secondary btn-icon" disabled>
+                    <img src="/static/icons/rest_off.png" alt="停止播放" data-i18n-alt="live2d.vrmAnimation.stop" style="width: 20px; height: 20px;">
+                    <span data-i18n="live2d.vrmAnimation.stop">停止播放</span>
+                </button>
+            </div>
+            <div style="margin-top: 8px; display: flex; align-items: center; gap: 10px;">
+                <label style="display: flex; align-items: center; gap: 5px; font-size: 12px; cursor: pointer;">
+                    <input type="checkbox" id="vrm-animation-loop" checked style="cursor: pointer;">
+                    <span data-i18n="live2d.vrmAnimation.loop">循环播放</span>
+                </label>
+                <div style="display: flex; align-items: center; gap: 5px; font-size: 12px;">
+                    <span data-i18n="live2d.vrmAnimation.speed">速度:</span>
+                    <input type="range" id="vrm-animation-speed" min="0.1" max="2" step="0.1" value="1.0" style="width: 80px;">
+                    <span id="vrm-animation-speed-value">1.0x</span>
+                </div>
+            </div>
+        </div>
 
         <div class="control-group" id="vrm-performance-group" style="display:none;">
             <label class="control-label" data-i18n="live2d.performance.title">性能设置</label>
@@ -366,8 +393,7 @@
     {
         "imports": {
             "three": "/static/libs/three.module.js",
-            "three/addons/loaders/GLTFLoader.js": "/static/libs/three/addons/loaders/GLTFLoader.js",
-            "three/addons/utils/BufferGeometryUtils.js": "/static/libs/three/addons/utils/BufferGeometryUtils.js",
+            "three/addons/": "/static/libs/three/addons/",
             "@pixiv/three-vrm": "https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3/lib/three-vrm.module.min.js"
         }
     }
@@ -596,12 +622,12 @@
                 showStatus(t('live2d.modelListLoadFailed', '加载模型列表失败'));
             }
 
-            // 然后加载当前角色的模型（此时下拉框已经有选项了）
             // 初始化模型类型（从 localStorage 或默认值）
             const savedModelType = localStorage.getItem('modelType') || 'live2d';
             await switchModelDisplay(savedModelType);
 
-            await loadCurrentCharacterModel();
+            // 不再自动加载模型，只有用户手动选择时才加载
+            // await loadCurrentCharacterModel();
 
             // 如果已自动加载了一个模型，确保在下拉框中选中它
             // 这是双重保险：防止 loadCurrentCharacterModel() 内部设置失败
@@ -737,6 +763,8 @@
                     
                     // 隐藏 VRM 性能设置
                     if (vrmPerformanceGroup) vrmPerformanceGroup.style.display = 'none';
+                    // 隐藏 VRM 动作预览组
+                    if (vrmAnimationGroup) vrmAnimationGroup.style.display = 'none';
                     
                     if (!window.live2dManager.pixi_app) {
                         await window.live2dManager.initPIXI('live2d-canvas', 'live2d-container');
@@ -765,7 +793,10 @@
                     // 确保保存设置按钮组可见（VRM模式下也需要保存）
                     const saveSettingsGroup = document.getElementById('save-settings-group');
                     if (saveSettingsGroup) saveSettingsGroup.style.display = 'flex';
-                    // VRM动作管理器已移除，改为自动循环播放
+                    // 显示 VRM 动作预览组
+                    if (vrmAnimationGroup) vrmAnimationGroup.style.display = 'flex';
+                    // 显示 VRM 性能设置
+                    if (vrmPerformanceGroup) vrmPerformanceGroup.style.display = 'flex';
                     // 更新上传按钮提示文本（VRM模式）
                     if (uploadBtn) {
                         uploadBtn.setAttribute('data-i18n', 'live2d.selectVRMFile');
@@ -949,10 +980,18 @@
                         // VRM动作已改为自动循环播放，模型加载时会自动启动
                         
                         showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelPath} 加载成功`, { model: modelPath }));
+                        
+                        // 加载 VRM 动作列表（用于预览）
+                        await loadVRMAnimations(false);
                     } catch (error) {
                         console.error('加载 VRM 模型失败:', error);
                         showStatus(t('live2d.vrmModelLoadFailed', `加载 VRM 模型失败: ${error.message}。您仍可以保存模型设置。`));
-                        // VRM动作已改为自动循环播放，不再需要手动加载动作列表
+                        // 即使模型加载失败，也尝试加载动作列表（可能用户想预览其他动作）
+                        try {
+                            await loadVRMAnimations(false);
+                        } catch (animError) {
+                            console.warn('加载动作列表失败:', animError);
+                        }
                     }
                 });
             }
@@ -1096,8 +1135,8 @@
                     const speed = parseFloat(e.target.value);
                     vrmAnimationSpeedValue.textContent = speed.toFixed(1) + 'x';
                     // 如果正在播放动画，更新速度
-                    if (vrmManager && vrmManager.vrmaAction) {
-                        vrmManager.vrmaAction.timeScale = speed;
+                    if (vrmManager && vrmManager.animation && vrmManager.animation.vrmaAction) {
+                        vrmManager.animation.vrmaAction.timeScale = speed;
                     }
                 });
             }
@@ -1152,14 +1191,36 @@
                     const lanlanName = await getLanlanName();
                     if (!lanlanName) return { isVoiceMode: false, isCurrent: false };
                     
-                    const response = await fetch(`/api/characters/catgirl/${encodeURIComponent(lanlanName)}/voice_mode_status`);
+                    const response = await fetch(`/api/characters/catgirl/${encodeURIComponent(lanlanName)}/voice_mode_status`, {
+                        method: 'GET',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        // 设置较短的超时时间，避免长时间等待
+                        signal: AbortSignal.timeout(5000)
+                    });
+                    
+                    if (!response.ok) {
+                        // 如果响应不成功，记录但不阻止操作
+                        console.warn(`检查语音模式状态失败: HTTP ${response.status}`);
+                        return { isVoiceMode: false, isCurrent: false };
+                    }
+                    
                     const data = await response.json();
                     return {
                         isVoiceMode: data.is_voice_mode || false,
                         isCurrent: data.is_current || false
                     };
                 } catch (error) {
-                    console.warn('检查语音模式状态失败:', error);
+                    // 区分不同类型的错误
+                    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
+                        console.warn('检查语音模式状态超时（服务器可能未响应）');
+                    } else if (error.message && (error.message.includes('Failed to fetch') || error.message.includes('ERR_CONNECTION_REFUSED'))) {
+                        console.warn('无法连接到服务器，请确保 main_server.py 正在运行');
+                    } else {
+                        console.warn('检查语音模式状态失败:', error);
+                    }
+                    // 连接失败时返回默认值，允许用户继续操作
                     return { isVoiceMode: false, isCurrent: false };
                 }
             }

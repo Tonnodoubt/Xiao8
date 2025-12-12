@@ -439,7 +439,7 @@
       "title": "VRM 动作管理",
       "selectAnimation": "选择动作:",
       "play": "播放",
-      "stop": "停止",
+      "stop": "停止播放",
       "loop": "循环播放",
       "speed": "播放速度:",
       "noAnimations": "未找到动作文件",
