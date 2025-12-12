@@ -1729,6 +1729,21 @@
         try {
             console.log('[模型加载] 开始根据角色配置加载模型...');
             
+            // 先隐藏 Live2D 容器，避免显示默认模型
+            // 注意：保持 display: block 但设置 opacity: 0，这样 canvas 可以正常创建
+            const live2dContainer = document.getElementById('live2d-container');
+            const vrmContainer = document.getElementById('vrm-container');
+            if (live2dContainer) {
+                // 保持 display: block，只设置透明度和可见性，这样 canvas 可以正常创建
+                live2dContainer.style.display = 'block';
+                live2dContainer.style.visibility = 'hidden';
+                live2dContainer.style.opacity = '0';
+            }
+            if (vrmContainer) {
+                vrmContainer.style.display = 'none';
+                vrmContainer.classList.add('hidden');
+            }
+            
             // 获取角色配置
             const charResponse = await fetch('/api/characters');
             if (!charResponse.ok) {
@@ -1760,20 +1775,21 @@
             console.log('[模型加载] 模型类型:', modelType, 'VRM路径:', vrmModelPath);
             
             if (modelType === 'vrm' && vrmModelPath) {
+                // 设置模型类型标记
+                localStorage.setItem('modelType', 'vrm');
                 // 加载 VRM 模型（传递完整配置以支持动作播放）
                 console.log('[模型加载] 开始加载VRM模型:', vrmModelPath);
                 await loadVRMModelFromConfig(vrmModelPath, catgirlConfig);
                 return; // 重要：加载VRM后直接返回，不继续加载Live2D
             } else {
+                // 设置模型类型标记
+                localStorage.setItem('modelType', 'live2d');
                 // 加载 Live2D 模型
                 const live2dModelName = catgirlConfig.live2d;
                 if (live2dModelName) {
                     console.log(`重新加载 Live2D 模型: ${live2dModelName}`);
                     // 重新加载 Live2D 模型
                     // 显示 Live2D 容器，隐藏 VRM 容器
-                    const live2dContainer = document.getElementById('live2d-container');
-                    const vrmContainer = document.getElementById('vrm-container');
-                    
                     if (live2dContainer) {
                         live2dContainer.style.display = 'block';
                         live2dContainer.classList.remove('minimized');
@@ -1799,6 +1815,18 @@
                                     isMobile: window.innerWidth <= 768
                                 });
                                 console.log('Live2D 模型重新加载成功');
+                                // 确保模型类型已设置
+                                localStorage.setItem('modelType', 'live2d');
+                                
+                                // 确保菜单栏显示（模型加载完成后）
+                                setTimeout(() => {
+                                    const floatingButtons = document.getElementById('live2d-floating-buttons');
+                                    if (floatingButtons && !window.live2dManager?.isLocked) {
+                                        floatingButtons.style.display = 'flex';
+                                        floatingButtons.style.visibility = 'visible';
+                                        floatingButtons.style.opacity = '1';
+                                    }
+                                }, 200);
                             }
                         }
                     } catch (error) {
@@ -1931,6 +1959,24 @@
             // 设置模型类型为VRM，确保口型同步能正确启动
             localStorage.setItem('modelType', 'vrm');
             
+            // 确保菜单栏和锁图标显示（VRM 模型加载完成后）
+            setTimeout(() => {
+                const floatingButtons = document.getElementById('live2d-floating-buttons');
+                if (floatingButtons) {
+                    floatingButtons.style.display = 'flex';
+                    floatingButtons.style.visibility = 'visible';
+                    floatingButtons.style.opacity = '1';
+                }
+                
+                // 确保锁图标显示
+                const lockIcon = document.getElementById('live2d-lock-icon');
+                if (lockIcon) {
+                    lockIcon.style.display = 'block';
+                    lockIcon.style.visibility = 'visible';
+                    lockIcon.style.opacity = '1';
+                }
+            }, 200);
+            
             // VRM动作已改为自动循环播放wait动作，模型加载时会自动启动
             console.log('VRM模型加载完成，将自动循环播放wait动作');
             
@@ -1974,8 +2020,26 @@
         }
     }
     
+    // 将 loadModelBasedOnCharacterConfig 设置为全局函数，以便其他脚本可以检查
+    window.loadModelBasedOnCharacterConfig = loadModelBasedOnCharacterConfig;
+    
     // 页面加载完成后，根据角色配置自动加载模型
     window.addEventListener('DOMContentLoaded', async () => {
+        // 先隐藏模型容器，避免显示默认模型
+        // 注意：保持 display: block 但设置 opacity: 0，这样 canvas 可以正常创建
+        const live2dContainer = document.getElementById('live2d-container');
+        const vrmContainer = document.getElementById('vrm-container');
+        if (live2dContainer) {
+            // 保持 display: block，只设置透明度和可见性，这样 canvas 可以正常创建
+            live2dContainer.style.display = 'block';
+            live2dContainer.style.visibility = 'hidden';
+            live2dContainer.style.opacity = '0';
+        }
+        if (vrmContainer) {
+            vrmContainer.style.display = 'none';
+            vrmContainer.classList.add('hidden');
+        }
+        
         // 延迟执行，确保其他脚本已加载
         setTimeout(async () => {
             // 初始化当前角色名称记录
@@ -1991,7 +2055,7 @@
             }
             
             await loadModelBasedOnCharacterConfig();
-        }, 1000);
+        }, 100);
     });
     
     // 定期检查角色是否切换（每5秒检查一次）
