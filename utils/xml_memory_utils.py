@@ -10,7 +10,7 @@ try:
 except ImportError:
     # 如果defusedxml未安装，回退到标准库（不推荐，存在XXE风险）
     import warnings
-    warnings.warn("defusedxml未安装，XML解析存在XXE安全风险。建议安装: pip install defusedxml")
+    warnings.warn("defusedxml未安装，XML解析存在XXE安全风险。建议安装: pip install defusedxml", stacklevel=2)
     safe_fromstring = ET.fromstring
 from langchain_core.messages import (
     BaseMessage, HumanMessage, AIMessage, SystemMessage,
@@ -170,7 +170,7 @@ def xml_element_to_message(elem: ET.Element) -> BaseMessage:
     if kwargs_elem is not None and kwargs_elem.text:
         try:
             message.additional_kwargs = json.loads(kwargs_elem.text)
-        except:
+        except (json.JSONDecodeError, TypeError, ValueError):
             pass
     
     # 恢复response_metadata
@@ -178,7 +178,7 @@ def xml_element_to_message(elem: ET.Element) -> BaseMessage:
     if metadata_elem is not None and metadata_elem.text:
         try:
             message.response_metadata = json.loads(metadata_elem.text)
-        except:
+        except (json.JSONDecodeError, TypeError, ValueError):
             pass
     
     # 恢复tool_calls
@@ -186,7 +186,7 @@ def xml_element_to_message(elem: ET.Element) -> BaseMessage:
     if tool_calls_elem is not None and tool_calls_elem.text:
         try:
             message.tool_calls = json.loads(tool_calls_elem.text)
-        except:
+        except (json.JSONDecodeError, TypeError, ValueError):
             pass
     
     # 恢复usage_metadata
@@ -194,7 +194,7 @@ def xml_element_to_message(elem: ET.Element) -> BaseMessage:
     if usage_elem is not None and usage_elem.text:
         try:
             message.usage_metadata = json.loads(usage_elem.text)
-        except:
+        except (json.JSONDecodeError, TypeError, ValueError):
             pass
     
     return message

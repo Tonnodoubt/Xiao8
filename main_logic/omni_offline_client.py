@@ -295,9 +295,8 @@ class OmniOfflineClient:
                                 content = content[:fence_pos]
                                 fence_triggered = True
                                 logger.info("OmniOfflineClient: 围栏触发 - 检测到XML停止标签 <stop>，截断输出")
-                            
-                            # 也在累积缓冲区中检测（处理跨块的标签）
-                            if not fence_triggered:
+                            else:
+                                # 累积缓冲区检测（处理跨块的标签）
                                 xml_buffer += content
                                 match = STOP_PATTERN.search(xml_buffer)
                                 if match:
