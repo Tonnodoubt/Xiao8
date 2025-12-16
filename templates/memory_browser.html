@@ -291,20 +291,42 @@
     </div>
     <script>
         let currentMemoryFile = null;
-        async function loadMemoryFileList() {
+        async function loadMemoryFileList(retryCount = 0) {
             const ul = document.getElementById('memory-file-list');
             ul.innerHTML = `<li style="color:#888;">${window.t ? window.t('memory.loading') : '加载中...'}</li>`;
             try {
                 const resp = await fetch('/api/memory/recent_files');
+                
+                // 检查HTTP响应状态码
+                if (!resp.ok) {
+                    const errorText = await resp.text();
+                    let errorMsg = `HTTP ${resp.status}`;
+                    try {
+                        const errorData = JSON.parse(errorText);
+                        errorMsg = errorData.error || errorData.message || errorMsg;
+                    } catch (e) {
+                        errorMsg = errorText || errorMsg;
+                    }
+                    throw new Error(errorMsg);
+                }
+                
                 const data = await resp.json();
+                
+                // 检查响应数据格式
+                if (!data || typeof data !== 'object') {
+                    throw new Error('响应数据格式错误');
+                }
+                
                 ul.innerHTML = '';
                 if (data.files && data.files.length) {
                     // 获取当前猫娘名称
                     let currentCatgirl = null;
                     try {
                         const catgirlResp = await fetch('/api/characters/current_catgirl');
-                        const catgirlData = await catgirlResp.json();
-                        currentCatgirl = catgirlData.current_catgirl || null;
+                        if (catgirlResp.ok) {
+                            const catgirlData = await catgirlResp.json();
+                            currentCatgirl = catgirlData.current_catgirl || null;
+                        }
                     } catch (e) {
                         console.error('获取当前猫娘失败:', e);
                     }
@@ -323,17 +345,17 @@
                         btn.setAttribute('data-filename', f);
                         btn.setAttribute('data-catname', catKey);
                         btn.textContent = displayName;
-                        btn.addEventListener('click', () => selectMemoryFile(f, li, catName));
+                        btn.addEventListener('click', () => selectMemoryFile(f, li, catKey));
                         li.appendChild(btn);
-                        li.onclick = () => selectMemoryFile(f, li, catName);
+                        li.onclick = () => selectMemoryFile(f, li, catKey);
                         ul.appendChild(li);
 
                         // 如果是当前猫娘，自动选择
-                        if (currentCatgirl && catName === currentCatgirl && !foundCurrentCatgirl) {
+                        if (currentCatgirl && catKey === currentCatgirl && !foundCurrentCatgirl) {
                             foundCurrentCatgirl = true;
                             // 延迟一下确保DOM已渲染
                             setTimeout(() => {
-                                selectMemoryFile(f, li, catName);
+                                selectMemoryFile(f, li, catKey);
                             }, 100);
                         }
                     });
@@ -341,7 +363,21 @@
                     ul.innerHTML = `<li style="color:#888;">${window.t ? window.t('memory.noFiles') : '无文件'}</li>`;
                 }
             } catch (e) {
-                ul.innerHTML = `<li style="color:#e74c3c;">${window.t ? window.t('memory.loadFailed') : '加载失败'}</li>`;
+                console.error('加载记忆文件列表失败:', e);
+                const errorMsg = e.message || String(e);
+                
+                // 如果是网络错误且重试次数未达到上限，则重试
+                if ((errorMsg.includes('Failed to fetch') || errorMsg.includes('NetworkError') || errorMsg.includes('网络')) && retryCount < 2) {
+                    console.log(`加载失败，${1000 * (retryCount + 1)}ms后重试 (${retryCount + 1}/2)`);
+                    setTimeout(() => {
+                        loadMemoryFileList(retryCount + 1);
+                    }, 1000 * (retryCount + 1));
+                    return;
+                }
+                
+                // 显示错误信息
+                const errorText = errorMsg.length > 50 ? errorMsg.substring(0, 50) + '...' : errorMsg;
+                ul.innerHTML = `<li style="color:#e74c3c;" title="${errorMsg}">${window.t ? window.t('memory.loadFailed') : '加载失败'}: ${errorText}</li>`;
             }
         }
 
