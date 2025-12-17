@@ -351,7 +351,6 @@ async def update_catgirl_name(request: Request):
         new_filename = f'recent_{new_name}.xml'
         # 向后兼容：如果XML文件不存在，尝试JSON文件
         old_json = f'recent_{old_name}.json'
-        new_json = f'recent_{new_name}.json'
         
         old_file_path, old_path_error = safe_memory_path(memory_dir, old_filename)
         if old_file_path is None:
