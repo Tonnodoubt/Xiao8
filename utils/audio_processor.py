@@ -39,6 +39,11 @@ def _get_rnnoise():
         except ImportError:
             logger.warning("⚠️ pyrnnoise library not installed. Run: pip install pyrnnoise")
             _rnnoise_available = False
+        except Exception as e:
+            # Nuitka 打包后可能出现 TypeError: iter() returned non-iterator
+            # 这是 Jinja2 PackageLoader 与 Nuitka 资源系统不兼容导致的
+            logger.warning(f"⚠️ pyrnnoise import failed (Nuitka compatibility issue): {e}")
+            _rnnoise_available = False
     return _RNNoise if _rnnoise_available else None
 
 
@@ -160,7 +165,7 @@ class AudioProcessor:
             if self._denoiser is not None:
                 self._reset_internal_state()
                 self._last_speech_time = current_time  # Prevent infinite reset loop
-                logger.info("🔄 RNNoise state auto-reset after silence")
+                logger.debug("🔄 RNNoise state auto-reset after silence")
             self._needs_reset = False
         
         # Apply RNNoise if available (processes int16, returns int16)

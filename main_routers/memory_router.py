@@ -26,6 +26,7 @@ router = APIRouter(prefix="/api/memory", tags=["memory"])
 # - Must be 1-100 characters long
 VALID_NAME_PATTERN = re.compile(r'^[\w\-\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]{1,100}$')
 
+<<<<<<< HEAD
 # Strict pattern for valid recent file names: must start with "recent", followed by
 # alphanumeric, dots, underscores, or hyphens, and end with .xml (or .json for backward compatibility)
 VALID_RECENT_FILENAME_PATTERN = re.compile(r'^recent[0-9A-Za-z._-]+\.(xml|json)$')
