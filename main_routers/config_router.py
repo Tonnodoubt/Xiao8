@@ -125,6 +125,8 @@ async def get_steam_language():
         'schinese': 'zh-CN',      # 简体中文
         'tchinese': 'zh-CN',      # 繁体中文（映射到简体中文，因为目前只支持 zh-CN）
         'english': 'en',          # 英文
+        'japanese': 'ja',          # 日语
+        'ja': 'ja',               # 日语（备用）
         # 其他语言默认映射到英文
     }
     
@@ -430,6 +432,55 @@ async def get_api_providers_config():
             "error": str(e),
             "core_api_providers": [],
             "assist_api_providers": [],
+        }
+
+
+@router.post("/translate")
+async def translate_text_api(request: Request):
+    """翻译文本API端点"""
+    try:
+        from utils.language_utils import detect_language, translate_text, get_user_language_async
+        
+        data = await request.json()
+        text = data.get('text', '')
+        
+        if not text:
+            return {
+                "success": False,
+                "error": "文本不能为空",
+                "translated_text": ""
+            }
+        
+        # 获取用户语言偏好
+        target_lang = await get_user_language_async()
+        
+        # 检测源语言
+        source_lang = detect_language(text)
+        
+        # 如果源语言和目标语言相同，不需要翻译
+        if source_lang == target_lang or source_lang == 'unknown':
+            return {
+                "success": True,
+                "translated_text": text,
+                "source_lang": source_lang,
+                "target_lang": target_lang
+            }
+        
+        # 翻译文本
+        translated_text = await translate_text(text, target_lang, source_lang)
+        
+        return {
+            "success": True,
+            "translated_text": translated_text,
+            "source_lang": source_lang,
+            "target_lang": target_lang
+        }
+    except Exception as e:
+        logger.error(f"翻译API错误: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "translated_text": text  # 失败时返回原文
         }
 
 

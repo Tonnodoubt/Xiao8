@@ -20,6 +20,7 @@ from main_logic.omni_offline_client import OmniOfflineClient
 from main_logic.tts_client import get_tts_worker
 from config import MEMORY_SERVER_PORT
 from utils.config_manager import get_config_manager
+from utils.language_utils import detect_language, translate_text, get_user_language_async
 from threading import Thread
 from queue import Queue
 from uuid import uuid4
@@ -81,6 +82,8 @@ class LLMSessionManager:
         self.memory_server_port = MEMORY_SERVER_PORT
         self.audio_api_key = self._config_manager.get_core_config()['AUDIO_API_KEY']  # 用于CosyVoice自定义音色
         self.voice_id = self.lanlan_basic_config[self.lanlan_name].get('voice_id', '')
+        self._user_language = None  # 用户语言缓存
+        self._user_language_lock = asyncio.Lock()  # 用户语言获取锁
         # 注意：use_tts 会在 start_session 中根据 input_mode 重新设置
         self.use_tts = False
         self.generation_config = {}  # Qwen暂时不用
@@ -1412,9 +1415,35 @@ class LLMSessionManager:
             # 如果没有设置websocket_lock（旧代码路径），直接清理
             self.websocket = None
 
+    async def _get_user_language(self) -> str:
+        """获取用户语言偏好（带缓存）"""
+        if self._user_language is None:
+            async with self._user_language_lock:
+                # 双重检查，避免重复获取
+                if self._user_language is None:
+                    try:
+                        self._user_language = await get_user_language_async()
+                    except Exception as e:
+                        logger.debug(f"获取用户语言失败: {e}, 使用默认中文")
+                        self._user_language = 'zh'  # 默认中文
+        return self._user_language
+    
     async def send_status(self, message: str): # 向前端发送status message
         try:
             if self.websocket and hasattr(self.websocket, 'client_state') and self.websocket.client_state == self.websocket.client_state.CONNECTED:
+                # 检测消息语言并翻译
+                message_lang = detect_language(message)
+                user_lang = await self._get_user_language()
+                
+                # 如果消息语言与用户语言不同，进行翻译
+                if message_lang != user_lang and message_lang != 'unknown':
+                    try:
+                        translated_message = await translate_text(message, user_lang, message_lang)
+                        message = translated_message
+                    except Exception as e:
+                        logger.warning(f"翻译消息失败: {e}, 使用原文")
+                        # 翻译失败时使用原文
+                
                 data = json.dumps({"type": "status", "message": message})
                 await self.websocket.send_text(data)
 

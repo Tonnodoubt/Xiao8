@@ -46,7 +46,7 @@
             }
         }
 
-        /* Status 气泡框样式 - 更显眼的样式 */
+        /* Status 气泡框样式 - 右上角位置 */
         #status-toast {
             position: fixed;
             top: 20px;
@@ -185,6 +185,133 @@
             animation: none;
         }
 
+        /* 字幕显示区域样式 */
+        /* 字幕提示消息样式 */
+        .subtitle-prompt-message {
+            align-self: stretch;
+            width: 100%;
+            background: linear-gradient(135deg, rgba(68, 183, 254, 0.08) 0%, rgba(68, 183, 254, 0.12) 100%);
+            border: 1px solid rgba(68, 183, 254, 0.2);
+            border-radius: 0;
+            border-left: none;
+            border-right: none;
+            margin: 0;
+            padding: 0;
+            box-shadow: 0 2px 8px rgba(68, 183, 254, 0.1);
+        }
+
+        .subtitle-prompt-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 8px 16px;
+        }
+
+        .subtitle-toggle-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .subtitle-toggle-indicator {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid #ccc;
+            background-color: transparent;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: all 0.2s ease;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .subtitle-toggle-indicator::after {
+            content: '✓';
+            color: #fff;
+            font-size: 12px;
+            font-weight: bold;
+            line-height: 1;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .subtitle-toggle-indicator.active {
+            border-color: #44b7fe;
+            background-color: #44b7fe;
+        }
+
+        .subtitle-toggle-indicator.active::after {
+            opacity: 1;
+        }
+
+        .subtitle-toggle-label {
+            font-size: 15px;
+            color: #333;
+            user-select: none;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        #subtitle-display {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 99998;
+            max-width: 85%;
+            min-width: 320px;
+            padding: 20px 28px;
+            background: linear-gradient(135deg, rgba(68, 183, 254, 0.95) 0%, rgba(68, 183, 254, 0.9) 50%, rgba(100, 200, 255, 0.95) 100%);
+            color: #fff;
+            border-radius: 20px;
+            font-size: 19px;
+            font-weight: 500;
+            line-height: 1.7;
+            text-align: center;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            pointer-events: none;
+            box-shadow: 0 8px 32px rgba(68, 183, 254, 0.4), 
+                        0 0 0 1px rgba(255, 255, 255, 0.3) inset,
+                        0 2px 12px rgba(68, 183, 254, 0.3),
+                        0 4px 20px rgba(68, 183, 254, 0.2);
+            backdrop-filter: blur(20px) saturate(180%);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            /* 字幕文字阴影效果，增强可读性 */
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.3),
+                         0 1px 3px rgba(0, 0, 0, 0.4),
+                         0 0 2px rgba(255, 255, 255, 0.3);
+        }
+
+        #subtitle-display.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+            animation: subtitleFadeIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        @keyframes subtitleFadeIn {
+            0% {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px) scale(0.95);
+            }
+            100% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0) scale(1);
+            }
+        }
+
+
         @media (max-width: 600px) {
             #status-toast {
                 top: 10px;
@@ -212,6 +339,16 @@
             #status-toast.hide {
                 transform: translateY(-20px) scale(0.95);
             }
+
+            #subtitle-display {
+                bottom: 15px;
+                max-width: calc(100% - 20px);
+                min-width: 280px;
+                font-size: 17px;
+                padding: 16px 22px;
+                border-radius: 14px;
+            }
+
         }
 
         /* 全局按钮样式 - 防止文字被选中 */
@@ -512,6 +649,17 @@
             /* 与主色调协调的浅蓝背景 */
             color: #333;
             margin-right: auto;
+        }
+        
+        .message.system {
+            align-self: center;
+            background: rgba(68, 183, 254, 0.12);
+            /* 与系统风格一致的浅蓝色背景 */
+            color: #333;
+            border: 1px solid rgba(68, 183, 254, 0.2);
+            border-radius: 8px;
+            margin: 10px auto;
+            max-width: 90%;
             border-bottom-left-radius: 4px;
         }
 
@@ -1175,6 +1323,8 @@
 
     <!-- Status 气泡框 -->
     <div id="status-toast"></div>
+    <!-- 字幕显示区域 -->
+    <div id="subtitle-display"></div>
     <div id="chat-container">
         <div id="chat-header">
             <span id="chat-title" data-i18n="chat.title">💬 对话</span>

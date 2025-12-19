@@ -383,9 +383,8 @@ function init_app() {
                         hideVoicePreparingToast();
                     }
 
-                    // 翻译后端发送的状态消息
-                    const translatedMessage = window.translateStatusMessage ? window.translateStatusMessage(response.message) : response.message;
-                    showStatusToast(translatedMessage, 4000);
+                    // 直接显示后端发送的消息（后端已经完成翻译）
+                    showStatusToast(response.message, 4000);
                     if (response.message === `${lanlan_config.lanlan_name}失联了，即将重启！`) {
                         if (isRecording === false && !isTextSessionActive) {
                             showStatusToast(window.t ? window.t('app.catgirlResting', { name: lanlan_config.lanlan_name }) : `${lanlan_config.lanlan_name}正在打盹...`, 5000);
@@ -469,10 +468,13 @@ function init_app() {
                         console.warn('未知表情指令或表情系统未初始化:', response.message);
                     }
                 } else if (response.type === 'system' && response.data === 'turn end') {
-                    console.log('收到turn end事件，开始情感分析');
-                    // 消息完成时进行情感分析
+                    console.log('收到turn end事件，开始情感分析和翻译');
+                    // 消息完成时进行情感分析和翻译
                     if (currentGeminiMessage) {
+                        // 获取完整文本（移除时间戳和图标）
                         const fullText = currentGeminiMessage.textContent.replace(/^\[\d{2}:\d{2}:\d{2}\] 🎀 /, '');
+                        
+                        // 情感分析
                         setTimeout(async () => {
                             const emotionResult = await analyzeEmotion(fullText);
                             if (emotionResult && emotionResult.emotion) {
@@ -480,6 +482,14 @@ function init_app() {
                                 applyEmotion(emotionResult.emotion);
                             }
                         }, 100);
+                        
+                        // 显示提示消息（让用户知道可以开启翻译字幕）
+                        showSubtitlePrompt();
+                        
+                        // 只有开关开启时才翻译并显示到字幕
+                        if (getSubtitleEnabled()) {
+                            translateAndShowSubtitle(fullText);
+                        }
                     }
 
                     // AI回复完成后，重置主动搭话计时器（如果已开启且在文本模式）
@@ -616,6 +626,9 @@ function init_app() {
             // 如果是Gemini消息，更新当前消息引用
             if (sender === 'gemini') {
                 currentGeminiMessage = messageDiv;
+                
+                // 注意：不再在新消息开始时清空字幕，让字幕平滑衔接
+                // 字幕会在翻译完成后自动更新为新内容
 
                 // 如果是AI第一次回复，更新状态并检查成就
                 if (isFirstAIResponse) {
@@ -1965,6 +1978,235 @@ function init_app() {
             window.LanLan1.setEmotion(emotion);
         } else {
             console.warn('情感功能未初始化');
+        }
+    }
+
+    // 字幕自动隐藏定时器
+    let subtitleAutoHideTimer = null;
+
+    // 获取字幕开关状态
+    function getSubtitleEnabled() {
+        const saved = localStorage.getItem('subtitleEnabled');
+        return saved === null ? false : saved === 'true'; // 默认关闭
+    }
+
+    // 设置字幕开关状态
+    function setSubtitleEnabled(enabled) {
+        localStorage.setItem('subtitleEnabled', enabled.toString());
+    }
+
+    // 显示翻译字幕提示消息（在对话框中）
+    function showSubtitlePrompt() {
+        // 检查是否已经显示过提示（避免重复显示）
+        const existingPrompt = document.getElementById('subtitle-prompt-message');
+        if (existingPrompt) {
+            return;
+        }
+        
+        const chatContainer = document.getElementById('chat-container');
+        if (!chatContainer) {
+            return;
+        }
+        
+        // 创建提示消息
+        const promptDiv = document.createElement('div');
+        promptDiv.id = 'subtitle-prompt-message';
+        promptDiv.classList.add('message', 'system', 'subtitle-prompt-message');
+        
+        // 创建提示内容
+        const promptContent = document.createElement('div');
+        promptContent.classList.add('subtitle-prompt-content');
+        
+        // 创建开关容器
+        const toggleWrapper = document.createElement('div');
+        toggleWrapper.classList.add('subtitle-toggle-wrapper');
+        
+        // 创建圆形指示器
+        const indicator = document.createElement('div');
+        indicator.classList.add('subtitle-toggle-indicator');
+        if (getSubtitleEnabled()) {
+            indicator.classList.add('active');
+        }
+        
+        // 创建标签文本
+        const labelText = document.createElement('span');
+        labelText.classList.add('subtitle-toggle-label');
+        labelText.setAttribute('data-i18n', 'subtitle.enable');
+        // 使用i18n翻译，如果i18n未加载则使用默认文本
+        if (window.t) {
+            labelText.textContent = window.t('subtitle.enable');
+        } else {
+            labelText.textContent = '开启字幕'; // 默认中文
+        }
+        
+        toggleWrapper.appendChild(indicator);
+        toggleWrapper.appendChild(labelText);
+        
+        promptContent.appendChild(toggleWrapper);
+        promptDiv.appendChild(promptContent);
+        
+        chatContainer.appendChild(promptDiv);
+        chatContainer.scrollTop = chatContainer.scrollHeight;
+        
+        // 如果i18next已加载，监听语言变化事件
+        if (window.i18next) {
+            window.i18next.on('languageChanged', () => {
+                if (labelText && window.t) {
+                    labelText.textContent = window.t('subtitle.enable');
+                }
+            });
+        }
+        
+        // 更新指示器状态
+        const updateIndicator = () => {
+            const enabled = getSubtitleEnabled();
+            if (enabled) {
+                indicator.classList.add('active');
+            } else {
+                indicator.classList.remove('active');
+            }
+        };
+        
+        // 切换开关的函数
+        const handleToggle = (e) => {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            const currentEnabled = getSubtitleEnabled();
+            const newEnabled = !currentEnabled;
+            setSubtitleEnabled(newEnabled);
+            updateIndicator();
+            console.log('字幕开关:', newEnabled ? '开启' : '关闭');
+            
+            // 如果关闭，立即隐藏字幕
+            if (!newEnabled) {
+                const subtitleDisplay = document.getElementById('subtitle-display');
+                if (subtitleDisplay) {
+                    subtitleDisplay.textContent = '';
+                    subtitleDisplay.classList.remove('show');
+                }
+                // 清除自动隐藏定时器
+                if (subtitleAutoHideTimer) {
+                    clearTimeout(subtitleAutoHideTimer);
+                    subtitleAutoHideTimer = null;
+                }
+            } else {
+                // 如果开启，重新翻译并显示字幕
+                if (currentGeminiMessage && currentGeminiMessage.textContent) {
+                    const fullText = currentGeminiMessage.textContent.replace(/^\[.*?\] 🎀\s*/, '');
+                    translateAndShowSubtitle(fullText);
+                }
+            }
+        };
+        
+        // 绑定点击事件
+        toggleWrapper.addEventListener('click', handleToggle);
+        indicator.addEventListener('click', handleToggle);
+        labelText.addEventListener('click', handleToggle);
+    }
+
+    // 跟踪正在进行的翻译请求
+    let pendingTranslation = null;
+    
+    // 翻译并显示到字幕（只有检测到后端返回的不是用户使用的语言才进行翻译）
+    async function translateAndShowSubtitle(text) {
+        // 再次检查字幕开关是否开启（双重检查确保安全）
+        if (!getSubtitleEnabled()) {
+            console.log('字幕功能已关闭，跳过翻译');
+            return;
+        }
+
+        if (!text || !text.trim()) {
+            return;
+        }
+        
+        // 保存当前翻译请求的文本，用于后续验证
+        const currentTranslationText = text;
+        pendingTranslation = currentTranslationText;
+        
+        try {
+            const subtitleDisplay = document.getElementById('subtitle-display');
+            if (!subtitleDisplay) {
+                console.warn('字幕显示元素不存在');
+                return;
+            }
+            
+            // 调用翻译API（API内部会检测语言，如果相同则不翻译）
+            const response = await fetch('/api/config/translate', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    text: text
+                })
+            });
+            
+            if (!response.ok) {
+                console.warn('翻译请求失败:', response.status);
+                // 翻译失败时不清空字幕，保持显示之前的内容
+                if (pendingTranslation === currentTranslationText) {
+                    pendingTranslation = null;
+                }
+                return;
+            }
+            
+            const result = await response.json();
+            
+            // 检查是否是最新的翻译请求（避免旧的翻译结果覆盖新的）
+            if (pendingTranslation !== currentTranslationText) {
+                console.log('检测到更新的翻译请求，忽略旧的翻译结果');
+                return;
+            }
+            pendingTranslation = null;
+            
+            // 只有源语言和目标语言不同时才显示字幕（避免字幕和对话框显示一样的内容）
+            if (result.success && result.translated_text && 
+                result.source_lang && result.target_lang && 
+                result.source_lang !== result.target_lang && 
+                result.source_lang !== 'unknown') {
+                // 显示提示消息（让用户知道可以开启翻译字幕）
+                showSubtitlePrompt();
+                
+                // 再次检查开关状态（确保在翻译过程中开关没有被关闭）
+                if (getSubtitleEnabled()) {
+                    // 清除之前的自动隐藏定时器
+                    if (subtitleAutoHideTimer) {
+                        clearTimeout(subtitleAutoHideTimer);
+                        subtitleAutoHideTimer = null;
+                    }
+                    
+                    // 显示翻译后的文本到字幕（平滑更新，不清空之前的内容）
+                    subtitleDisplay.textContent = result.translated_text;
+                    subtitleDisplay.classList.add('show');
+                    console.log('字幕已更新（已翻译）:', result.translated_text.substring(0, 50) + '...');
+                    
+                    // 设置30秒后自动隐藏
+                    subtitleAutoHideTimer = setTimeout(() => {
+                        if (subtitleDisplay && subtitleDisplay.classList.contains('show')) {
+                            subtitleDisplay.textContent = '';
+                            subtitleDisplay.classList.remove('show');
+                            console.log('字幕30秒后自动隐藏');
+                        }
+                        subtitleAutoHideTimer = null;
+                    }, 30000); // 30秒
+                } else {
+                    // 如果开关关闭，确保字幕不显示
+                    subtitleDisplay.textContent = '';
+                    subtitleDisplay.classList.remove('show');
+                    console.log('开关已关闭，不显示字幕');
+                }
+            } else {
+                // 如果语言相同或检测失败，不清空字幕（保持显示之前的内容）
+                console.log('语言相同，不显示字幕');
+            }
+        } catch (error) {
+            console.error('翻译请求异常:', error);
+            // 异常时不清空字幕，保持显示之前的内容
+            if (pendingTranslation === currentTranslationText) {
+                pendingTranslation = null;
+            }
         }
     }
 
