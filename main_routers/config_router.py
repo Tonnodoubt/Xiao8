@@ -303,6 +303,8 @@ async def update_core_config(request: Request):
             core_cfg['assistApiKeySilicon'] = data['assistApiKeySilicon']
         if 'mcpToken' in data:
             core_cfg['mcpToken'] = data['mcpToken']
+        if 'deeplApiKey' in data:
+            core_cfg['deeplApiKey'] = data['deeplApiKey']
         if 'enableCustomApi' in data:
             core_cfg['enableCustomApi'] = data['enableCustomApi']
         
@@ -443,6 +445,9 @@ async def translate_text_api(request: Request):
         
         data = await request.json()
         text = data.get('text', '')
+        
+        # 记录翻译请求
+        logger.info(f"🌐 [翻译API] 收到翻译请求，文本长度: {len(text)} 字符")
         
         if not text:
             return {

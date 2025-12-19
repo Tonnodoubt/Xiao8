@@ -483,13 +483,8 @@ function init_app() {
                             }
                         }, 100);
                         
-                        // 显示提示消息（让用户知道可以开启翻译字幕）
-                        showSubtitlePrompt();
-                        
-                        // 只有开关开启时才翻译并显示到字幕
-                        if (getSubtitleEnabled()) {
-                            translateAndShowSubtitle(fullText);
-                        }
+                        // 调用翻译函数，它会自动检测语言并决定是否显示/隐藏提示和字幕
+                        translateAndShowSubtitle(fullText);
                     }
 
                     // AI回复完成后，重置主动搭话计时器（如果已开启且在文本模式）
@@ -1995,6 +1990,15 @@ function init_app() {
         localStorage.setItem('subtitleEnabled', enabled.toString());
     }
 
+    // 隐藏翻译字幕提示消息
+    function hideSubtitlePrompt() {
+        const existingPrompt = document.getElementById('subtitle-prompt-message');
+        if (existingPrompt) {
+            existingPrompt.remove();
+            console.log('已隐藏字幕提示消息');
+        }
+    }
+    
     // 显示翻译字幕提示消息（在对话框中）
     function showSubtitlePrompt() {
         // 检查是否已经显示过提示（避免重复显示）
@@ -2111,15 +2115,12 @@ function init_app() {
     
     // 翻译并显示到字幕（只有检测到后端返回的不是用户使用的语言才进行翻译）
     async function translateAndShowSubtitle(text) {
-        // 再次检查字幕开关是否开启（双重检查确保安全）
-        if (!getSubtitleEnabled()) {
-            console.log('字幕功能已关闭，跳过翻译');
-            return;
-        }
-
         if (!text || !text.trim()) {
             return;
         }
+        
+        // 注意：即使开关关闭，也需要检测语言来决定是否隐藏提示
+        // 所以这里不提前返回，而是继续执行语言检测
         
         // 保存当前翻译请求的文本，用于后续验证
         const currentTranslationText = text;
@@ -2198,8 +2199,16 @@ function init_app() {
                     console.log('开关已关闭，不显示字幕');
                 }
             } else {
-                // 如果语言相同或检测失败，不清空字幕（保持显示之前的内容）
-                console.log('语言相同，不显示字幕');
+                // 如果语言相同或检测失败，隐藏提示和字幕
+                hideSubtitlePrompt();
+                subtitleDisplay.textContent = '';
+                subtitleDisplay.classList.remove('show');
+                // 清除自动隐藏定时器
+                if (subtitleAutoHideTimer) {
+                    clearTimeout(subtitleAutoHideTimer);
+                    subtitleAutoHideTimer = null;
+                }
+                console.log('语言相同，隐藏提示和字幕');
             }
         } catch (error) {
             console.error('翻译请求异常:', error);

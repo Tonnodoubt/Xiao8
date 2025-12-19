@@ -37,6 +37,8 @@ dependencies = [
   "pyrnnoise>=0.4.0",
   "beautifulsoup4>=4.12.0",
   "defusedxml>=0.7.1",
+  "googletrans>=4.0.0",
+  "aiohttp>=3.8.0",
 ]
 
 
