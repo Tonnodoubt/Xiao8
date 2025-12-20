@@ -39,6 +39,7 @@ dependencies = [
   "defusedxml>=0.7.1",
   "googletrans>=4.0.0",
   "aiohttp>=3.8.0",
+  "translatepy>=2.3",
 ]
 
 

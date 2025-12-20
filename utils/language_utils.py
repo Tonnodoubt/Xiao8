@@ -2,13 +2,11 @@
 """
 语言检测和翻译工具模块
 用于检测文本语言并翻译到目标语言
-优先级：Google 翻译 -> LibreTranslate -> DeepL -> LLM 翻译
+优先级：Google 翻译 (googletrans) -> translatepy (仅使用中国大陆可访问的服务，免费) -> LLM 翻译
 """
 import re
 import logging
 import asyncio
-import aiohttp
-import json
 from typing import Optional
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -28,28 +26,33 @@ except Exception as e:
     GOOGLETRANS_AVAILABLE = False
     logger.warning(f"googletrans 导入失败（其他错误）: {e}，将跳过 Google 翻译")
 
-# DeepL API 配置（从环境变量或配置文件中读取）
-DEEPL_API_KEY = None
-DEEPL_API_AVAILABLE = False
-
-def init_deepl_api():
-    """初始化 DeepL API 配置"""
-    global DEEPL_API_KEY, DEEPL_API_AVAILABLE
-    try:
-        config_manager = get_config_manager()
-        core_config = config_manager.get_core_config()
-        # 从配置中读取 DeepL API key（如果配置了的话）
-        DEEPL_API_KEY = core_config.get('DEEPL_API_KEY', '') or None
-        if DEEPL_API_KEY:
-            DEEPL_API_AVAILABLE = True
-            logger.info("✅ DeepL API 已配置，将作为备选翻译方案")
-        else:
-            logger.debug("DeepL API key 未配置，将跳过 DeepL 翻译")
-    except Exception as e:
-        logger.debug(f"初始化 DeepL API 配置失败: {e}")
-
-# 初始化 DeepL API
-init_deepl_api()
+# 尝试导入 translatepy
+try:
+    from translatepy import Translator as TranslatepyTranslator
+    # 导入在中国大陆可直接访问的翻译服务
+    from translatepy.translators.microsoft import MicrosoftTranslate
+    from translatepy.translators.bing import BingTranslate
+    from translatepy.translators.reverso import ReversoTranslate
+    from translatepy.translators.libre import LibreTranslate
+    from translatepy.translators.mymemory import MyMemoryTranslate
+    from translatepy.translators.translatecom import TranslateComTranslate
+    # 定义在中国大陆可直接访问的翻译服务列表（排除需要代理的 Google、Yandex、DeepL）
+    CHINA_ACCESSIBLE_SERVICES = [
+        MicrosoftTranslate,
+        BingTranslate,
+        ReversoTranslate,
+        LibreTranslate,
+        MyMemoryTranslate,
+        TranslateComTranslate,
+    ]
+    TRANSLATEPY_AVAILABLE = True
+    logger.debug("translatepy 导入成功，已配置中国大陆可访问的翻译服务")
+except ImportError as e:
+    TRANSLATEPY_AVAILABLE = False
+    logger.warning(f"translatepy 导入失败（未安装）: {e}，将跳过 translatepy 翻译")
+except Exception as e:
+    TRANSLATEPY_AVAILABLE = False
+    logger.warning(f"translatepy 导入失败（其他错误）: {e}，将跳过 translatepy 翻译")
 
 # 语言检测正则表达式
 CHINESE_PATTERN = re.compile(r'[\u4e00-\u9fff]')
@@ -57,129 +60,147 @@ JAPANESE_PATTERN = re.compile(r'[\u3040-\u309f\u30a0-\u30ff\u4e00-\u9fff]')  # �
 ENGLISH_PATTERN = re.compile(r'[a-zA-Z]')
 
 
-async def translate_with_libretranslate(text: str, source_lang: str, target_lang: str) -> Optional[str]:
+async def translate_with_translatepy(text: str, source_lang: str, target_lang: str) -> Optional[str]:
     """
-    使用 LibreTranslate 公共实例进行翻译（开源，免费，不需要 API key）
+    使用 translatepy 进行翻译（只使用中国大陆可直接访问的翻译服务，免费，不需要 API key）
+    
+    支持的服务（按优先级）：
+    - MicrosoftTranslate (Microsoft Translator)
+    - BingTranslate (Bing Translator)
+    - ReversoTranslate (Reverso)
+    - LibreTranslate (开源服务)
+    - MyMemoryTranslate (MyMemory)
+    - TranslateComTranslate (Translate.com)
+    
+    排除需要代理的服务：Google、Yandex、DeepL
     
     Args:
         text: 要翻译的文本
-        source_lang: 源语言代码（LibreTranslate格式，如 'zh', 'en', 'ja'）
-        target_lang: 目标语言代码（LibreTranslate格式，如 'zh', 'en', 'ja'）
+        source_lang: 源语言代码（我们的格式，如 'zh', 'en', 'ja'）
+        target_lang: 目标语言代码（我们的格式，如 'zh', 'en', 'ja'）
         
     Returns:
         翻译后的文本，失败时返回 None
     """
-    if not text or not text.strip():
+    if not text or not text.strip() or not TRANSLATEPY_AVAILABLE:
         return None
-    
-    # LibreTranslate 公共实例端点（多个备选）
-    endpoints = [
-        "https://libretranslate.de/translate",
-        "https://translate.argosopentech.com/translate",
-        "https://translate.fortytwo-it.com/translate",
-    ]
-    
-    payload = {
-        'q': text,
-        'source': source_lang if source_lang != 'auto' else 'auto',
-        'target': target_lang,
-        'format': 'text'
-    }
-    
-    logger.debug(f"LibreTranslate 请求参数: source={source_lang}, target={target_lang}, text_length={len(text)}")
-    for endpoint in endpoints:
-        logger.info(f"尝试 LibreTranslate 端点: {endpoint}")
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    endpoint,
-                    json=payload,
-                    headers={'Content-Type': 'application/json'},
-                    timeout=aiohttp.ClientTimeout(total=10)
-                ) as response:
-                    response_text = await response.text()
-                    logger.info(f"LibreTranslate 端点 {endpoint} 响应状态: {response.status}, 响应长度: {len(response_text)}")
-                    
-                    if response.status == 200:
-                        try:
-                            data = json.loads(response_text) if response_text else {}
-                            logger.debug(f"LibreTranslate 响应数据: {str(data)[:300]}")
-                            # LibreTranslate 返回 'translatedText'
-                            translated_text = data.get('translatedText', '') or data.get('translated_text', '')
-                            if translated_text and translated_text.strip():
-                                logger.info(f"✅ LibreTranslate 端点 {endpoint} 成功，翻译长度: {len(translated_text)}")
-                                return translated_text
-                            else:
-                                logger.warning(f"❌ LibreTranslate 端点 {endpoint} 返回空翻译结果，响应数据: {str(data)[:300]}")
-                        except json.JSONDecodeError as json_error:
-                            logger.warning(f"❌ LibreTranslate 端点 {endpoint} JSON解析失败: {json_error}, 响应: {response_text[:300]}")
-                    else:
-                        logger.warning(f"❌ LibreTranslate 端点 {endpoint} 返回错误: {response.status} - {response_text[:300]}")
-        except asyncio.TimeoutError:
-            logger.warning(f"❌ LibreTranslate 端点 {endpoint} 超时")
-            continue
-        except aiohttp.ClientError as e:
-            logger.warning(f"❌ LibreTranslate 端点 {endpoint} 网络错误: {type(e).__name__}: {e}")
-            continue
-        except Exception as e:
-            logger.warning(f"❌ LibreTranslate 端点 {endpoint} 失败: {type(e).__name__}: {e}")
-            continue
-    
-    logger.debug("所有 LibreTranslate 端点都失败")
-    return None
-
-
-async def translate_with_deepl(text: str, source_lang: Optional[str], target_lang: str) -> Optional[str]:
-    """
-    使用 DeepL API 进行翻译（免费，每月50万字符，不需要梯子）
-    
-    Args:
-        text: 要翻译的文本
-        source_lang: 源语言代码（DeepL格式，如 'ZH', 'EN', 'JA'），None 表示自动检测
-        target_lang: 目标语言代码（DeepL格式，如 'ZH', 'EN', 'JA'）
-        
-    Returns:
-        翻译后的文本，失败时返回 None
-    """
-    if not text or not text.strip() or not DEEPL_API_KEY:
-        return None
-    
-    # DeepL API 端点（免费版使用 api-free.deepl.com）
-    url = "https://api-free.deepl.com/v2/translate"
-    
-    # 构建请求参数
-    data = {
-        'auth_key': DEEPL_API_KEY,
-        'text': text,
-        'target_lang': target_lang
-    }
-    
-    # 如果指定了源语言，添加到参数中
-    if source_lang:
-        data['source_lang'] = source_lang
     
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                url,
-                data=data,
-                timeout=aiohttp.ClientTimeout(total=10)
-            ) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    translations = result.get('translations', [])
-                    if translations and len(translations) > 0:
-                        translated_text = translations[0].get('text', '')
-                        if translated_text:
-                            return translated_text
+        # translatepy 的语言代码映射（translatepy 支持多种语言名称和代码）
+        TRANSLATEPY_LANG_MAP = {
+            'zh': 'Chinese',  # 简体中文
+            'en': 'English',
+            'ja': 'Japanese',
+            'auto': 'auto'
+        }
+        
+        translatepy_source = TRANSLATEPY_LANG_MAP.get(source_lang, source_lang) if source_lang != 'unknown' else 'auto'
+        translatepy_target = TRANSLATEPY_LANG_MAP.get(target_lang, target_lang)
+        
+        # 如果源语言和目标语言相同，不需要翻译
+        if translatepy_source == translatepy_target and translatepy_source != 'auto':
+            return None
+        
+        # translatepy 是同步的，需要在线程池中运行以避免阻塞
+        def _translate_sync(text_to_translate: str, target: str, source: Optional[str] = None) -> Optional[str]:
+            """同步翻译函数，在线程池中运行，只使用中国大陆可访问的翻译服务"""
+            try:
+                # 创建 Translator 实例，并指定只使用中国大陆可访问的服务
+                translator = TranslatepyTranslator()
+                # 修改 services 属性，只使用可访问的服务
+                translator.services = CHINA_ACCESSIBLE_SERVICES
+                
+                # 按优先级尝试各个服务
+                for service_class in CHINA_ACCESSIBLE_SERVICES:
+                    try:
+                        # 创建单个服务实例进行翻译
+                        service_instance = service_class()
+                        # 如果 source 是 None，使用 'auto'
+                        source_param = source if source else 'auto'
+                        result = service_instance.translate(text_to_translate, destination_language=target, source_language=source_param)
+                        if result and hasattr(result, 'result') and result.result:
+                            return result.result
+                    except Exception:
+                        continue
+                
+                # 如果所有单个服务都失败，尝试使用 Translator 的自动选择（但只使用可访问的服务）
+                source_param = source if source else 'auto'
+                result = translator.translate(text_to_translate, destination_language=target, source_language=source_param)
+                if result and hasattr(result, 'result') and result.result:
+                    return result.result
                 else:
-                    error_text = await response.text()
-                    logger.debug(f"DeepL API 返回错误: {response.status} - {error_text}")
-    except Exception as e:
-        logger.debug(f"DeepL API 调用失败: {e}")
-        raise
-    
-    return None
+                    return None
+            except Exception:
+                return None
+        
+        # 如果文本太长（超过5000字符），分段翻译
+        max_chunk_size = 5000
+        if len(text) > max_chunk_size:
+            # 分段翻译
+            chunks = []
+            current_chunk = ""
+            for char in text:
+                current_chunk += char
+                if len(current_chunk) >= max_chunk_size:
+                    # 尝试在句号、换行符等位置分割
+                    last_period = max(
+                        current_chunk.rfind('。'),
+                        current_chunk.rfind('.'),
+                        current_chunk.rfind('！'),
+                        current_chunk.rfind('!'),
+                        current_chunk.rfind('？'),
+                        current_chunk.rfind('?'),
+                        current_chunk.rfind('\n')
+                    )
+                    if last_period > max_chunk_size * 0.7:  # 如果找到合适的分割点
+                        chunks.append(current_chunk[:last_period + 1])
+                        current_chunk = current_chunk[last_period + 1:]
+                    else:
+                        chunks.append(current_chunk)
+                        current_chunk = ""
+            if current_chunk:
+                chunks.append(current_chunk)
+            
+            # 在线程池中翻译每个分段
+            loop = asyncio.get_event_loop()
+            translated_chunks = []
+            for chunk in chunks:
+                try:
+                    chunk_result = await loop.run_in_executor(
+                        None, 
+                        _translate_sync, 
+                        chunk, 
+                        translatepy_target, 
+                        translatepy_source if translatepy_source != 'auto' else None
+                    )
+                    if chunk_result:
+                        translated_chunks.append(chunk_result)
+                    else:
+                        logger.warning(f"translatepy 分段翻译返回空结果")
+                        return None
+                except Exception as chunk_error:
+                    logger.warning(f"translatepy 分段翻译异常: {type(chunk_error).__name__}: {chunk_error}")
+                    return None
+            
+            translated_text = ''.join(translated_chunks)
+        else:
+            # 单次翻译，在线程池中运行
+            loop = asyncio.get_event_loop()
+            translated_text = await loop.run_in_executor(
+                None, 
+                _translate_sync, 
+                text, 
+                translatepy_target, 
+                translatepy_source if translatepy_source != 'auto' else None
+            )
+        
+        if translated_text and translated_text.strip():
+            return translated_text
+        else:
+            return None
+            
+    except Exception:
+        return None
 
 
 def detect_language(text: str) -> str:
@@ -221,7 +242,7 @@ def detect_language(text: str) -> str:
 async def translate_text(text: str, target_lang: str, source_lang: Optional[str] = None) -> str:
     """
     翻译文本到目标语言
-    优先级：Google 翻译 -> LibreTranslate -> DeepL -> LLM 翻译
+    优先级：Google 翻译 (googletrans) -> translatepy (仅使用中国大陆可访问的服务，免费) -> LLM 翻译
     
     Args:
         text: 要翻译的文本
@@ -243,7 +264,7 @@ async def translate_text(text: str, target_lang: str, source_lang: Optional[str]
         logger.debug(f"跳过翻译: 源语言({source_lang}) == 目标语言({target_lang}) 或源语言未知")
         return text
     
-    logger.info(f"🔄 [翻译服务] 开始翻译流程: {source_lang} -> {target_lang}, 文本长度: {len(text)}")
+    logger.debug(f"🔄 [翻译服务] 开始翻译流程: {source_lang} -> {target_lang}, 文本长度: {len(text)}")
     
     # 语言代码映射：我们的代码 -> Google Translate 代码
     GOOGLE_LANG_MAP = {
@@ -257,7 +278,7 @@ async def translate_text(text: str, target_lang: str, source_lang: Optional[str]
     
     # 优先级1：尝试使用 Google 翻译（免费，但可能需要梯子）
     if GOOGLETRANS_AVAILABLE:
-        logger.info(f"🌐 [翻译服务] 尝试 Google 翻译: {source_lang} -> {target_lang}, 文本长度: {len(text)}")
+        logger.debug(f"🌐 [翻译服务] 尝试 Google 翻译: {source_lang} -> {target_lang}")
         try:
             translator = Translator()
             # 如果文本太长（超过15k字符），分段翻译
@@ -305,66 +326,32 @@ async def translate_text(text: str, target_lang: str, source_lang: Optional[str]
                 translated_text = result.text
             
             logger.info(f"✅ [翻译服务] Google翻译成功: {source_lang} -> {target_lang}")
-            logger.debug(f"Google翻译结果预览: {text[:50]}... -> {translated_text[:50]}...")
             return translated_text
                 
         except Exception as e:
-            logger.warning(f"❌ [翻译服务] Google翻译失败: {type(e).__name__}: {e}，尝试 LibreTranslate 翻译")
+            logger.debug(f"❌ [翻译服务] Google翻译失败: {type(e).__name__}，尝试 translatepy")
             # 继续执行，尝试下一个方案
     else:
-        logger.info("⚠️ [翻译服务] Google 翻译不可用（googletrans 未安装），跳过")
+        logger.debug("⚠️ [翻译服务] Google 翻译不可用（googletrans 未安装），尝试 translatepy")
     
-    # 优先级2：尝试使用 LibreTranslate 翻译（开源，免费，不需要 API key）
-    logger.info(f"🌐 [翻译服务] 尝试 LibreTranslate 翻译: {source_lang} -> {target_lang}, 文本长度: {len(text)}")
-    try:
-        # 语言代码映射：我们的代码 -> LibreTranslate API 代码
-        LIBRETRANSLATE_LANG_MAP = {
-            'zh': 'zh',
-            'en': 'en',
-            'ja': 'ja'
-        }
-        
-        libre_target = LIBRETRANSLATE_LANG_MAP.get(target_lang, target_lang)
-        libre_source = LIBRETRANSLATE_LANG_MAP.get(source_lang, source_lang) if source_lang != 'unknown' else 'auto'
-        
-        translated_text = await translate_with_libretranslate(text, libre_source, libre_target)
-        if translated_text:
-            logger.info(f"✅ [翻译服务] LibreTranslate翻译成功: {source_lang} -> {target_lang}")
-            logger.debug(f"LibreTranslate翻译结果预览: {text[:50]}... -> {translated_text[:50]}...")
-            return translated_text
-        else:
-            logger.warning(f"❌ [翻译服务] LibreTranslate翻译返回空结果，尝试 DeepL 翻译")
-    except Exception as e:
-        logger.warning(f"❌ [翻译服务] LibreTranslate翻译异常: {type(e).__name__}: {e}，尝试 DeepL 翻译")
-        # 继续执行，尝试下一个方案
-    
-    # 优先级3：尝试使用 DeepL 翻译（免费，每月50万字符，不需要梯子）
-    if DEEPL_API_AVAILABLE and DEEPL_API_KEY:
-        logger.info(f"🌐 [翻译服务] 尝试 DeepL 翻译: {source_lang} -> {target_lang}, 文本长度: {len(text)}")
+    # 优先级2：尝试使用 translatepy（支持多个翻译服务，免费，不需要 API key）
+    if TRANSLATEPY_AVAILABLE:
+        logger.debug(f"🌐 [翻译服务] 尝试 translatepy: {source_lang} -> {target_lang}")
         try:
-            # 语言代码映射：我们的代码 -> DeepL API 代码
-            DEEPL_LANG_MAP = {
-                'zh': 'ZH',  # 简体中文
-                'en': 'EN',
-                'ja': 'JA'
-            }
-            
-            deepl_target = DEEPL_LANG_MAP.get(target_lang, target_lang.upper())
-            deepl_source = DEEPL_LANG_MAP.get(source_lang, source_lang.upper()) if source_lang != 'unknown' else None
-            
-            translated_text = await translate_with_deepl(text, deepl_source, deepl_target)
+            translated_text = await translate_with_translatepy(text, source_lang, target_lang)
             if translated_text:
-                logger.info(f"✅ [翻译服务] DeepL翻译成功: {source_lang} -> {target_lang}")
-                logger.debug(f"DeepL翻译结果预览: {text[:50]}... -> {translated_text[:50]}...")
+                logger.info(f"✅ [翻译服务] translatepy翻译成功: {source_lang} -> {target_lang}")
                 return translated_text
+            else:
+                logger.debug(f"❌ [翻译服务] translatepy翻译返回空结果，回退到 LLM 翻译")
         except Exception as e:
-            logger.warning(f"❌ [翻译服务] DeepL翻译失败: {type(e).__name__}: {e}，回退到 LLM 翻译")
-            # 继续执行，回退到LLM翻译
+            logger.debug(f"❌ [翻译服务] translatepy翻译异常: {type(e).__name__}，回退到 LLM 翻译")
+            # 继续执行，尝试下一个方案
     else:
-        logger.info("⚠️ [翻译服务] DeepL 翻译不可用（API key 未配置），跳过")
+        logger.debug("⚠️ [翻译服务] translatepy 不可用（未安装），回退到 LLM 翻译")
     
-    # 优先级4：回退到 LLM 翻译
-    logger.info(f"🔄 [翻译服务] 回退到 LLM 翻译: {source_lang} -> {target_lang}, 文本长度: {len(text)}")
+    # 优先级3：回退到 LLM 翻译
+    logger.debug(f"🔄 [翻译服务] 回退到 LLM 翻译: {source_lang} -> {target_lang}")
     try:
         config_manager = get_config_manager()
         # 使用correction模型配置（轻量级模型，适合翻译任务）
@@ -404,12 +391,11 @@ async def translate_text(text: str, target_lang: str, source_lang: Optional[str]
         response = await llm.ainvoke(messages)
         translated_text = response.content.strip()
         
-        logger.info(f"✅ [翻译服务] LLM翻译成功: {source_lang} -> {target_lang} (使用 {correction_config.get('model', 'unknown')} 模型)")
-        logger.debug(f"LLM翻译结果预览: {text[:50]}... -> {translated_text[:50]}...")
+        logger.info(f"✅ [翻译服务] LLM翻译成功: {source_lang} -> {target_lang}")
         return translated_text
         
     except Exception as e:
-        logger.error(f"LLM翻译也失败: {e}, 返回原文")
+        logger.warning(f"❌ [翻译服务] LLM翻译失败: {type(e).__name__}, 返回原文")
         return text
 
 
