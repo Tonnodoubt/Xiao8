@@ -34,7 +34,16 @@ import mimetypes # noqa
 mimetypes.add_type("application/javascript", ".js")
 import asyncio # noqa
 import logging # noqa
-from fastapi import FastAPI # noqa
+import json # noqa
+import uuid # noqa
+import webbrowser # noqa
+from datetime import datetime # noqa
+from urllib.parse import quote # noqa
+import io # noqa
+import pathlib # noqa
+import wave # noqa
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, File, UploadFile, Form, Body # noqa
+from fastapi.responses import HTMLResponse, JSONResponse # noqa
 from fastapi.staticfiles import StaticFiles # noqa
 from main_logic import core as core, cross_server as cross_server # noqa
 from fastapi.templating import Jinja2Templates # noqa
@@ -407,17 +416,26 @@ if _IS_MAIN_PROCESS:
     )
 
 @app.post('/api/beacon/shutdown')
-async def beacon_shutdown():
+async def beacon_shutdown(request: Request):
     """Beacon API for graceful server shutdown"""
     try:
+        # 获取请求数据
+        data = await request.json()
+        page = data.get('page', '')
+        
         # 从 app.state 获取配置
         current_config = get_start_config()
         # Only respond to beacon if server was started with --open-browser
-        if current_config['browser_mode_enabled']:
-            logger.info("收到beacon信号，准备关闭服务器...")
+        # 并且只有来自主页（index.html）的beacon信号才关闭服务器
+        if current_config['browser_mode_enabled'] and page == 'index':
+            logger.info("收到来自主页的beacon信号，准备关闭服务器...")
             # Schedule server shutdown
             asyncio.create_task(shutdown_server_async())
             return {"success": True, "message": "服务器关闭信号已接收"}
+        elif current_config['browser_mode_enabled']:
+            # 来自其他页面的beacon信号，只记录日志，不关闭服务器
+            logger.info(f"收到beacon信号（来自页面: {page or '未知'}），但不关闭服务器")
+            return {"success": True, "message": "Beacon信号已接收，但不会关闭服务器"}
     except Exception as e:
         logger.error(f"Beacon处理错误: {e}")
         return {"success": False, "error": str(e)}
@@ -2482,80 +2500,10 @@ async def set_current_catgirl(request: Request):
     
     return {"success": True}
 
-@app.post('/api/characters/reload')
-async def reload_character_config():
-    """重新加载角色配置（热重载）"""
-    try:
-        await initialize_character_data()
-        return {"success": True, "message": "角色配置已重新加载"}
-    except Exception as e:
-        logger.error(f"重新加载角色配置失败: {e}")
-        return JSONResponse(
-            {'success': False, 'error': f'重新加载失败: {str(e)}'}, 
-            status_code=500
-        )
-
-@app.post('/api/characters/master')
-async def update_master(request: Request):
-    data = await request.json()
-    if not data or not data.get('档案名'):
-        return JSONResponse({'success': False, 'error': '档案名为必填项'}, status_code=400)
-    characters = _config_manager.load_characters()
-    characters['主人'] = {k: v for k, v in data.items() if v}
-    _config_manager.save_characters(characters)
-    # 自动重新加载配置
-    await initialize_character_data()
-    return {"success": True}
-
-@app.post('/api/characters/catgirl')
-async def add_catgirl(request: Request):
-    data = await request.json()
-    if not data or not data.get('档案名'):
-        return JSONResponse({'success': False, 'error': '档案名为必填项'}, status_code=400)
-    
-    characters = _config_manager.load_characters()
-    key = data['档案名']
-    if key in characters.get('猫娘', {}):
-        return JSONResponse({'success': False, 'error': '该猫娘已存在'}, status_code=400)
-    
-    if '猫娘' not in characters:
-        characters['猫娘'] = {}
-    
-    # 创建猫娘数据，只保存非空字段
-    catgirl_data = {}
-    for k, v in data.items():
-        if k != '档案名':
-            # voice_id 特殊处理：空字符串表示删除该字段
-            if k == 'voice_id' and v == '':
-                continue  # 不添加该字段，相当于删除
-            elif v:  # 只保存非空字段
-                catgirl_data[k] = v
-    
-    characters['猫娘'][key] = catgirl_data
-    _config_manager.save_characters(characters)
-    # 自动重新加载配置
-    await initialize_character_data()
-    
-    # 通知记忆服务器重新加载配置
-    try:
-        import httpx
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(f"http://localhost:{MEMORY_SERVER_PORT}/reload", timeout=5.0)
-            if resp.status_code == 200:
-                result = resp.json()
-                if result.get('status') == 'success':
-                    logger.info(f"✅ 已通知记忆服务器重新加载配置（新角色: {key}）")
-                else:
-                    logger.warning(f"⚠️ 记忆服务器重新加载配置返回: {result.get('message')}")
-            else:
-                logger.warning(f"⚠️ 记忆服务器重新加载配置失败，状态码: {resp.status_code}")
-    except Exception as e:
-        logger.warning(f"⚠️ 通知记忆服务器重新加载配置时出错: {e}（不影响角色创建）")
-    
-    return {"success": True}
-
-@app.put('/api/characters/catgirl/{name}')
-async def update_catgirl(name: str, request: Request):
+# 以下路由已移至 main_routers/characters_router.py，通过 app.include_router(characters_router) 挂载
+# 删除重复的路由定义以避免冲突
+# 以下路由已移至 main_routers/characters_router.py，通过 app.include_router(characters_router) 挂载
+# 删除重复的路由定义以避免冲突
     data = await request.json()
     if not data:
         return JSONResponse({'success': False, 'error': '无数据'}, status_code=400)
@@ -2641,84 +2589,6 @@ async def update_catgirl(name: str, request: Request):
         logger.info(f"切换的是其他猫娘 {name} 的音色，跳过重新加载以避免影响当前猫娘的session")
     
     return {"success": True, "voice_id_changed": voice_id_changed, "session_restarted": session_ended}
-
-@app.put('/api/characters/catgirl/l2d/{name}')
-async def update_catgirl_l2d(name: str, request: Request):
-    """更新指定猫娘的模型设置（支持Live2D和VRM）"""
-    try:
-        data = await request.json()
-        live2d_model = data.get('live2d')
-        vrm_model = data.get('vrm')
-        model_type = data.get('model_type', 'live2d')  # 默认为 live2d
-        item_id = data.get('item_id')  # 获取可选的item_id
-        
-        # 验证至少提供了其中一种模型
-        if not live2d_model and not vrm_model:
-            return JSONResponse(content={
-                'success': False,
-                'error': '未提供模型信息（需要提供 live2d 或 vrm）'
-            })
-        
-        # 加载当前角色配置
-        characters = _config_manager.load_characters()
-        
-        # 确保猫娘配置存在
-        if '猫娘' not in characters:
-            characters['猫娘'] = {}
-        
-        # 确保指定猫娘的配置存在
-        if name not in characters['猫娘']:
-            characters['猫娘'][name] = {}
-        
-        # 根据模型类型保存相应的设置
-        if model_type == 'vrm' and vrm_model:
-            # VRM 模式：保存 vrm 路径和 model_type
-            characters['猫娘'][name]['vrm'] = vrm_model
-            characters['猫娘'][name]['model_type'] = 'vrm'
-            # 保存VRM动作路径（如果提供）
-            vrm_animation = data.get('vrm_animation')
-            if vrm_animation:
-                characters['猫娘'][name]['vrm_animation'] = vrm_animation
-                logger.debug(f"已保存角色 {name} 的 VRM 动作: {vrm_animation}")
-            # 清除 Live2D 相关设置（如果存在）
-            if 'live2d' in characters['猫娘'][name]:
-                del characters['猫娘'][name]['live2d']
-            if 'live2d_item_id' in characters['猫娘'][name]:
-                del characters['猫娘'][name]['live2d_item_id']
-            logger.debug(f"已保存角色 {name} 的 VRM 模型: {vrm_model}")
-        else:
-            # Live2D 模式：保存 live2d 模型名称和 model_type
-            if live2d_model:
-                characters['猫娘'][name]['live2d'] = live2d_model
-                characters['猫娘'][name]['model_type'] = 'live2d'
-                if item_id:
-                    characters['猫娘'][name]['live2d_item_id'] = item_id
-                    logger.debug(f"已保存角色 {name} 的模型 {live2d_model} 和item_id {item_id}")
-                else:
-                    logger.debug(f"已保存角色 {name} 的模型 {live2d_model}")
-                # 清除 VRM 相关设置（如果存在）
-                if 'vrm' in characters['猫娘'][name]:
-                    del characters['猫娘'][name]['vrm']
-                if 'vrm_animation' in characters['猫娘'][name]:
-                    del characters['猫娘'][name]['vrm_animation']
-        
-        # 保存配置
-        _config_manager.save_characters(characters)
-        # 自动重新加载配置
-        await initialize_character_data()
-        
-        model_name = vrm_model if model_type == 'vrm' else live2d_model
-        return JSONResponse(content={
-            'success': True,
-            'message': f'已更新角色 {name} 的{model_type.upper()}模型为 {model_name}'
-        })
-        
-    except Exception as e:
-        logger.error(f"更新角色模型设置失败: {e}")
-        return JSONResponse(content={
-            'success': False,
-            'error': str(e)
-        })
 
 @app.put('/api/characters/catgirl/vrm/{name}')
 async def update_catgirl_vrm(name: str, request: Request):

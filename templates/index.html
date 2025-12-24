@@ -1457,17 +1457,46 @@
         window.pageConfigReady = loadPageConfig();
     </script>
     <script>
-        // Beacon功能 - 页面关闭时发送信号给服务器
+        // Beacon功能 - 页面关闭时发送信号给服务器（仅主页关闭时关闭服务器）
         let beaconSent = false;
 
         function sendBeacon() {
             if (beaconSent) return; // 防止重复发送
             beaconSent = true;
 
-<<<<<<< HEAD
-    // 监听页面关闭事件
-    window.addEventListener('beforeunload', sendBeacon);
-    window.addEventListener('unload', sendBeacon);
+            try {
+                // 使用navigator.sendBeacon确保信号不被拦截
+                // 添加页面标识，只有主页的beacon才会关闭服务器
+                const success = navigator.sendBeacon('/api/beacon/shutdown', JSON.stringify({
+                    timestamp: Date.now(),
+                    action: 'shutdown',
+                    page: 'index'  // 标识这是来自主页的信号
+                }));
+
+                if (success) {
+                    console.log('Beacon信号已发送（来自主页）');
+                } else {
+                    console.warn('Beacon发送失败，尝试使用fetch');
+                    // 备用方案：使用fetch
+                    fetch('/api/beacon/shutdown', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            timestamp: Date.now(),
+                            action: 'shutdown',
+                            page: 'index'  // 标识这是来自主页的信号
+                        }),
+                        keepalive: true // 确保请求在页面关闭时仍能发送
+                    }).catch(err => console.log('备用beacon发送失败:', err));
+                }
+            } catch (e) {
+                console.log('Beacon发送异常:', e);
+            }
+        }
+
+        // 监听页面关闭事件
+        window.addEventListener('beforeunload', sendBeacon);
+        window.addEventListener('unload', sendBeacon);
 </script>
 <script src="/static/libs/live2dcubismcore.min.js"></script>  <!-- Cubism 4核心库（支持Cubism 3/4模型） -->
 <!-- Three.js 和 three-vrm 的 importmap（用于动态导入 ES 模块） -->
@@ -1528,38 +1557,6 @@
         }
     }
     
-    // Beacon shutdown 功能
-    function sendBeacon() {
-        try {
-            // 使用navigator.sendBeacon确保信号不被拦截
-            const success = navigator.sendBeacon('/api/beacon/shutdown', JSON.stringify({
-                timestamp: Date.now(),
-                action: 'shutdown'
-            }));
-
-            if (success) {
-                console.log('Beacon信号已发送');
-            } else {
-                console.warn('Beacon发送失败，尝试使用fetch');
-                // 备用方案：使用fetch
-                fetch('/api/beacon/shutdown', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        timestamp: Date.now(),
-                        action: 'shutdown'
-                    }),
-                    keepalive: true // 确保请求在页面关闭时仍能发送
-                }).catch(err => console.log('备用beacon发送失败:', err));
-            }
-        } catch (e) {
-            console.log('Beacon发送异常:', e);
-        }
-    }
-    
-    // 监听页面关闭事件
-    window.addEventListener('beforeunload', sendBeacon);
-    window.addEventListener('unload', sendBeacon);
 </script>
     <script src="/static/libs/live2dcubismcore.min.js"></script> <!-- Cubism 4核心库（支持Cubism 3/4模型） -->
     <script>
@@ -1865,6 +1862,42 @@
     // 注册localStorage事件监听器
     window.addEventListener('storage', handlePageMessage);
     
+    // 注册 postMessage 监听器（用于接收来自弹出窗口的消息）
+    window.addEventListener('message', async function(event) {
+        // 验证消息来源（确保来自同源）
+        if (event.origin !== window.location.origin) {
+            return;
+        }
+        
+        const message = event.data;
+        if (message && message.action) {
+            console.log('[消息接收] 通过 postMessage 接收到消息:', message.action);
+            try {
+                switch (message.action) {
+                    case 'hide_main_ui':
+                        console.log('接收到隐藏主界面命令');
+                        hideMainUI();
+                        break;
+                    case 'show_main_ui':
+                        console.log('接收到显示主界面命令');
+                        await showMainUI();
+                        break;
+                    case 'reload_model_parameters':
+                        console.log('接收到重新加载模型参数命令');
+                        await reloadModelParameters();
+                        break;
+                    case 'reload_model':
+                        console.log('接收到重新加载模型命令');
+                        // 重新加载模型（根据角色配置）
+                        await loadModelBasedOnCharacterConfig();
+                        break;
+                }
+            } catch (e) {
+                console.error('处理 postMessage 消息失败:', e);
+            }
+        }
+    });
+    
     // 页面可见性变化时检查参数更新（用户从其他页面返回时）
     let lastParameterCheckTime = 0;
     // 记录上次检查的角色名称，用于检测角色切换
@@ -2019,7 +2052,23 @@
             
             console.log('[模型加载] 模型类型:', modelType, 'VRM路径:', vrmModelPath);
             
+            // 获取当前模型类型，用于检测是否需要切换
+            const currentModelType = localStorage.getItem('modelType') || 'live2d';
+            
             if (modelType === 'vrm' && vrmModelPath) {
+                // 如果当前是 Live2D，先清理 Live2D 模型
+                if (currentModelType === 'live2d' && window.live2dManager) {
+                    console.log('[模型加载] 从 Live2D 切换到 VRM，清理 Live2D 模型...');
+                    try {
+                        // 停止 Live2D 动画循环
+                        if (window.live2dManager.getCurrentModel()) {
+                            window.live2dManager.getCurrentModel().internalModel.core.motionManager.stopAllMotions();
+                        }
+                    } catch (e) {
+                        console.warn('清理 Live2D 动画失败:', e);
+                    }
+                }
+                
                 // 设置模型类型标记
                 localStorage.setItem('modelType', 'vrm');
                 // 加载 VRM 模型（传递完整配置以支持动作播放）
@@ -2027,6 +2076,23 @@
                 await loadVRMModelFromConfig(vrmModelPath, catgirlConfig);
                 return; // 重要：加载VRM后直接返回，不继续加载Live2D
             } else {
+                // 如果当前是 VRM，先清理 VRM 模型
+                if (currentModelType === 'vrm' && window.vrmManager) {
+                    console.log('[模型加载] 从 VRM 切换到 Live2D，清理 VRM 模型...');
+                    try {
+                        // 停止 VRM 动画
+                        if (window.vrmManager.currentModel) {
+                            window.vrmManager.stopAnimation();
+                        }
+                        // 清理 VRM 场景
+                        if (window.vrmManager.scene) {
+                            window.vrmManager.scene.clear();
+                        }
+                    } catch (e) {
+                        console.warn('清理 VRM 模型失败:', e);
+                    }
+                }
+                
                 // 设置模型类型标记
                 localStorage.setItem('modelType', 'live2d');
                 // 加载 Live2D 模型
@@ -2091,6 +2157,20 @@
         const live2dContainer = document.getElementById('live2d-container');
         const vrmContainer = document.getElementById('vrm-container');
         
+        // 清理 Live2D 模型（如果存在）
+        if (window.live2dManager && window.live2dManager.getCurrentModel()) {
+            console.log('[VRM加载] 清理现有的 Live2D 模型...');
+            try {
+                // 停止 Live2D 动画循环
+                const currentModel = window.live2dManager.getCurrentModel();
+                if (currentModel && currentModel.internalModel && currentModel.internalModel.core) {
+                    currentModel.internalModel.core.motionManager.stopAllMotions();
+                }
+            } catch (e) {
+                console.warn('[VRM加载] 清理 Live2D 动画失败:', e);
+            }
+        }
+        
         // 隐藏 Live2D，显示 VRM
         if (live2dContainer) {
             live2dContainer.style.display = 'none';
@@ -2121,11 +2201,7 @@
                     return;
                 }
                 
-                // 获取保存的性能模式设置
-                const savedMode = localStorage.getItem('vrm_performance_mode');
-                const performanceOptions = savedMode ? { performanceMode: savedMode } : {};
-                
-                vrmManager = new VRMManager('vrm-container', performanceOptions);
+                vrmManager = new VRMManager('vrm-container', {});
                 await vrmManager.init();
                 window.vrmManager = vrmManager;
                 console.log('VRM 管理器初始化成功');
