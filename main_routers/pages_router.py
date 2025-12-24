@@ -21,11 +21,12 @@ async def get_default_index(request: Request):
     })
 
 
-@router.get("/l2d", response_class=HTMLResponse)
-async def get_l2d_manager(request: Request):
-    """渲染Live2D模型管理器页面"""
+@router.get("/model", response_class=HTMLResponse)
+@router.get("/l2d", response_class=HTMLResponse)  # 向后兼容别名
+async def get_model_manager(request: Request):
+    """渲染模型管理器页面（支持Live2D和VRM）"""
     templates = get_templates()
-    return templates.TemplateResponse("templates/l2d_manager.html", {
+    return templates.TemplateResponse("templates/model_manager.html", {
         "request": request
     })
 

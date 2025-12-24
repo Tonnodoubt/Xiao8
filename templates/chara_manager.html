@@ -186,9 +186,9 @@
         .fold.open>.fold-content {
             display: block;
         }
-        /* 限制live2d-link和vrm-link的可点击区域，只在文字部分可点击，不占据整行 */
-        .fold-content .live2d-link,
-        .fold-content .vrm-link {
+
+        /* 限制live2d-link的可点击区域，只在文字部分可点击，不占据整行 */
+        .fold-content .live2d-link {
             display: inline-block;
             flex: 0 0 auto;
             max-width: fit-content;
@@ -954,7 +954,7 @@
             form.appendChild(baseRow);
             // 渲染自定义项
             Object.keys(cat).forEach(k => {
-                if (!["live2d", "voice_id", "system_prompt", "档案名"].includes(k)) {
+                if (!["live2d", "voice_id", "system_prompt", "档案名", "vrm", "model_type"].includes(k)) {
                     const row = document.createElement('div');
                     row.className = 'field-row custom-row';
                     const deleteFieldText = window.t ? window.t('character.deleteField') : '删除设定';
@@ -1002,16 +1002,34 @@
             const foldContent = document.createElement('div');
             foldContent.className = 'fold-content';
 
-            // live2d row
+            // model settings row
             const live2dRow = document.createElement('div');
             live2dRow.className = 'field-row';
             const live2dLabel = document.createElement('label');
-            live2dLabel.textContent = 'live2d';
+            live2dLabel.textContent = window.t ? window.t('character.modelSettings') : '模型设置';
             live2dRow.appendChild(live2dLabel);
             const live2dLink = document.createElement('span');
             live2dLink.className = 'live2d-link';
-            live2dLink.title = window.t ? window.t('character.manageLive2D') : '点击管理Live2D模型';
-            live2dLink.textContent = cat['live2d'] ? cat['live2d'] : (window.t ? window.t('character.live2dNotSet') : '未设置');
+            live2dLink.title = window.t ? window.t('character.manageModel') : '点击管理模型';
+            
+            // 检查模型设置：优先检查 model_type，然后检查 vrm 和 live2d
+            let modelDisplayText = '';
+            const modelType = cat['model_type'] || (cat['vrm'] ? 'vrm' : (cat['live2d'] ? 'live2d' : null));
+            if (modelType === 'vrm' && cat['vrm']) {
+                // VRM 模型：显示模型路径或名称
+                const vrmPath = cat['vrm'];
+                // 提取文件名作为显示名称
+                const vrmName = vrmPath.split('/').pop().replace('.vrm', '');
+                modelDisplayText = `VRM: ${vrmName}`;
+            } else if (modelType === 'live2d' && cat['live2d']) {
+                // Live2D 模型：显示模型名称
+                modelDisplayText = cat['live2d'];
+            } else {
+                // 未设置
+                modelDisplayText = window.t ? window.t('character.live2dNotSet') : '未设置';
+            }
+            
+            live2dLink.textContent = modelDisplayText;
             live2dRow.appendChild(live2dLink);
             foldContent.appendChild(live2dRow);
 
@@ -1111,10 +1129,10 @@
                 live2dLinkEl.onclick = async function () {
                     const catgirlName = form.querySelector('[name="档案名"]').value;
                     if (!catgirlName) {
-                        await showAlert(window.t ? window.t('character.fillProfileNameFirst') : '请先填写猫娘档案名，然后再设置Live2D模型');
+                        await showAlert(window.t ? window.t('character.fillProfileNameFirst') : '请先填写猫娘档案名，然后再设置模型');
                         return;
                     }
-                    const url = `/l2d?lanlan_name=${encodeURIComponent(catgirlName)}`;
+                    const url = `/model?lanlan_name=${encodeURIComponent(catgirlName)}`;
 
                     // 检查是否已有该URL的窗口打开
                     if (!window._openSettingsWindows) {
@@ -1149,6 +1167,8 @@
 
                     popup.moveTo(0, 0);
                     popup.resizeTo(screen.availWidth, screen.availHeight);
+                    
+                    // 定时检查窗口是否关闭
                     const timer = setInterval(() => {
                         if (popup.closed) {
                             clearInterval(timer);
@@ -1156,9 +1176,11 @@
                             if (window._openSettingsWindows[url] === popup) {
                                 delete window._openSettingsWindows[url];
                             }
+                            // 窗口关闭时刷新数据（全局消息监听器会处理保存消息，这里作为备用）
+                            console.log('模型管理窗口已关闭，刷新角色数据...');
                             loadCharacterData();
                         }
-                    }, 500);
+                    }, 200); // 缩短检查间隔到200ms，提高响应速度
                 };
             }
             // 表单特定的showActionButtons封装
@@ -1202,7 +1224,7 @@
                     '',
                     window.t ? window.t('character.addCatgirlFieldTitle') : '新增猫娘设定'
                 );
-                if (!key || ["档案名", "live2d", "voice_id", "system_prompt"].includes(key)) return;
+                if (!key || ["档案名", "live2d", "voice_id", "system_prompt", "vrm", "model_type"].includes(key)) return;
                 if (form.querySelector(`[name='${key}']`)) {
                     await showAlert(window.t ? window.t('character.fieldExists') : '该设定已存在');
                     return;
@@ -1307,7 +1329,7 @@
                     return;
                 }
 
-                // 验证Live2D模型文件存在性
+                // 验证模型文件存在性
                 if (data['live2d'] && data['live2d'].trim() !== '') {
                     try {
                         const response = await fetch(`/api/characters/catgirl/l2d/${encodeURIComponent(data['档案名'])}`);
@@ -1337,11 +1359,11 @@
                                 }
                             } else {
                                 // 用户选择保持当前设置，继续保存
-                                console.warn(`用户选择保持无效的Live2D模型设置: ${data['live2d']}`);
+                                console.warn(`用户选择保持无效的模型设置: ${data['live2d']}`);
                             }
                         }
                     } catch (error) {
-                        console.error('验证Live2D模型失败:', error);
+                        console.error('验证模型失败:', error);
                         const continueSave = await showConfirm(
                             window.t ? window.t('character.cannotVerifyLive2d') : `无法验证Live2D模型文件存在性。\n\n是否继续保存？\n\n点击"确定"继续保存，点击"取消"中止保存。`,
                             window.t ? window.t('character.verificationFailed') : '验证失败'
@@ -1437,705 +1459,23 @@
                     }, 0);
                 }
             } else {
-<<<<<<< HEAD
-                detailsDiv.style.display = 'block';
-                expandBtn.textContent = '▼';
-                // 保存状态到 localStorage
-                localStorage.setItem(storageKey, 'true');
-                // 记录当前展开的猫娘
-                expandedCatgirlName = key;
-                showCatgirlForm(key, detailsDiv);
-            }
-        };
-        list.appendChild(block);
-    });
-}
-
-// 随机颜色函数
-function randomColor() {
-    // 生成明亮、柔和的随机色
-    const h = Math.floor(Math.random() * 360);
-    const s = 60 + Math.floor(Math.random() * 25); // 60-85%
-    const l = 45 + Math.floor(Math.random() * 30); // 45-75%
-    return `hsl(${h},${s}%,${l}%)`;
-}
-
-// 新增猫娘
-const addBtn = document.getElementById('add-catgirl-btn');
-addBtn.onclick = function() {
-    showCatgirlForm(null);
-};
-
-// 编辑猫娘
-window.editCatgirl = function(key) {
-    showCatgirlForm(key);
-};
-
-// 删除猫娘
-window.deleteCatgirl = async function(key) {
-    const catgirls = characterData['猫娘'] || {};
-    if (Object.keys(catgirls).length <= 1) {
-        await showAlert(window.t ? window.t('character.onlyOneCatgirlLeft') : '只剩一只猫娘，无法删除！');
-        return;
-    }
-    // 检查是否是当前猫娘
-    try {
-        const currentResponse = await fetch('/api/characters/current_catgirl');
-        const currentData = await currentResponse.json();
-        const currentCatgirl = currentData.current_catgirl || '';
-        
-        if (key === currentCatgirl) {
-            await showAlert(window.t ? window.t('character.cannotDeleteCurrentCatgirl') : '不能删除当前正在使用的猫娘！\n\n请先切换到其他猫娘后再删除。');
-            return;
-        }
-    } catch (error) {
-        console.error('获取当前猫娘失败:', error);
-        await showAlert(window.t ? window.t('character.cannotConfirmCatgirlStatus') : '无法确认当前猫娘状态，删除操作已取消');
-        return;
-    }
-    
-    // 确保角色名称正确显示
-    // 确保角色名称正确显示，如果翻译函数返回包含 {name} 占位符，则使用默认消息
-    let confirmMsg;
-    if (window.t) {
-        const translated = window.t('character.confirmDeleteCatgirl', {name: key});
-        // 如果翻译结果包含未替换的占位符，使用默认消息
-        if (translated && translated.includes('{name}')) {
-            confirmMsg = `确定要删除猫娘"${key}"？`;
-        } else {
-            confirmMsg = translated || `确定要删除猫娘"${key}"？`;
-        }
-    } else {
-        confirmMsg = `确定要删除猫娘"${key}"？`;
-    }
-    const confirmTitle = window.t ? window.t('character.deleteCatgirlTitle') : '删除猫娘';
-    if (!await showConfirm(confirmMsg, confirmTitle, {danger: true})) return;
-    await fetch('/api/characters/catgirl/' + encodeURIComponent(key), {method: 'DELETE'});
-    // 清除 localStorage 中的展开状态记录
-    localStorage.removeItem(`catgirl_expand_${key}`);
-    // 清除进阶设定折叠状态记录
-    localStorage.removeItem(`catgirl_advanced_${key}`);
-    await loadCharacterData();
-};
-
-// 显示保存和取消按钮的全局函数
-function showActionButtons(form) {
-    if (!form) return;
-    // 使用表单内的查询选择器找到对应的按钮
-    const saveBtn = form.querySelector('#save-button');
-    const cancelBtn = form.querySelector('#cancel-button');
-    if (saveBtn) saveBtn.style.display = '';
-    if (cancelBtn) cancelBtn.style.display = '';
-}
-
-// 显示猫娘编辑/新增表单
-function showCatgirlForm(key, container) {
-    let cat = key ? characterData['猫娘'][key] : {};
-    let isNew = !key;
-    let form = document.createElement('form');
-    form.id = key ? 'catgirl-form-' + key : 'catgirl-form-new';
-    
-    // 保存猫娘名称，用于后续恢复进阶设定的展开状态
-    form._catgirlName = key;
-    // 先渲染基础项（使用 DOM API，避免插入未转义内容）
-    const baseRow = document.createElement('div');
-    baseRow.className = 'field-row';
-
-    const baseLabel = document.createElement('label');
-    baseLabel.textContent = window.t ? window.t('character.profileName') : '档案名';
-    const star = document.createElement('span');
-    star.style.color = 'red';
-    star.textContent = '*';
-    baseLabel.appendChild(star);
-    baseRow.appendChild(baseLabel);
-
-    const nameInput = document.createElement('input');
-    nameInput.type = 'text';
-    nameInput.name = '档案名';
-    nameInput.required = true;
-    nameInput.value = key || '';
-    if (!isNew) nameInput.readOnly = true;
-    baseRow.appendChild(nameInput);
-
-    if (!isNew) {
-        const renameBtn = document.createElement('button');
-        renameBtn.type = 'button';
-        renameBtn.className = 'btn sm';
-        renameBtn.id = 'rename-catgirl-btn';
-        renameBtn.textContent = window.t ? window.t('character.rename') : '修改名称';
-        baseRow.appendChild(renameBtn);
-    }
-    form.appendChild(baseRow);
-    // 渲染自定义项
-    Object.keys(cat).forEach(k => {
-        // 隐藏系统内部使用的VRM配置字段
-        if (!["live2d", "voice_id", "system_prompt", "档案名", "vrm", "model_type", "vrm_animation"].includes(k)) {
-            const row = document.createElement('div');
-            row.className = 'field-row custom-row';
-            const deleteFieldText = window.t ? window.t('character.deleteField') : '删除设定';
-
-            const labelEl = document.createElement('label');
-            labelEl.textContent = k;
-            row.appendChild(labelEl);
-
-            const textareaEl = document.createElement('textarea');
-            textareaEl.name = k;
-            textareaEl.rows = 1;
-            textareaEl.placeholder = '可输入详细描述';
-            textareaEl.value = cat[k];
-            row.appendChild(textareaEl);
-
-            // VRM相关字段不允许删除
-            const protectedFields = ['vrm', 'model_type', 'vrm_animation'];
-            if (!protectedFields.includes(k)) {
-                const delBtn = document.createElement('button');
-                delBtn.type = 'button';
-                delBtn.className = 'btn sm delete';
-                delBtn.style.marginLeft = '8px';
-                delBtn.textContent = deleteFieldText;
-                delBtn.addEventListener('click', function() { deleteCatgirlField(this); });
-                row.appendChild(delBtn);
-            }
-
-            form.appendChild(row);
-
-            // 为渲染的textarea添加自动调整高度功能
-            attachTextareaAutoResize(textareaEl);
-        }
-    });
-    // 渲染进阶设定
-    // 进阶设定（使用 DOM API）
-    const fold = document.createElement('div');
-    fold.className = 'fold';
-
-    const foldToggle = document.createElement('div');
-    foldToggle.className = 'fold-toggle';
-    foldToggle.textContent = window.t ? window.t('character.advancedSettings') : '进阶设定';
-    const arrowSpan = document.createElement('span');
-    arrowSpan.className = 'arrow';
-    arrowSpan.textContent = '▼';
-    foldToggle.appendChild(document.createTextNode(' '));
-    foldToggle.appendChild(arrowSpan);
-    fold.appendChild(foldToggle);
-
-    const foldContent = document.createElement('div');
-    foldContent.className = 'fold-content';
-
-    // 根据模型类型决定显示哪个
-    const modelType = cat['model_type'] || (cat['vrm'] ? 'vrm' : (cat['live2d'] ? 'live2d' : null));
-    
-    // 如果是VRM模式，只显示VRM行
-    if (modelType === 'vrm') {
-        // vrm row
-        const vrmRow = document.createElement('div');
-        vrmRow.className = 'field-row';
-        const vrmLabel = document.createElement('label');
-        vrmLabel.textContent = 'vrm';
-        vrmRow.appendChild(vrmLabel);
-        const vrmLink = document.createElement('span');
-        vrmLink.className = 'vrm-link';
-        vrmLink.style.cursor = 'pointer';
-        vrmLink.style.color = '#4f8cff';
-        vrmLink.title = window.t ? window.t('character.manageVRM') : '点击管理VRM模型';
-        // 显示VRM模型路径（如果有），否则显示"未设置"
-        if (cat['vrm']) {
-            // 从路径中提取模型名称
-            const vrmPath = cat['vrm'];
-            const vrmName = vrmPath.split('/').pop().replace('.vrm', '') || vrmPath;
-            vrmLink.textContent = vrmName;
-        } else {
-            vrmLink.textContent = window.t ? window.t('character.vrmNotSet') : '未设置';
-        }
-        vrmRow.appendChild(vrmLink);
-        foldContent.appendChild(vrmRow);
-    } 
-    // 如果是Live2D模式或未设置，只显示Live2D行
-    else {
-        // live2d row
-        const live2dRow = document.createElement('div');
-        live2dRow.className = 'field-row';
-        const live2dLabel = document.createElement('label');
-        live2dLabel.textContent = 'live2d';
-        live2dRow.appendChild(live2dLabel);
-        const live2dLink = document.createElement('span');
-        live2dLink.className = 'live2d-link';
-        live2dLink.title = window.t ? window.t('character.manageLive2D') : '点击管理Live2D模型';
-        live2dLink.textContent = cat['live2d'] ? cat['live2d'] : (window.t ? window.t('character.live2dNotSet') : '未设置');
-        live2dRow.appendChild(live2dLink);
-        foldContent.appendChild(live2dRow);
-    }
-
-    // voice_id row
-    const voiceRow = document.createElement('div');
-    voiceRow.className = 'field-row';
-    const voiceLabel = document.createElement('label');
-    voiceLabel.textContent = 'voice_id';
-    voiceRow.appendChild(voiceLabel);
-    const voiceSelect = document.createElement('select');
-    voiceSelect.name = 'voice_id';
-    voiceSelect.className = 'form-control';
-    voiceSelect.style.flex = '1';
-    const defaultOption = document.createElement('option');
-    defaultOption.value = '';
-    defaultOption.textContent = window.t ? window.t('character.voiceNotSet') : '未指定音色';
-    voiceSelect.appendChild(defaultOption);
-    voiceRow.appendChild(voiceSelect);
-    const registerVoiceBtn = document.createElement('button');
-    registerVoiceBtn.type = 'button';
-    registerVoiceBtn.className = 'btn sm';
-    registerVoiceBtn.textContent = window.t ? window.t('character.registerNewVoice') : '注册新声音';
-    registerVoiceBtn.addEventListener('click', function() { openVoiceClone(key || ''); });
-    voiceRow.appendChild(registerVoiceBtn);
-    foldContent.appendChild(voiceRow);
-
-    // system_prompt fold
-    const innerFold = document.createElement('div');
-    innerFold.className = 'fold';
-    const hr = document.createElement('hr');
-    hr.style.cssText = 'border: none; border-top: 1px solid #e0e0e0; margin: 8px 0;';
-    innerFold.appendChild(hr);
-    const sysToggle = document.createElement('div');
-    sysToggle.className = 'fold-toggle';
-    sysToggle.style.color = '#888';
-    sysToggle.style.fontStyle = 'italic';
-    sysToggle.textContent = 'system_prompt ';
-    const sysArrow = document.createElement('span');
-    sysArrow.className = 'arrow';
-    sysArrow.textContent = '▼';
-    sysToggle.appendChild(sysArrow);
-    innerFold.appendChild(sysToggle);
-    const sysContent = document.createElement('div');
-    sysContent.className = 'fold-content';
-    const sysTextarea = document.createElement('textarea');
-    sysTextarea.name = 'system_prompt';
-    sysTextarea.rows = 5;
-    sysTextarea.style.width = '100%';
-    sysTextarea.placeholder = window.t ? window.t('character.systemPrompt') : '系统指令（谨慎修改）';
-    sysTextarea.value = cat['system_prompt'] || '';
-    sysContent.appendChild(sysTextarea);
-    attachTextareaAutoResize(sysTextarea);
-    innerFold.appendChild(sysContent);
-    foldContent.appendChild(innerFold);
-
-    fold.appendChild(foldContent);
-    form.appendChild(fold);
-
-    // 操作按钮区
-    const btnArea = document.createElement('div');
-    btnArea.className = 'btn-area';
-    btnArea.style.textAlign = 'right';
-    btnArea.style.marginTop = '10px';
-
-    const addFieldBtn = document.createElement('button');
-    addFieldBtn.type = 'button';
-    addFieldBtn.className = 'btn sm add';
-    addFieldBtn.id = 'add-catgirl-field-btn';
-    addFieldBtn.textContent = window.t ? window.t('character.addField') : '新增设定';
-    btnArea.appendChild(addFieldBtn);
-
-    const saveButton = document.createElement('button');
-    saveButton.type = 'submit';
-    saveButton.className = 'btn sm';
-    saveButton.id = 'save-button';
-    saveButton.style.display = 'none';
-    saveButton.textContent = isNew ? (window.t ? window.t('character.confirmNewCatgirl') : '确认新猫娘') : (window.t ? window.t('character.saveChanges') : '保存修改');
-    btnArea.appendChild(saveButton);
-
-    const cancelButton = document.createElement('button');
-    cancelButton.type = 'button';
-    cancelButton.className = 'btn sm';
-    cancelButton.id = 'cancel-button';
-    cancelButton.style.display = 'none';
-    cancelButton.textContent = window.t ? window.t('character.cancel') : '取消';
-    cancelButton.addEventListener('click', function() {
-        if (form.querySelector('#save-button')) form.querySelector('#save-button').style.display = 'none';
-        if (form.querySelector('#cancel-button')) form.querySelector('#cancel-button').style.display = 'none';
-        loadCharacterData();
-    });
-    btnArea.appendChild(cancelButton);
-
-    form.appendChild(btnArea);
-    // live2d弹窗逻辑
-    const live2dLinkEl = form.querySelector('.live2d-link');
-    if (live2dLinkEl) {
-        live2dLinkEl.onclick = async function() {
-            const catgirlName = form.querySelector('[name="档案名"]').value;
-            if (!catgirlName) {
-                await showAlert(window.t ? window.t('character.fillProfileNameFirst') : '请先填写猫娘档案名，然后再设置Live2D模型');
-                return;
-            }
-            const url = `/l2d?lanlan_name=${encodeURIComponent(catgirlName)}`;
-            
-            // 检查是否已有该URL的窗口打开
-            if (!window._openSettingsWindows) {
-                window._openSettingsWindows = {};
-            }
-            
-            if (window._openSettingsWindows[url]) {
-                const existingWindow = window._openSettingsWindows[url];
-                // 检查窗口是否仍然打开
-                if (existingWindow && !existingWindow.closed) {
-                    // 聚焦到已存在的窗口
-                    existingWindow.focus();
-                    return;
-                }
-            }
-            
-            const popup = window.open(
-                url,
-                '_blank',
-                'toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,width=' + screen.availWidth + ',height=' + screen.availHeight + ',top=0,left=0'
-            );
-            if (!popup) {
-                await showAlert(window.t ? window.t('character.allowPopups') : '请允许弹窗！');
-                return;
-            }
-            
-            // 保存窗口引用
-            window._openSettingsWindows[url] = popup;
-            
-            popup.moveTo(0, 0);
-            popup.resizeTo(screen.availWidth, screen.availHeight);
-            const timer = setInterval(() => {
-                if (popup.closed) {
-                    clearInterval(timer);
-                    // 清除窗口引用
-                    if (window._openSettingsWindows[url] === popup) {
-                        delete window._openSettingsWindows[url];
-                    }
-                    loadCharacterData();
-                }
-            }, 500);
-        };
-    }
-    
-    // vrm弹窗逻辑（与live2d相同，都打开模型设置页面）
-    const vrmLinkEl = form.querySelector('.vrm-link');
-    if (vrmLinkEl) {
-        vrmLinkEl.onclick = async function() {
-            const catgirlName = form.querySelector('[name="档案名"]').value;
-            if (!catgirlName) {
-                await showAlert(window.t ? window.t('character.fillProfileNameFirst') : '请先填写猫娘档案名，然后再设置VRM模型');
-                return;
-            }
-            const url = `/l2d?lanlan_name=${encodeURIComponent(catgirlName)}`;
-            
-            // 检查是否已有该URL的窗口打开
-            if (!window._openSettingsWindows) {
-                window._openSettingsWindows = {};
-            }
-            
-            if (window._openSettingsWindows[url]) {
-                const existingWindow = window._openSettingsWindows[url];
-                // 检查窗口是否仍然打开
-                if (existingWindow && !existingWindow.closed) {
-                    // 聚焦到已存在的窗口
-                    existingWindow.focus();
-                    return;
+                // 兼容原有逻辑
+                const list = document.getElementById('catgirl-list');
+                // 先移除所有表单
+                Array.from(list.querySelectorAll('form')).forEach(f => f.style.display = 'none');
+                // 找到或新建表单
+                if (key) {
+                    let oldForm = document.getElementById('catgirl-form-' + key);
+                    if (oldForm) oldForm.style.display = '';
                 } else {
-                    // 窗口已关闭，清除引用
-                    delete window._openSettingsWindows[url];
+                    // 新增猫娘时，创建一个新的表单块
+                    const block = document.createElement('div');
+                    block.className = 'catgirl-block';
+                    block.appendChild(form);
+                    list.prepend(block);
                 }
             }
-            
-            const popup = window.open(
-                url,
-                '_blank',
-                'toolbar=no,location=no,status=no,menubar=no,scrollbars=yes,resizable=yes,width=' + screen.availWidth + ',height=' + screen.availHeight + ',top=0,left=0'
-            );
-            if (!popup) {
-                await showAlert(window.t ? window.t('character.allowPopups') : '请允许弹窗！');
-                return;
-            }
-            
-            // 保存窗口引用
-            window._openSettingsWindows[url] = popup;
-            
-            popup.moveTo(0, 0);
-            popup.resizeTo(screen.availWidth, screen.availHeight);
-            const timer = setInterval(() => {
-                if (popup.closed) {
-                    clearInterval(timer);
-                    // 清除窗口引用
-                    if (window._openSettingsWindows[url] === popup) {
-                        delete window._openSettingsWindows[url];
-                    }
-                    // 重新加载角色数据以更新显示
-                    loadCharacterData();
-                }
-            }, 500);
-        };
-    }
-    // 表单特定的showActionButtons封装
-    const formShowActionButtons = function() {
-        showActionButtons(form);
-    };
-    
-    // 新猫娘始终显示确认按钮
-    if (isNew) {
-        setTimeout(() => {
-            formShowActionButtons();
-        }, 0);
-    }
 
-    // 监听表单元素变化
-    function setupChangeListeners() {
-        // 为所有输入元素添加change事件监听
-        const inputs = form.querySelectorAll('input, select, textarea');
-        inputs.forEach(input => {
-            input.addEventListener('change', formShowActionButtons);
-            // 对于textarea和文本输入，也监听input事件以获得实时响应
-            if (input.type === 'text' || input.tagName === 'TEXTAREA') {
-                input.addEventListener('input', formShowActionButtons);
-            }
-        });
-        
-        // 为删除按钮添加点击事件监听
-        const deleteButtons = form.querySelectorAll('.btn.delete');
-        deleteButtons.forEach(btn => {
-            btn.addEventListener('click', formShowActionButtons);
-        });
-    }
-    
-    // 调用函数绑定事件监听器
-    setupChangeListeners();
-
-    // 新增自定义项按钮
-    form.querySelector('#add-catgirl-field-btn').onclick = async function() {
-        const key = await showPrompt(
-            window.t ? window.t('character.addCatgirlFieldPrompt') : '请输入新设定的名称（键名）', 
-            '', 
-            window.t ? window.t('character.addCatgirlFieldTitle') : '新增猫娘设定'
-        );
-        if (!key || ["档案名", "live2d", "voice_id", "system_prompt", "vrm", "model_type", "vrm_animation"].includes(key)) return;
-        if (form.querySelector(`[name='${key}']`)) { 
-            await showAlert(window.t ? window.t('character.fieldExists') : '该设定已存在'); 
-            return; 
-        }
-        const row = document.createElement('div');
-        row.className = 'field-row custom-row';
-        const deleteFieldText = window.t ? window.t('character.deleteField') : '删除设定';
-
-        const labelEl = document.createElement('label');
-        labelEl.textContent = key;
-        row.appendChild(labelEl);
-
-        const textareaEl = document.createElement('textarea');
-        textareaEl.name = key;
-        textareaEl.rows = 1;
-        textareaEl.placeholder = '可输入详细描述';
-        row.appendChild(textareaEl);
-
-        const delBtn = document.createElement('button');
-        delBtn.type = 'button';
-        delBtn.className = 'btn sm delete';
-        delBtn.style.marginLeft = '8px';
-        delBtn.textContent = deleteFieldText;
-        delBtn.addEventListener('click', function() { deleteCatgirlField(this); });
-        row.appendChild(delBtn);
-
-        form.insertBefore(row, form.querySelector('.fold'));
-        
-        // 新增字段后显示操作按钮
-        formShowActionButtons();
-        
-        // 为新添加的输入元素添加事件监听
-        const newTextarea = row.querySelector('textarea');
-        newTextarea.addEventListener('change', formShowActionButtons);
-        newTextarea.addEventListener('input', formShowActionButtons);
-        
-        // 为新增的textarea添加自动调整高度功能
-        // 为新增的textarea添加自动调整高度功能
-        attachTextareaAutoResize(newTextarea);
-        
-        const newDeleteBtn = row.querySelector('button');
-        newDeleteBtn.addEventListener('click', formShowActionButtons);
-    };
-    
-    // 设置删除字段的全局函数
-    window.deleteCatgirlField = function(btn) {
-        const fieldRow = btn.parentNode;
-        const labelEl = fieldRow.querySelector('label');
-        
-        // 检查是否是VRM相关字段，如果是则不允许删除
-        if (labelEl) {
-            const fieldName = labelEl.textContent.trim();
-            const protectedFields = ['vrm', 'model_type', 'vrm_animation'];
-            
-            if (protectedFields.includes(fieldName)) {
-                let alertMsg;
-                if (window.t) {
-                    const translated = window.t('character.cannotDeleteVRMField', { field: fieldName });
-                    alertMsg = translated.includes('{{field}}') ? `无法删除 "${fieldName}" 字段，这是VRM模型的必需配置，删除会导致模型无法正常工作。` : translated;
-                } else {
-                    alertMsg = `无法删除 "${fieldName}" 字段，这是VRM模型的必需配置，删除会导致模型无法正常工作。`;
-                }
-                showAlert(alertMsg);
-                return;
-            }
-        }
-        
-        const form = fieldRow.closest('form');
-        fieldRow.remove();
-        showActionButtons(form); // 删除字段后显示操作按钮
-    };
-
-    // 在 form.onsubmit 之前添加
-    async function loadVoices() {
-        try {
-            const response = await fetch('/api/voices');
-            const data = await response.json();
-            const select = form.querySelector('select[name="voice_id"]');
-                if (select) {
-                // 清空现有选项并使用 DOM API 创建
-                while (select.firstChild) select.removeChild(select.firstChild);
-                const voiceNotSetText = window.t ? window.t('character.voiceNotSet') : '未指定音色';
-                const defaultOption = document.createElement('option');
-                defaultOption.value = '';
-                defaultOption.textContent = voiceNotSetText;
-                select.appendChild(defaultOption);
-                // 添加音色选项
-                Object.entries(data.voices).forEach(([voiceId, voiceData]) => {
-                    const option = document.createElement('option');
-                    option.value = voiceId;
-                    option.textContent = voiceData.prefix || voiceId;
-                    if (voiceId === (cat['voice_id'] || '')) option.selected = true;
-                    select.appendChild(option);
-                });
-            }
-        } catch (error) {
-            console.error('加载音色列表失败:', error);
-        }
-    }
-
-    // 立即调用加载音色
-    loadVoices();
-
-
-
-
-
-    form.onsubmit = async function(e) {
-        e.preventDefault();
-        const fd = new FormData(form);
-        const data = {};
-        for (const [k, v] of fd.entries()) {
-            // 特殊处理voice_id字段，即使为空也要包含
-            if (k === 'voice_id') {
-                data[k] = v;
-            } else if (k && v) {
-                data[k] = v;
-            }
-        }
-        if (!data['档案名']) { 
-            await showAlert(window.t ? window.t('character.profileNameRequired') : '档案名为必填项'); 
-            return; 
-        }
-        
-        // 验证Live2D模型文件存在性
-        if (data['live2d'] && data['live2d'].trim() !== '') {
-            try {
-                const response = await fetch(`/api/characters/catgirl/l2d/${encodeURIComponent(data['档案名'])}`);
-                const modelInfo = await response.json();
-                
-                if (!modelInfo.valid) {
-                    const confirmFallback = await showConfirm(
-                        window.t ? window.t('character.live2dModelError', {name: data['档案名'], path: data['live2d']}) : `猫娘"${data['档案名']}"的Live2D模型文件不存在或已损坏。\n\n当前模型路径: ${data['live2d']}\n\n是否回退到默认模型(mao_pro)？\n\n点击"确定"使用默认模型，点击"取消"保持当前设置。`, 
-                        window.t ? window.t('character.live2dModelErrorTitle') : 'Live2D模型异常'
-                    );
-                    
-                    if (confirmFallback) {
-                        // 回退到默认模型
-                        const fallbackResponse = await fetch(`/api/characters/catgirl/l2d/${encodeURIComponent(data['档案名'])}`, {
-                            method: 'POST',
-                            headers: {'Content-Type': 'application/json'},
-                            body: JSON.stringify({ fallback_to_default: true })
-                        });
-                        const fallbackResult = await fallbackResponse.json();
-                        
-                        if (fallbackResult.success) {
-                            await showAlert(window.t ? window.t('character.fallbackToDefaultModel', {path: fallbackResult.model_path}) : `已回退到默认模型: ${fallbackResult.model_path}`);
-                            // 更新表单中的live2d字段
-                            data['live2d'] = fallbackResult.model_path;
-                        } else {
-                            await showAlert(window.t ? window.t('character.fallbackFailed') : '回退到默认模型失败，请检查模型设置');
-                        }
-                    } else {
-                        // 用户选择保持当前设置，继续保存
-                        console.warn(`用户选择保持无效的Live2D模型设置: ${data['live2d']}`);
-                    }
-                }
-            } catch (error) {
-                console.error('验证Live2D模型失败:', error);
-                const continueSave = await showConfirm(
-                    window.t ? window.t('character.cannotVerifyLive2d') : `无法验证Live2D模型文件存在性。\n\n是否继续保存？\n\n点击"确定"继续保存，点击"取消"中止保存。`, 
-                    window.t ? window.t('character.verificationFailed') : '验证失败'
-                );
-                if (!continueSave) {
-                    return;
-                }
-            }
-        }
-        
-        try {
-            console.log('提交数据:', data);
-            const response = await fetch('/api/characters/catgirl' + (isNew ? '' : '/' + encodeURIComponent(key)), {
-                method: isNew ? 'POST' : 'PUT',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            });
-            
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('API请求失败:', response.status, errorText);
-                await showAlert(window.t ? window.t('character.saveFailedWithError', {error: errorText}) : '保存失败: ' + errorText);
-                return;
-            }
-            
-            const result = await response.json();
-            console.log('保存结果:', result);
-            
-            if (result.success === false) {
-                await showAlert(result.error || (window.t ? window.t('character.saveFailed') : '保存失败'));
-                return;
-            }
-            
-            // 保存当前展开的猫娘名称，以便重新加载后自动展开
-            let formCatgirlName = data['档案名'];
-            if (formCatgirlName) {
-                // 验证并清理猫娘名称，避免特殊字符
-                formCatgirlName = formCatgirlName.trim();
-                if (formCatgirlName) {
-                    expandedCatgirlName = formCatgirlName;
-                }
-            }
-            
-            // 在重新加载数据前，隐藏当前表单的按钮
-            form.querySelector('#save-button').style.display = 'none';
-            form.querySelector('#cancel-button').style.display = 'none';
-            
-            await loadCharacterData();
-        } catch (error) {
-            console.error('保存出错:', error);
-            await showAlert(window.t ? window.t('character.saveError', {error: error.message}) : '保存时发生错误: ' + error.message);
-        }
-    };
-    // 绑定"修改名称"按钮事件
-    if (!isNew) {
-        const renameBtn = form.querySelector('#rename-catgirl-btn');
-        if (renameBtn) {
-            renameBtn.addEventListener('click', async function() {
-                await window.renameCatgirl(key);
-            });
-        }
-    }
-    // 渲染到指定容器
-    if (container) {
-        container.innerHTML = '';
-        container.appendChild(form);
-        
-        // 如果是编辑现有猫娘，尝试恢复进阶设定的展开状态
-        if (key) {
             // 初始化猫娘表单中的textarea自动调整高度功能
             setTimeout(() => {
                 initAutoResizeTextareas();
@@ -2395,11 +1735,24 @@ function showCatgirlForm(key, container) {
             }
         }
 
-        // 监听API Key变更事件
+        // 监听API Key变更事件和模型保存事件
         window.addEventListener('message', function (event) {
+            // 确保消息来源是同一域名
+            if (event.origin !== window.location.origin) {
+                return;
+            }
+            
             if (event.data && event.data.type === 'api_key_changed') {
                 // API Key已更改，刷新角色数据以显示更新后的Voice ID状态
                 console.log('API Key已更改，正在刷新角色数据...');
+                loadCharacterData();
+            } else if (event.data && event.data.action === 'reload_model') {
+                // 模型保存成功，刷新角色数据
+                console.log('收到模型保存成功消息，正在刷新角色数据...');
+                loadCharacterData();
+            } else if (event.data && event.data.action === 'model_saved') {
+                // 模型保存成功（备用消息类型）
+                console.log('收到模型保存消息，正在刷新角色数据...');
                 loadCharacterData();
             }
         });

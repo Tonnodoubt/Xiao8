@@ -18,13 +18,13 @@ class TimeIndexedMemory:
             self.engine[i] = create_engine(f"sqlite:///{time_store[i]}")
 
             _ = SQLChatMessageHistory(
-                connection=self.engine[i],
+                connection_string=f"sqlite:///{time_store[i]}",
                 session_id="",
                 table_name=TIME_ORIGINAL_TABLE_NAME,
             )
 
             _ = SQLChatMessageHistory(
-                connection=self.engine[i],
+                connection_string=f"sqlite:///{time_store[i]}",
                 session_id="",
                 table_name=TIME_COMPRESSED_TABLE_NAME,
             )
@@ -46,7 +46,8 @@ class TimeIndexedMemory:
             self.add_timestamp_column(lanlan_name)
 
     async def store_conversation(self, event_id, messages, lanlan_name, timestamp=None):
-        # 检查角色是否存在于配置中，如果不存在则创建默认路径
+        # 获取角色配置和数据库路径
+        db_path = None
         try:
             _, _, _, _, _, _, _, time_store, _, _ = get_config_manager().get_character_data()
             
@@ -58,20 +59,22 @@ class TimeIndexedMemory:
                 memory_base = str(config_mgr.memory_dir)
                 default_path = os.path.join(memory_base, f'time_indexed_{lanlan_name}')
                 time_store[lanlan_name] = default_path
+                db_path = default_path
                 logger.info(f"[TimeIndexedMemory] 角色 '{lanlan_name}' 不在配置中，使用默认路径: {default_path}")
+            else:
+                db_path = time_store[lanlan_name]
             
             # 确保数据库引擎存在
             if lanlan_name not in self.engine:
                 # 创建数据库引擎和表
-                db_path = time_store[lanlan_name]
                 self.engine[lanlan_name] = create_engine(f"sqlite:///{db_path}")
                 _ = SQLChatMessageHistory(
-                    connection=self.engine[lanlan_name],
+                    connection_string=f"sqlite:///{db_path}",
                     session_id="",
                     table_name=TIME_ORIGINAL_TABLE_NAME,
                 )
                 _ = SQLChatMessageHistory(
-                    connection=self.engine[lanlan_name],
+                    connection_string=f"sqlite:///{db_path}",
                     session_id="",
                     table_name=TIME_COMPRESSED_TABLE_NAME,
                 )
@@ -86,15 +89,16 @@ class TimeIndexedMemory:
                 config_mgr.ensure_memory_directory()
                 memory_base = str(config_mgr.memory_dir)
                 default_path = os.path.join(memory_base, f'time_indexed_{lanlan_name}')
+                db_path = default_path
                 if lanlan_name not in self.engine:
                     self.engine[lanlan_name] = create_engine(f"sqlite:///{default_path}")
                     _ = SQLChatMessageHistory(
-                        connection=self.engine[lanlan_name],
+                        connection_string=f"sqlite:///{default_path}",
                         session_id="",
                         table_name=TIME_ORIGINAL_TABLE_NAME,
                     )
                     _ = SQLChatMessageHistory(
-                        connection=self.engine[lanlan_name],
+                        connection_string=f"sqlite:///{default_path}",
                         session_id="",
                         table_name=TIME_COMPRESSED_TABLE_NAME,
                     )
@@ -107,18 +111,21 @@ class TimeIndexedMemory:
         if timestamp is None:
             timestamp = datetime.now()
 
-        if lanlan_name not in self.engine:
-            logger.error(f"角色 '{lanlan_name}' 的数据库引擎不存在")
+        if lanlan_name not in self.engine or db_path is None:
+            logger.error(f"角色 '{lanlan_name}' 的数据库引擎不存在或路径未设置")
             return
 
+        # 使用已确定的数据库路径构建连接字符串
+        connection_string = f"sqlite:///{db_path}"
+        
         origin_history = SQLChatMessageHistory(
-            connection=self.engine[lanlan_name],
+            connection_string=connection_string,
             session_id=event_id,
             table_name=TIME_ORIGINAL_TABLE_NAME,
         )
 
         compressed_history = SQLChatMessageHistory(
-            connection=self.engine[lanlan_name],
+            connection_string=connection_string,
             session_id=event_id,
             table_name=TIME_COMPRESSED_TABLE_NAME,
         )

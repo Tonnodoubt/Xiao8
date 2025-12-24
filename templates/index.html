@@ -1429,8 +1429,54 @@
                     // 使用 URL 中的 lanlan_name（如果有），否则使用 API 返回的
                     lanlan_config.lanlan_name = lanlanNameFromUrl || data.lanlan_name || "";
                     window.lanlan_config = lanlan_config;
-                    cubism4Model = data.model_path || "";
-                    window.cubism4Model = cubism4Model;
+                    
+                    // 检查角色配置，如果是 VRM 模型，不设置 cubism4Model
+                    // 使用 Promise.race 设置超时，避免阻塞页面加载
+                    try {
+                        const checkConfigPromise = fetch('/api/characters').then(response => {
+                            if (response.ok) {
+                                return response.json();
+                            }
+                            return null;
+                        });
+                        
+                        const timeoutPromise = new Promise(resolve => setTimeout(() => resolve(null), 2000));
+                        const charactersData = await Promise.race([checkConfigPromise, timeoutPromise]);
+                        
+                        if (charactersData) {
+                            const currentLanlanName = lanlan_config.lanlan_name || charactersData['当前猫娘'];
+                            const catgirlConfig = charactersData['猫娘']?.[currentLanlanName];
+                            
+                            if (catgirlConfig) {
+                                const vrmModelPath = catgirlConfig.vrm;
+                                const modelType = catgirlConfig.model_type || (vrmModelPath ? 'vrm' : 'live2d');
+                                
+                                if (modelType === 'vrm' && vrmModelPath) {
+                                    // VRM 模型：不设置 cubism4Model，让 loadModelBasedOnCharacterConfig 处理
+                                    cubism4Model = "";
+                                    window.cubism4Model = "";
+                                    console.log('检测到VRM模型配置，跳过设置 cubism4Model');
+                                } else {
+                                    // Live2D 模型：使用 API 返回的 model_path
+                                    cubism4Model = data.model_path || "";
+                                    window.cubism4Model = cubism4Model;
+                                }
+                            } else {
+                                // 如果无法获取角色配置，使用默认值
+                                cubism4Model = data.model_path || "";
+                                window.cubism4Model = cubism4Model;
+                            }
+                        } else {
+                            // 如果获取角色配置失败或超时，使用默认值
+                            cubism4Model = data.model_path || "";
+                            window.cubism4Model = cubism4Model;
+                        }
+                    } catch (error) {
+                        console.warn('检查角色配置失败，使用默认 model_path:', error);
+                        // 如果检查失败，使用默认值
+                        cubism4Model = data.model_path || "";
+                        window.cubism4Model = cubism4Model;
+                    }
 
                     // 动态设置页面标题
                     document.title = `${lanlan_config.lanlan_name} Terminal - Project N.E.K.O.`;
@@ -1550,9 +1596,9 @@
                             await loadModelBasedOnCharacterConfig();
                             break;
                     }
-                } catch (e) {
-                    console.error('处理页面消息失败:', e);
                 }
+            } catch (e) {
+                console.error('处理页面消息失败:', e);
             }
         }
     }
@@ -1635,7 +1681,6 @@
 
             if (live2dContainer) {
                 live2dContainer.style.display = '';
->>>>>>> upstream/main
             }
             if (chatContainer) {
                 chatContainer.style.display = '';
@@ -1664,12 +1709,25 @@
                 currentLanlanName = lanlan_config.lanlan_name = charactersData['当前猫娘'];
                 console.log('AFTER currentLanlanName: ', currentLanlanName);
 
-                // 从猫娘配置中获取当前角色的 live2d 模型名称
+                // 从猫娘配置中获取当前角色的模型配置
                 const catgirlConfig = charactersData['猫娘']?.[currentLanlanName];
                 if (!catgirlConfig) {
                     console.warn(`未找到角色 ${currentLanlanName} 的配置，跳过模型检查`);
                     return;
                 }
+                
+                // 检查模型类型（VRM 或 Live2D）
+                const vrmModelPath = catgirlConfig.vrm;
+                const modelType = catgirlConfig.model_type || (vrmModelPath ? 'vrm' : 'live2d');
+                
+                // 如果是VRM模型，使用 loadModelBasedOnCharacterConfig 函数加载
+                if (modelType === 'vrm' && vrmModelPath) {
+                    console.log('检测到VRM模型配置，使用 loadModelBasedOnCharacterConfig 加载');
+                    await loadModelBasedOnCharacterConfig();
+                    return;
+                }
+                
+                // Live2D 模型处理
                 const newModelName = catgirlConfig.live2d || 'mao_pro';
                 console.log('AFTER newModelName: ', newModelName);
 
@@ -1849,15 +1907,19 @@
                     if (!p || !p.model_path) return false;
                     return p.model_path === currentModelPath;
                 });
-<<<<<<< HEAD
+                
+                // 应用保存的模型参数
+                if (modelPreferences && modelPreferences.parameters && currentModel.internalModel && currentModel.internalModel.coreModel) {
+                    window.live2dManager.applyModelParameters(currentModel, modelPreferences.parameters);
+                    console.log('已应用保存的模型参数');
+                }
+                
+                console.log('=== 重新加载模型参数完成 ===');
+            } catch (error) {
+                console.error('重新加载模型参数失败:', error);
+                console.error('错误堆栈:', error.stack);
             }
-            
-            console.log('=== 重新加载模型参数完成 ===');
-        } catch (error) {
-            console.error('重新加载模型参数失败:', error);
-            console.error('错误堆栈:', error.stack);
         }
-    }
     
     // 注册localStorage事件监听器
     window.addEventListener('storage', handlePageMessage);
@@ -2409,8 +2471,11 @@
     // 等待配置加载完成后再加载 Live2D 和 app.js
     (async function() {
         try {
-            // 等待配置加载完成
-            await window.pageConfigReady;
+            // 等待配置加载完成（设置超时，避免阻塞）
+            await Promise.race([
+                window.pageConfigReady,
+                new Promise(resolve => setTimeout(resolve, 5000))
+            ]);
             
             // 动态加载 live2d 模块（按顺序加载拆分后的文件）
             const live2dModules = [
@@ -2438,7 +2503,96 @@
                 }
             }
 
-                // 如果还是没找到，尝试通过模型名称匹配
+            // 加载所有 live2d 模块
+            await loadScriptsSequentially(live2dModules);
+
+            // 等待 live2d 模块加载完成后再加载 app.js
+            const appScript = document.createElement('script');
+            appScript.src = '/static/app.js';
+            appScript.onerror = (error) => {
+                console.error('加载 app.js 失败:', error);
+            };
+            document.body.appendChild(appScript);
+        } catch (error) {
+            console.error('加载脚本时出错:', error);
+            // 即使出错也尝试加载 app.js，确保聊天功能可用
+            try {
+                const appScript = document.createElement('script');
+                appScript.src = '/static/app.js';
+                appScript.onerror = (err) => {
+                    console.error('加载 app.js 失败:', err);
+                };
+                document.body.appendChild(appScript);
+            } catch (e) {
+                console.error('无法加载 app.js:', e);
+            }
+        }
+    })();
+</script>
+<script>
+    // 重新加载模型参数（用于参数编辑器保存后）
+    async function reloadModelParameters() {
+        try {
+            console.log('=== 开始重新加载模型参数 ===');
+            const currentModel = window.live2dManager?.getCurrentModel();
+            if (!currentModel) {
+                console.log('模型未加载，跳过参数重新加载');
+                return;
+            }
+
+            // 获取当前模型路径（尝试多种方式）
+            let currentModelPath = '';
+
+            // 方式1: 从live2dManager的_lastLoadedModelPath获取（最可靠）
+            if (window.live2dManager?._lastLoadedModelPath) {
+                currentModelPath = window.live2dManager._lastLoadedModelPath;
+                console.log('使用 _lastLoadedModelPath:', currentModelPath);
+            }
+            // 方式2: 从模型的url获取
+            else if (currentModel.url) {
+                currentModelPath = currentModel.url;
+                console.log('使用 currentModel.url:', currentModelPath);
+            }
+            // 方式3: 从modelRootPath和modelName构建
+            else if (window.live2dManager?.modelRootPath && window.live2dManager?.modelName) {
+                currentModelPath = `${window.live2dManager.modelRootPath}/${window.live2dManager.modelName}.model3.json`;
+                console.log('使用 modelRootPath + modelName:', currentModelPath);
+            }
+            // 方式4: 从cubism4Model获取
+            else if (typeof cubism4Model !== 'undefined' && cubism4Model) {
+                currentModelPath = cubism4Model;
+                console.log('使用 cubism4Model:', currentModelPath);
+            }
+
+            if (!currentModelPath) {
+                console.warn('无法确定当前模型路径，跳过参数重新加载');
+                console.log('live2dManager状态:', {
+                    hasManager: !!window.live2dManager,
+                    _lastLoadedModelPath: window.live2dManager?._lastLoadedModelPath,
+                    modelRootPath: window.live2dManager?.modelRootPath,
+                    modelName: window.live2dManager?.modelName,
+                    currentModelUrl: currentModel?.url
+                });
+                return;
+            }
+
+            console.log('当前模型路径:', currentModelPath);
+
+            // 重新加载用户偏好
+            const preferences = await window.live2dManager.loadUserPreferences();
+            console.log('加载到的偏好设置数量:', preferences.length);
+            console.log('所有偏好设置的路径:', preferences.map(p => p?.model_path).filter(Boolean));
+
+            // 尝试多种匹配方式
+            let modelPreferences = null;
+
+            // 首先尝试精确匹配
+            modelPreferences = preferences.find(p => {
+                if (!p || !p.model_path) return false;
+                return p.model_path === currentModelPath;
+            });
+
+            // 如果还是没找到，尝试通过模型名称匹配
                 if (!modelPreferences && window.live2dManager?.modelName) {
                     const modelName = window.live2dManager.modelName;
                     console.log('尝试模型名称匹配:', modelName);
@@ -2585,8 +2739,11 @@
         // 等待配置加载完成后再加载 Live2D 和 app.js
         (async function () {
             try {
-                // 等待配置加载完成
-                await window.pageConfigReady;
+                // 等待配置加载完成（设置超时，避免阻塞）
+                await Promise.race([
+                    window.pageConfigReady,
+                    new Promise(resolve => setTimeout(resolve, 5000))
+                ]);
 
                 // 动态加载 live2d 模块（按顺序加载拆分后的文件）
                 const live2dModules = [
@@ -2620,9 +2777,23 @@
                 // 等待 live2d 模块加载完成后再加载 app.js
                 const appScript = document.createElement('script');
                 appScript.src = '/static/app.js';
+                appScript.onerror = (error) => {
+                    console.error('加载 app.js 失败:', error);
+                };
                 document.body.appendChild(appScript);
             } catch (error) {
                 console.error('加载脚本时出错:', error);
+                // 即使出错也尝试加载 app.js，确保聊天功能可用
+                try {
+                    const appScript = document.createElement('script');
+                    appScript.src = '/static/app.js';
+                    appScript.onerror = (err) => {
+                        console.error('加载 app.js 失败:', err);
+                    };
+                    document.body.appendChild(appScript);
+                } catch (e) {
+                    console.error('无法加载 app.js:', e);
+                }
             }
         })();
     </script>

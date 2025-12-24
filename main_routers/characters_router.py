@@ -72,6 +72,13 @@ async def get_characters(request: Request):
     # 创建深拷贝，避免修改原始配置数据
     characters_data = copy.deepcopy(_config_manager.load_characters())
     
+    # 确保主人和猫娘字段存在，使用默认值
+    defaults = _config_manager.get_default_characters()
+    if '主人' not in characters_data or not characters_data['主人']:
+        characters_data['主人'] = copy.deepcopy(defaults['主人'])
+    if '猫娘' not in characters_data or not characters_data['猫娘']:
+        characters_data['猫娘'] = copy.deepcopy(defaults['猫娘'])
+    
     # 尝试从请求参数或请求头获取用户语言
     user_language = request.query_params.get('language')
     if not user_language:
@@ -265,16 +272,22 @@ async def get_current_live2d_model(catgirl_name: str = "", item_id: str = ""):
 
 @router.put('/catgirl/l2d/{name}')
 async def update_catgirl_l2d(name: str, request: Request):
-    """更新指定猫娘的Live2D模型设置"""
+    """更新指定猫娘的模型设置（支持Live2D和VRM）"""
     try:
         data = await request.json()
+        logger.debug(f"[update_catgirl_l2d] 接收到的数据: {data}")
         live2d_model = data.get('live2d')
+        vrm_model = data.get('vrm')
+        model_type = data.get('model_type', 'live2d')  # 默认为 live2d
         item_id = data.get('item_id')  # 获取可选的item_id
         
-        if not live2d_model:
+        logger.debug(f"[update_catgirl_l2d] live2d_model={live2d_model}, vrm_model={vrm_model}, model_type={model_type}")
+        
+        # 验证至少提供了其中一种模型
+        if not live2d_model and not vrm_model:
             return JSONResponse(content={
                 'success': False,
-                'error': '未提供Live2D模型名称'
+                'error': '未提供模型信息（需要提供 live2d 或 vrm）'
             })
         
         # 加载当前角色配置
@@ -287,18 +300,39 @@ async def update_catgirl_l2d(name: str, request: Request):
         
         # 确保指定猫娘的配置存在
         if name not in characters['猫娘']:
-            return JSONResponse(
-                {'success': False, 'error': '猫娘不存在'}, 
-                status_code=404
-            )
+            characters['猫娘'][name] = {}
         
-        # 更新Live2D模型设置，同时保存item_id（如果有）
-        characters['猫娘'][name]['live2d'] = live2d_model
-        if item_id:
-            characters['猫娘'][name]['live2d_item_id'] = item_id
-            logger.debug(f"已保存角色 {name} 的模型 {live2d_model} 和item_id {item_id}")
+        # 根据模型类型保存相应的设置
+        if model_type == 'vrm' and vrm_model:
+            # VRM 模式：保存 vrm 路径和 model_type
+            characters['猫娘'][name]['vrm'] = vrm_model
+            characters['猫娘'][name]['model_type'] = 'vrm'
+            # 保存VRM动作路径（如果提供）
+            vrm_animation = data.get('vrm_animation')
+            if vrm_animation:
+                characters['猫娘'][name]['vrm_animation'] = vrm_animation
+                logger.debug(f"已保存角色 {name} 的 VRM 动作: {vrm_animation}")
+            # 清除 Live2D 相关设置（如果存在）
+            if 'live2d' in characters['猫娘'][name]:
+                del characters['猫娘'][name]['live2d']
+            if 'live2d_item_id' in characters['猫娘'][name]:
+                del characters['猫娘'][name]['live2d_item_id']
+            logger.debug(f"已保存角色 {name} 的 VRM 模型: {vrm_model}")
         else:
-            logger.debug(f"已保存角色 {name} 的模型 {live2d_model}")
+            # Live2D 模式：保存 live2d 模型名称和 model_type
+            if live2d_model:
+                characters['猫娘'][name]['live2d'] = live2d_model
+                characters['猫娘'][name]['model_type'] = 'live2d'
+                if item_id:
+                    characters['猫娘'][name]['live2d_item_id'] = item_id
+                    logger.debug(f"已保存角色 {name} 的模型 {live2d_model} 和item_id {item_id}")
+                else:
+                    logger.debug(f"已保存角色 {name} 的模型 {live2d_model}")
+                # 清除 VRM 相关设置（如果存在）
+                if 'vrm' in characters['猫娘'][name]:
+                    del characters['猫娘'][name]['vrm']
+                if 'vrm_animation' in characters['猫娘'][name]:
+                    del characters['猫娘'][name]['vrm_animation']
         
         # 保存配置
         _config_manager.save_characters(characters)
@@ -306,13 +340,14 @@ async def update_catgirl_l2d(name: str, request: Request):
         initialize_character_data = get_initialize_character_data()
         await initialize_character_data()
         
+        model_display = vrm_model if model_type == 'vrm' else live2d_model
         return JSONResponse(content={
             'success': True,
-            'message': f'已更新角色 {name} 的Live2D模型为 {live2d_model}'
+            'message': f'已更新角色 {name} 的{model_type.upper()}模型为 {model_display}'
         })
         
     except Exception as e:
-        logger.error(f"更新角色Live2D模型失败: {e}")
+        logger.error(f"更新角色模型失败: {e}")
         return JSONResponse(content={
             'success': False,
             'error': str(e)

@@ -13,7 +13,7 @@ Live2DManager.prototype.setupHTMLLockIcon = function (model) {
         return;
     }
 
-    // 在 l2d_manager 等页面，默认解锁并可交互
+    // 在 model_manager 等页面，默认解锁并可交互
     if (!document.getElementById('chat-container')) {
         this.isLocked = false;
         container.style.pointerEvents = 'auto';
@@ -137,7 +137,7 @@ Live2DManager.prototype.setupFloatingButtons = function (model) {
         return;
     }
 
-    // 在 l2d_manager 等页面不显示
+    // 在 model_manager 等页面不显示
     if (!document.getElementById('chat-container')) {
         this.isLocked = false;
         container.style.pointerEvents = 'auto';

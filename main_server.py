@@ -1605,10 +1605,11 @@ async def proactive_chat(request: Request):
             "detail": str(e)
         }, status_code=500)
 
-@app.get("/l2d", response_class=HTMLResponse)
-async def get_l2d_manager(request: Request):
-    """渲染Live2D模型管理器页面"""
-    return templates.TemplateResponse("templates/l2d_manager.html", {
+@app.get("/model", response_class=HTMLResponse)
+@app.get("/l2d", response_class=HTMLResponse)  # 向后兼容别名
+async def get_model_manager(request: Request):
+    """渲染模型管理器页面（支持Live2D和VRM）"""
+    return templates.TemplateResponse("templates/model_manager.html", {
         "request": request
     })
 
