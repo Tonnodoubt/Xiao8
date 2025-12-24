@@ -293,6 +293,44 @@
             visibility: hidden;
         }
 
+        #vrm-container {
+            position: fixed;
+            right: 0px;
+            bottom: 0px;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+            background: none;
+            opacity: 1;
+            overflow: hidden;
+            visibility: visible;
+            transition: all 1s ease-in-out, height 0ms 1s, width 0ms 1s, visibility 0ms 1s;
+        }
+
+        #vrm-container.minimized {
+            right: -800px;
+            opacity: 0;
+            visibility: hidden;
+        }
+
+        #vrm-canvas {
+            right: 0;
+            bottom: 0;
+            pointer-events: none;
+            display: block;
+            opacity: 1;
+            visibility: visible;
+            background: transparent;
+            width: 100%;
+            height: 100%;
+        }
+
+        #vrm-canvas.minimized {
+            opacity: 0;
+            visibility: hidden;
+        }
+
         #chat-container {
             margin-bottom: 50px;
             pointer-events: auto;
@@ -1366,6 +1404,10 @@
     <div id="live2d-container">
         <canvas id="live2d-canvas"></canvas>
     </div>
+    <!-- VRM模型容器 -->
+    <div id="vrm-container" style="display: none;">
+        <canvas id="vrm-canvas"></canvas>
+    </div>
 
     <script>
         // 页面配置 - 从 URL 或 API 获取
@@ -1374,6 +1416,7 @@
         };
         window.lanlan_config = lanlan_config;
         let cubism4Model = "";
+        let vrmModel = "";
 
         // 异步获取页面配置
         async function loadPageConfig() {
@@ -1402,19 +1445,35 @@
                     // 使用 URL 中的 lanlan_name（如果有），否则使用 API 返回的
                     lanlan_config.lanlan_name = lanlanNameFromUrl || data.lanlan_name || "";
                     window.lanlan_config = lanlan_config;
-                    cubism4Model = data.model_path || "";
-                    window.cubism4Model = cubism4Model;
+                    const modelPath = data.model_path || "";
+                    // 根据文件扩展名判断是Live2D还是VRM
+                    if (modelPath.toLowerCase().endsWith('.vrm')) {
+                        vrmModel = modelPath;
+                        window.vrmModel = vrmModel;
+                        cubism4Model = "";
+                        window.cubism4Model = "";
+                    } else {
+                        cubism4Model = modelPath;
+                        window.cubism4Model = cubism4Model;
+                        vrmModel = "";
+                        window.vrmModel = "";
+                    }
 
                     // 动态设置页面标题
                     document.title = `${lanlan_config.lanlan_name} Terminal - Project N.E.K.O.`;
 
-                    console.log('页面配置加载成功:', { lanlan_name: lanlan_config.lanlan_name, model_path: cubism4Model });
+                    console.log('页面配置加载成功:', { 
+                        lanlan_name: lanlan_config.lanlan_name, 
+                        live2d_model: cubism4Model,
+                        vrm_model: vrmModel 
+                    });
                     return true;
                 } else {
                     console.error('获取页面配置失败:', data.error);
                     // 使用默认值
                     lanlan_config.lanlan_name = "";
                     cubism4Model = "";
+                    vrmModel = "";
                     return false;
                 }
             } catch (error) {
@@ -1422,6 +1481,7 @@
                 // 使用默认值
                 lanlan_config.lanlan_name = "";
                 cubism4Model = "";
+                vrmModel = "";
                 return false;
             }
         }
@@ -1915,6 +1975,9 @@
     <script src="/static/libs/live2d.min.js"></script> <!-- Cubism 2.1核心库（支持旧模型） -->
     <script src="/static/libs/pixi.min.js"></script> <!-- PixiJS v7 CDN -->
     <script src="/static/libs/index.min.js"></script> <!-- pixi-live2d-display v0.5.0-ls-6（RaSan147 fork，支持v7） -->
+    <!-- Three.js和three-vrm库 -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.0.0/dist/three-vrm.min.js"></script>
     <!-- i18next 已在 head 中加载，这里不再需要 -->
     <!-- OGG OPUS WASM 解码器 (@wasm-audio-decoders/ogg-opus-decoder) -->
     <script>window.webpackChunkogg_opus_decoder = window.webpackChunkogg_opus_decoder || [];</script>
@@ -1955,6 +2018,24 @@
 
                 // 加载所有 live2d 模块
                 await loadScriptsSequentially(live2dModules);
+
+                // 加载VRM管理器
+                const vrmManagerScript = document.createElement('script');
+                vrmManagerScript.src = '/static/vrm-manager.js';
+                await new Promise((resolve, reject) => {
+                    vrmManagerScript.onload = resolve;
+                    vrmManagerScript.onerror = reject;
+                    document.body.appendChild(vrmManagerScript);
+                });
+
+                // 加载VRM初始化脚本
+                const vrmInitScript = document.createElement('script');
+                vrmInitScript.src = '/static/vrm-init.js';
+                await new Promise((resolve, reject) => {
+                    vrmInitScript.onload = resolve;
+                    vrmInitScript.onerror = reject;
+                    document.body.appendChild(vrmInitScript);
+                });
 
                 // 等待 live2d 模块加载完成后再加载 app.js
                 const appScript = document.createElement('script');

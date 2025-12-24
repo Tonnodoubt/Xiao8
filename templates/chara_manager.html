@@ -1010,7 +1010,7 @@
             live2dRow.appendChild(live2dLabel);
             const live2dLink = document.createElement('span');
             live2dLink.className = 'live2d-link';
-            live2dLink.title = window.t ? window.t('character.manageLive2D') : '点击管理Live2D模型';
+            live2dLink.title = window.t ? window.t('character.manageModel') : '点击管理模型';
             live2dLink.textContent = cat['live2d'] ? cat['live2d'] : (window.t ? window.t('character.live2dNotSet') : '未设置');
             live2dRow.appendChild(live2dLink);
             foldContent.appendChild(live2dRow);
@@ -1114,7 +1114,7 @@
                         await showAlert(window.t ? window.t('character.fillProfileNameFirst') : '请先填写猫娘档案名，然后再设置Live2D模型');
                         return;
                     }
-                    const url = `/l2d?lanlan_name=${encodeURIComponent(catgirlName)}`;
+                    const url = `/model_manager?lanlan_name=${encodeURIComponent(catgirlName)}`;
 
                     // 检查是否已有该URL的窗口打开
                     if (!window._openSettingsWindows) {

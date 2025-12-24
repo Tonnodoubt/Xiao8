@@ -800,6 +800,7 @@
   "settings": {
     "menu": {
       "live2dSettings": "Live2D设置",
+      "modelSettings": "模型管理",
       "apiKeys": "API密钥",
       "characterManage": "角色管理",
       "voiceClone": "声音克隆",

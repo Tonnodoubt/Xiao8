@@ -48,6 +48,10 @@ class ConfigManager:
         self.config_dir = self.app_docs_dir / "config"
         self.memory_dir = self.app_docs_dir / "memory"
         self.live2d_dir = self.app_docs_dir / "live2d"
+        # VRM模型存储在项目目录下的static/vrm（使用动态路径，无硬编码）
+        project_root = self._get_project_root()
+        self.vrm_dir = project_root / "static" / "vrm"
+        self.vrm_animation_dir = self.vrm_dir / "animation"  # VRMA动画文件目录
         self.workshop_dir = self.app_docs_dir / "workshop"
         self.chara_dir = self.app_docs_dir / "character_cards"
 
@@ -194,6 +198,20 @@ class ConfigManager:
         self._log(f"[ConfigManager] ⚠ All document directories failed, using fallback: {fallback}")
         return fallback
     
+    def _get_project_root(self):
+        """获取项目根目录"""
+        if getattr(sys, 'frozen', False):
+            # 如果是打包后的exe（PyInstaller）
+            if hasattr(sys, '_MEIPASS'):
+                # 单文件模式：使用临时解压目录
+                return Path(sys._MEIPASS)
+            else:
+                # 多文件模式：使用 exe 同目录
+                return Path(sys.executable).parent
+        else:
+            # 开发模式：使用当前工作目录
+            return Path.cwd()
+    
     def _get_project_config_directory(self):
         """获取项目的config目录"""
         if getattr(sys, 'frozen', False):
@@ -303,6 +321,18 @@ class ConfigManager:
             return True
         except Exception as e:
             print(f"Warning: Failed to create live2d directory: {e}", file=sys.stderr)
+            return False
+        
+    def ensure_vrm_directory(self):
+        """确保项目目录下的vrm目录和animation子目录存在"""
+        try:
+            # 创建vrm目录
+            self.vrm_dir.mkdir(parents=True, exist_ok=True)
+            # 创建animation子目录
+            self.vrm_animation_dir.mkdir(parents=True, exist_ok=True)
+            return True
+        except Exception as e:
+            print(f"Warning: Failed to create vrm directory: {e}", file=sys.stderr)
             return False
         
     def ensure_chara_directory(self):

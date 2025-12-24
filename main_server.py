@@ -362,11 +362,31 @@ app.mount("/static", CustomStaticFiles(directory=static_dir), name="static")
 # 挂载用户文档下的live2d目录（只在主进程中执行，子进程不提供HTTP服务）
 if _IS_MAIN_PROCESS:
     _config_manager.ensure_live2d_directory()
+    _config_manager.ensure_vrm_directory()
     _config_manager.ensure_chara_directory()
     user_live2d_path = str(_config_manager.live2d_dir)
     if os.path.exists(user_live2d_path):
         app.mount("/user_live2d", CustomStaticFiles(directory=user_live2d_path), name="user_live2d")
         logger.info(f"已挂载用户Live2D目录: {user_live2d_path}")
+    
+    # 挂载VRM模型目录（项目目录下的static/vrm）
+    user_vrm_path = str(_config_manager.vrm_dir)
+    if os.path.exists(user_vrm_path):
+        app.mount("/user_vrm", CustomStaticFiles(directory=user_vrm_path), name="user_vrm")
+        logger.info(f"已挂载VRM目录: {user_vrm_path}")
+    
+    # 挂载VRM动画目录（static/vrm/animation）
+    vrm_animation_path = str(_config_manager.vrm_animation_dir)
+    if os.path.exists(vrm_animation_path):
+        app.mount("/user_vrm/animation", CustomStaticFiles(directory=vrm_animation_path), name="user_vrm_animation")
+        logger.info(f"已挂载VRM动画目录: {vrm_animation_path}")
+    
+    # 挂载models/vrm/animations目录（如果存在）
+    project_root = _config_manager._get_project_root()
+    models_animations_path = str(project_root / "models" / "vrm" / "animations")
+    if os.path.exists(models_animations_path):
+        app.mount("/models/vrm/animations", CustomStaticFiles(directory=models_animations_path), name="models_vrm_animations")
+        logger.info(f"已挂载models/vrm/animations目录: {models_animations_path}")
 
     # 挂载用户mod路径
     user_mod_path = _config_manager.get_workshop_path()

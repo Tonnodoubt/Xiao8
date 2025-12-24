@@ -663,7 +663,7 @@
                 // 获取当前URL参数，保留lanlan_name等参数
                 const urlParams = new URLSearchParams(window.location.search);
                 const lanlanName = urlParams.get('lanlan_name');
-                let targetUrl = '/l2d';
+                let targetUrl = '/model_manager';
                 if (lanlanName) {
                     targetUrl += `?lanlan_name=${encodeURIComponent(lanlanName)}`;
                 }
