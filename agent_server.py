@@ -15,7 +15,7 @@ import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
-from config import TOOL_SERVER_PORT, MAIN_SERVER_PORT
+from config import TOOL_SERVER_PORT, MAIN_SERVER_PORT ,USER_PLUGIN_SERVER_PORT
 from brain.processor import Processor
 from brain.planner import TaskPlanner
 from brain.analyzer import ConversationAnalyzer
@@ -50,7 +50,7 @@ class Modules:
     computer_use_running: bool = False
     active_computer_use_task_id: Optional[str] = None
     # Agent feature flags (controlled by UI)
-    agent_flags: Dict[str, Any] = {"mcp_enabled": False, "computer_use_enabled": False}
+    agent_flags: Dict[str, Any] = {"mcp_enabled": False, "computer_use_enabled": False, "user_plugin_enabled": False}
     # Notification queue for frontend (one-time messages)
     notification: Optional[str] = None
     # 使用统一的速率限制日志记录器（业务逻辑层面）
@@ -222,7 +222,7 @@ def _spawn_task(kind: str, args: Dict[str, Any]) -> Dict[str, Any]:
                     try:
                         async with httpx.AsyncClient(timeout=0.5) as _client:
                             await _client.post(
-                                f"http://localhost:{MAIN_SERVER_PORT}/api/notify_task_result",
+                                f"http://localhost:{MAIN_SERVER_PORT}/api/agent/notify_task_result",
                                 json={"text": summary[:240], "lanlan_name": info.get("lanlan_name")},
                             )
                     except Exception:
@@ -315,7 +315,7 @@ async def _poll_results_loop():
                         pass
                     async with httpx.AsyncClient(timeout=0.5) as _client:
                         await _client.post(
-                            f"http://localhost:{MAIN_SERVER_PORT}/api/notify_task_result",
+                            f"http://localhost:{MAIN_SERVER_PORT}/api/agent/notify_task_result",
                             json={"text": summary, "lanlan_name": info.get("lanlan_name")},
                         )
                 except Exception:
@@ -363,13 +363,41 @@ async def _background_analyze_and_plan(messages: list[dict[str, Any]], lanlan_na
         return
     
     try:
+        # testUserPlugin: log before analysis when user_plugin_enabled is true
+        try:
+            if Modules.agent_flags.get("user_plugin_enabled", False):
+                logger.debug("testUserPlugin: Starting analyze_and_execute with user_plugin_enabled = True")
+        except Exception:
+            pass
+
         # 一步完成：分析 + 执行
         result = await Modules.task_executor.analyze_and_execute(
             messages=messages,
             lanlan_name=lanlan_name,
             agent_flags=Modules.agent_flags
         )
-        
+
+        # testUserPlugin: log after analysis decision if user_plugin_enabled is true
+        try:
+            if Modules.agent_flags.get("user_plugin_enabled", False):
+                logger.debug("testUserPlugin: analyze_and_execute completed, checking result for user plugin involvement")
+                # If result indicates user_plugin execution or decision, log succinct info
+                if result is None:
+                    logger.debug("testUserPlugin: analyze_and_execute returned None (no task detected)")
+                else:
+                    # Attempt to surface if user_plugin was chosen or considered
+                    try:
+                        logger.debug(
+                            "testUserPlugin: execution_method=%s, success=%s, tool_name=%s",
+                            getattr(result, "execution_method", None),
+                            getattr(result, "success", None),
+                            getattr(result, "tool_name", None),
+                        )
+                    except Exception:
+                        logger.debug("testUserPlugin: analyze_and_execute returned result but failed to introspect details")
+        except Exception:
+            pass
+
         if result is None:
             # 没有检测到任务
             return
@@ -404,7 +432,7 @@ async def _background_analyze_and_plan(messages: list[dict[str, Any]], lanlan_na
                 try:
                     async with httpx.AsyncClient(timeout=0.5) as _client:
                         await _client.post(
-                            f"http://localhost:{MAIN_SERVER_PORT}/api/notify_task_result",
+                            f"http://localhost:{MAIN_SERVER_PORT}/api/agent/notify_task_result",
                             json={"text": summary[:240], "lanlan_name": lanlan_name},
                         )
                     logger.info(f"[TaskExecutor] ✅ MCP task completed and notified: {result.task_description}")
@@ -450,6 +478,37 @@ async def startup():
         await Modules.task_executor.refresh_capabilities()
     except Exception:
         pass
+
+    try:
+        import httpx
+
+        async def _http_plugin_provider(force_refresh: bool = False):
+            url = f"http://localhost:{USER_PLUGIN_SERVER_PORT}/plugins"
+            if force_refresh:
+                url += "?refresh=true"
+            try:
+                async with httpx.AsyncClient(timeout=1.0) as client:
+                    r = await client.get(url)
+                    if r.status_code == 200:
+                        try:
+                            data = r.json()
+                        except Exception as parse_err:
+                            logger.debug(f"[Agent] plugin_list_provider parse error: {parse_err}")
+                            data = {}
+                        return data.get("plugins", []) or []
+            except Exception as e:
+                logger.debug(f"[Agent] plugin_list_provider http fetch failed: {e}")
+            return []
+
+        # inject http-based provider so DirectTaskExecutor can pick up user_plugin_server plugins
+        try:
+            Modules.task_executor.set_plugin_list_provider(_http_plugin_provider)
+            logger.info("[Agent] Registered http plugin_list_provider for task_executor")
+        except Exception as e:
+            logger.warning(f"[Agent] Failed to inject plugin_list_provider into task_executor: {e}")
+    except Exception as e:
+        logger.warning(f"[Agent] Failed to set http plugin_list_provider: {e}")
+
     # Start result poller (for computer_use tasks)
     if Modules.poller_task is None:
         Modules.poller_task = asyncio.create_task(_poll_results_loop())
@@ -510,7 +569,7 @@ async def process_query(payload: Dict[str, Any]):
                 try:
                     async with httpx.AsyncClient(timeout=0.5) as _client:
                         await _client.post(
-                            f"http://localhost:{MAIN_SERVER_PORT}/api/notify_task_result",
+                            f"http://localhost:{MAIN_SERVER_PORT}/api/agent/notify_task_result",
                             json={"text": summary[:240], "lanlan_name": lanlan_name},
                         )
                 except Exception:
@@ -525,6 +584,84 @@ async def process_query(payload: Dict[str, Any]):
     
     logger.info(f"[MCP] Started processor task {task_id} for {lanlan_name}")
     return {"success": True, "task_id": task_id, "status": info["status"], "start_time": info["start_time"]}
+
+# 插件直接触发路由（放在顶层，确保不在其它函数体内）
+@app.post("/plugin/execute")
+async def plugin_execute_direct(payload: Dict[str, Any]):
+    """
+    新增接口：直接触发 plugin_entry。
+    请求 body 可包含:
+      - plugin_id: str (必需)
+      - entry_id: str (可选)
+      - args: dict (可选)
+      - lanlan_name: str (可选，用于日志/通知)
+    该接口将调用 Modules.task_executor.execute_user_plugin_direct 来执行插件触发。
+    """
+    if not Modules.task_executor:
+        raise HTTPException(503, "Task executor not ready")
+    # 当后端显式关闭用户插件功能时，直接拒绝调用，避免绕过前端开关
+    if not Modules.agent_flags.get("user_plugin_enabled", False):
+        raise HTTPException(403, "User plugin is disabled")
+    plugin_id = (payload or {}).get("plugin_id")
+    entry_id = (payload or {}).get("entry_id")
+    raw_args = (payload or {}).get("args", {}) or {}
+    if not isinstance(raw_args, dict):
+        raise HTTPException(400, "args must be a JSON object")
+    args = raw_args
+    lanlan_name = (payload or {}).get("lanlan_name")
+    if not plugin_id or not isinstance(plugin_id, str):
+        raise HTTPException(400, "plugin_id required")
+
+    # Dedup is not applied for direct plugin calls; client should dedupe if needed
+    task_id = str(uuid.uuid4())
+    # Log request
+    logger.info(f"[Plugin] Direct execute request: plugin_id={plugin_id}, entry_id={entry_id}, lanlan={lanlan_name}")
+
+    # Ensure task registry entry for tracking
+    info = {
+        "id": task_id,
+        "type": "plugin_direct",
+        "status": "running",
+        "start_time": _now_iso(),
+        "params": {"plugin_id": plugin_id, "entry_id": entry_id, "args": args},
+        "lanlan_name": lanlan_name,
+        "result": None,
+        "error": None,
+    }
+    Modules.task_registry[task_id] = info
+
+    # Execute via task_executor.execute_user_plugin_direct in background
+    async def _run_plugin():
+        try:
+            res = await Modules.task_executor.execute_user_plugin_direct(
+                task_id=task_id, plugin_id=plugin_id, plugin_args=args, entry_id=entry_id
+            )
+            info["result"] = res.result
+            # _execute_user_plugin marks success=False for "accepted but not completed", so rely on accepted flag in result
+            accepted = isinstance(res.result, dict) and res.result.get("accepted")
+            info["status"] = "completed" if accepted else "failed"
+            if not accepted and res.error:
+                info["error"] = res.error
+            # Only notify main server when actually accepted
+            if accepted:
+                try:
+                    summary = f'插件任务 "{plugin_id}" 已接受'
+                    async with httpx.AsyncClient(timeout=0.5) as _client:
+                        await _client.post(
+                            f"http://localhost:{MAIN_SERVER_PORT}/api/agent/notify_task_result",
+                            json={"text": summary[:240], "lanlan_name": lanlan_name},
+                        )
+                except Exception:
+                    pass
+        except Exception as e:
+            info["status"] = "failed"
+            info["error"] = str(e)
+            logger.error(f"[Plugin] Direct execute failed: {e}", exc_info=True)
+
+    asyncio.create_task(_run_plugin())
+    # 如果未来需要集中管理后台插件任务，可将 Task 收集到 Modules 上的集合并在 done 后移除
+    return {"success": True, "task_id": task_id, "status": info["status"], "start_time": info["start_time"]}
+
 
 
 # 2) 规划器模块：预载server能力，评估可执行性，入池并分解步骤
@@ -630,6 +767,8 @@ async def get_agent_flags():
 async def set_agent_flags(payload: Dict[str, Any]):
     mf = (payload or {}).get("mcp_enabled")
     cf = (payload or {}).get("computer_use_enabled")
+    uf = (payload or {}).get("user_plugin_enabled")
+    prev_up = Modules.agent_flags.get("user_plugin_enabled", False)
     
     # 1. Handle MCP Flag with Capability Check
     if isinstance(mf, bool):
@@ -679,6 +818,42 @@ async def set_agent_flags(payload: Dict[str, Any]):
         else: # Disabling
             Modules.agent_flags["computer_use_enabled"] = False
             
+    if isinstance(uf, bool):
+        if uf:  # Attempting to enable UserPlugin
+            try:
+                import httpx
+                async with httpx.AsyncClient(timeout=1.0) as client:
+                    r = await client.get(f"http://localhost:{USER_PLUGIN_SERVER_PORT}/plugins")
+                    if r.status_code != 200:
+                        Modules.agent_flags["user_plugin_enabled"] = False
+                        Modules.notification = "无法开启 UserPlugin: 插件服务不可用"
+                        logger.warning("[Agent] Cannot enable UserPlugin: service unavailable")
+                        return {"success": True, "agent_flags": Modules.agent_flags}
+                    data = r.json()
+                    plugins = data.get("plugins", []) if isinstance(data, dict) else []
+                    if not plugins:
+                        Modules.agent_flags["user_plugin_enabled"] = False
+                        Modules.notification = "无法开启 UserPlugin: 未发现可用插件"
+                        logger.warning("[Agent] Cannot enable UserPlugin: no plugins found")
+                        return {"success": True, "agent_flags": Modules.agent_flags}
+            except Exception as e:
+                Modules.agent_flags["user_plugin_enabled"] = False
+                Modules.notification = f"开启 UserPlugin 失败: {str(e)}"
+                logger.error(f"[Agent] Cannot enable UserPlugin: {e}")
+                return {"success": True, "agent_flags": Modules.agent_flags}
+        Modules.agent_flags["user_plugin_enabled"] = uf
+
+    # testUserPlugin: log when user_plugin_enabled toggles
+    try:
+        new_up = Modules.agent_flags.get("user_plugin_enabled", False)
+        if prev_up != new_up:
+            if new_up:
+                logger.info("testUserPlugin: user_plugin_enabled toggled ON via /agent/flags")
+            else:
+                logger.info("testUserPlugin: user_plugin_enabled toggled OFF via /agent/flags")
+    except Exception:
+        pass
+
     return {"success": True, "agent_flags": Modules.agent_flags}
 
 
@@ -693,6 +868,17 @@ async def analyze_and_plan(payload: Dict[str, Any]):
     messages = (payload or {}).get("messages", [])
     if not isinstance(messages, list):
         raise HTTPException(400, "messages must be a list of {role, text}")
+    # Previously forwarded messages to a user plugin endpoint (/plugin/testPlugin).
+    # This forwarding has been removed to avoid relying on that endpoint.
+    # If in future a safe user-plugin integration is needed, implement a provider
+    # that enumerates plugins and forwards to configured endpoints with retry/backoff.
+    # Preserve check and a light log when user_plugin_enabled is true for traceability.
+    try:
+        if Modules.agent_flags.get("user_plugin_enabled", False):
+            logger.info("user_plugin_enabled is true but /plugin/testPlugin forwarding is disabled.")
+    except Exception:
+        pass  # Defensive: catch edge cases in flag access
+
     # Fire-and-forget background processing and scheduling
     asyncio.create_task(_background_analyze_and_plan(messages, (payload or {}).get("lanlan_name")))
     return {"success": True, "status": "processed", "accepted_at": _now_iso()}
@@ -899,6 +1085,3 @@ if __name__ == "__main__":
     logging.getLogger("uvicorn.access").addFilter(create_agent_server_filter())
     
     uvicorn.run(app, host="127.0.0.1", port=TOOL_SERVER_PORT)
-
-
-

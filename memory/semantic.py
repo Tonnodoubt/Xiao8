@@ -4,7 +4,7 @@ from typing import List
 from langchain_core.documents import Document
 from datetime import datetime
 from memory.recent import CompressedRecentHistoryManager
-from config import SEMANTIC_MODEL, RERANKER_MODEL, MODELS_WITH_EXTRA_BODY
+from config import SEMANTIC_MODEL, RERANKER_MODEL, get_extra_body
 from utils.config_manager import get_config_manager
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from config.prompts_sys import semantic_manager_prompt
@@ -27,8 +27,8 @@ class SemanticMemory:
     
     def _get_reranker(self):
         """动态获取Reranker LLM实例以支持配置热重载"""
-        core_config = self._config_manager.get_core_config()
-        return ChatOpenAI(model=RERANKER_MODEL, base_url=core_config['OPENROUTER_URL'], api_key=core_config['OPENROUTER_API_KEY'], temperature=0.1, extra_body={"enable_thinking": False} if RERANKER_MODEL in MODELS_WITH_EXTRA_BODY else None)
+        api_config = self._config_manager.get_model_api_config('summary')
+        return ChatOpenAI(model=RERANKER_MODEL, base_url=api_config['base_url'], api_key=api_config['api_key'], temperature=0.1, extra_body=get_extra_body(RERANKER_MODEL) or None)
 
     async def store_conversation(self, event_id, messages, lanlan_name):
         self.original_memory[lanlan_name].store_conversation(event_id, messages)
@@ -67,6 +67,7 @@ class SemanticMemory:
                 reranker = self._get_reranker()
                 response = await reranker.ainvoke(prompt)
             except (APIConnectionError, InternalServerError, RateLimitError) as e:
+                print(f"ℹ️ 捕获到 {type(e).__name__} 错误")
                 retries += 1
                 if retries >= max_retries:
                     print(f'❌ Rerank query失败，已达到最大重试次数: {e}')
@@ -100,8 +101,8 @@ class SemanticMemory:
 class SemanticMemoryOriginal:
     def __init__(self, persist_directory, lanlan_name, name_mapping):
         config_manager = get_config_manager()
-        core_config = config_manager.get_core_config()
-        self.embeddings = OpenAIEmbeddings(base_url=core_config['OPENROUTER_URL'], model=SEMANTIC_MODEL, api_key=core_config['OPENROUTER_API_KEY'])
+        api_config = config_manager.get_model_api_config('summary')
+        self.embeddings = OpenAIEmbeddings(base_url=api_config['base_url'], model=SEMANTIC_MODEL, api_key=api_config['api_key'])
         # self.vectorstore = Chroma(
         #     collection_name="Origin",
         #     persist_directory=persist_directory[lanlan_name],
@@ -155,8 +156,8 @@ class SemanticMemoryCompressed:
         self.lanlan_name = lanlan_name
         self.name_mapping = name_mapping
         config_manager = get_config_manager()
-        core_config = config_manager.get_core_config()
-        self.embeddings = OpenAIEmbeddings(base_url=core_config['OPENROUTER_URL'], model=SEMANTIC_MODEL, api_key=core_config['OPENROUTER_API_KEY'])
+        api_config = config_manager.get_model_api_config('summary')
+        self.embeddings = OpenAIEmbeddings(base_url=api_config['base_url'], model=SEMANTIC_MODEL, api_key=api_config['api_key'])
         self.vectorstore = None
         # self.vectorstore = Chroma(
         #     collection_name="Compressed",

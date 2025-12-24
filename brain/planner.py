@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
 from langchain_openai import ChatOpenAI
 from openai import APIConnectionError, InternalServerError, RateLimitError
-from config import MODELS_WITH_EXTRA_BODY
+from config import get_extra_body
 from utils.config_manager import get_config_manager
 from .mcp_client import McpRouterClient, McpToolCatalog
 from .computer_use import ComputerUseAdapter
@@ -39,8 +39,8 @@ class TaskPlanner:
     
     def _get_llm(self):
         """动态获取LLM实例以支持配置热重载"""
-        core_config = self._config_manager.get_core_config()
-        return ChatOpenAI(model=core_config['SUMMARY_MODEL'], base_url=core_config['OPENROUTER_URL'], api_key=core_config['OPENROUTER_API_KEY'], temperature=0, extra_body={"enable_thinking": False} if core_config['SUMMARY_MODEL'] in MODELS_WITH_EXTRA_BODY else None)
+        api_config = self._config_manager.get_model_api_config('summary')
+        return ChatOpenAI(model=api_config['model'], base_url=api_config['base_url'], api_key=api_config['api_key'], temperature=0, extra_body=get_extra_body(api_config['model']) or None)
 
     async def refresh_capabilities(self, force_refresh: bool = True) -> Dict[str, Dict[str, Any]]:
         """
@@ -92,6 +92,7 @@ class TaskPlanner:
                     mcp = {"can_execute": False, "reason": "LLM parse error", "server_id": None, "steps": []}
                 break  # 成功则退出重试循环
             except (APIConnectionError, InternalServerError, RateLimitError) as e:
+                logger.info(f"ℹ️ 捕获到 {type(e).__name__} 错误")
                 if attempt < max_retries - 1:
                     wait_time = retry_delays[attempt]
                     logger.warning(f"[Planner MCP] LLM调用失败 (尝试 {attempt + 1}/{max_retries})，{wait_time}秒后重试: {e}")
@@ -148,6 +149,7 @@ class TaskPlanner:
                             cu_decision = {"use_computer": False, "reason": "LLM parse error"}
                         break  # 成功则退出重试循环
                     except (APIConnectionError, InternalServerError, RateLimitError) as e:
+                        logger.info(f"ℹ️ 捕获到 {type(e).__name__} 错误")
                         if attempt < max_retries - 1:
                             wait_time = retry_delays[attempt]
                             logger.warning(f"[Planner ComputerUse] LLM调用失败 (尝试 {attempt + 1}/{max_retries})，{wait_time}秒后重试: {e}")

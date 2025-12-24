@@ -1,5 +1,6 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
+
 <head>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <link rel="manifest" href="/static/manifest.json">
@@ -15,10 +16,11 @@
     <style>
         *:focus {
             outline: none !important;
-            box-shadow: none !important; 
+            box-shadow: none !important;
         }
 
-        html, body {
+        html,
+        body {
             height: 100%;
             margin: 0;
             padding: 0;
@@ -26,8 +28,10 @@
             background: transparent;
             color: #222;
             font-family: 'Segoe UI', Arial, sans-serif;
-            pointer-events: none; /* 允许鼠标事件穿透 */
-            overflow: hidden; /* 防止出现滚动条 */
+            pointer-events: none;
+            /* 允许鼠标事件穿透 */
+            overflow: hidden;
+            /* 防止出现滚动条 */
         }
 
         @keyframes fadeIn {
@@ -35,12 +39,13 @@
                 opacity: 0;
                 transform: translateY(10px);
             }
+
             to {
                 opacity: 0.85;
                 transform: translateY(0);
             }
         }
-        
+
         /* Status 气泡框样式 - 更显眼的样式 */
         #status-toast {
             position: fixed;
@@ -50,128 +55,165 @@
             max-width: 500px;
             min-width: 280px;
             padding: 18px 24px;
-            padding-left: 50px;  /* 为左上角的猫爪留出空间 */
+            padding-left: 50px;
+            /* 为左上角的猫爪留出空间 */
             /* 自定义背景图片 */
-            background-image: url('/static/icons/toast_background.png');  /* 图片路径 */
-            background-size: 100% 100%;  /* 强制拉伸到100%覆盖，避免边缘露出 */
-            background-position: center;  /* 居中显示 */
-            background-repeat: no-repeat;  /* 不重复 */
-            background-origin: border-box;  /* 背景从边框区域开始 */
-            background-clip: border-box;  /* 背景裁剪到边框区域 */
+            background-image: url('/static/icons/toast_background.png');
+            /* 图片路径 */
+            background-size: 100% 100%;
+            /* 强制拉伸到100%覆盖，避免边缘露出 */
+            background-position: center;
+            /* 居中显示 */
+            background-repeat: no-repeat;
+            /* 不重复 */
+            background-origin: border-box;
+            /* 背景从边框区域开始 */
+            background-clip: border-box;
+            /* 背景裁剪到边框区域 */
             /* 如果图片加载失败，使用备用背景色 */
-            background-color: transparent;  /* 移除备用背景色，避免白色边框 */
-            color: #fff;  /* 纯白色文字 */
-            text-shadow: none;  /* 移除文字阴影 */
+            background-color: transparent;
+            /* 移除备用背景色，避免白色边框 */
+            color: #fff;
+            /* 纯白色文字 */
+            text-shadow: none;
+            /* 移除文字阴影 */
             border-radius: 12px;
-            font-size: 18px;  /* 字体大小 */
+            font-size: 18px;
+            /* 字体大小 */
             font-weight: 500;
             line-height: 1.6;
-            box-shadow: none;  /* 移除阴影 */
-            border: none;  /* 移除边框，避免白色边框问题 */
-            overflow: hidden;  /* 确保背景图片不会超出圆角 */
+            box-shadow: none;
+            /* 移除阴影 */
+            border: none;
+            /* 移除边框，避免白色边框问题 */
+            overflow: hidden;
+            /* 确保背景图片不会超出圆角 */
             opacity: 0;
             transform: translateY(-20px) scale(0.95);
             transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-            pointer-events: none;  /* 默认不响应事件 */
+            pointer-events: none;
+            /* 默认不响应事件 */
             word-wrap: break-word;
             white-space: pre-wrap;
-            display: flex;  /* 使用flex布局 */
-            align-items: center;  /* 垂直居中对齐 */
-            visibility: visible;  /* 确保元素可见 */
+            display: flex;
+            /* 使用flex布局 */
+            align-items: center;
+            /* 垂直居中对齐 */
+            visibility: visible;
+            /* 确保元素可见 */
             text-align: center;
         }
-        
+
         /* 添加遮罩层以确保文字可读性（可选） */
         #status-toast::after {
             content: '';
             position: absolute;
-            top: -1px;  /* 稍微超出，确保完全覆盖 */
+            top: -1px;
+            /* 稍微超出，确保完全覆盖 */
             left: -1px;
             right: -1px;
             bottom: -1px;
-            background: rgba(0, 0, 0, 0.1);  /* 半透明黑色遮罩，增强文字对比度 */
+            background: rgba(0, 0, 0, 0.1);
+            /* 半透明黑色遮罩，增强文字对比度 */
             border-radius: 12px;
-            z-index: 0;  /* 在背景图片之上，文字和猫爪之下 */
+            z-index: 0;
+            /* 在背景图片之上，文字和猫爪之下 */
             pointer-events: none;
         }
-        
+
         /* 左上角的小猫爪爪 */
         #status-toast::before {
             content: '🐾';
             position: absolute;
-            top: 50%;  /* 垂直居中 */
+            top: 50%;
+            /* 垂直居中 */
             left: 12px;
-            transform: translateY(-50%);  /* 配合top: 50%实现垂直居中 */
-            font-size: 50px;  /* 增大猫爪图标 */
+            transform: translateY(-50%);
+            /* 配合top: 50%实现垂直居中 */
+            font-size: 50px;
+            /* 增大猫爪图标 */
             line-height: 1;
             opacity: 1;
-            filter: brightness(0) invert(1);  /* 将emoji变成纯白色，移除阴影 */
+            filter: brightness(0) invert(1);
+            /* 将emoji变成纯白色，移除阴影 */
             animation: pawBounce 1.5s ease-in-out infinite;
-            z-index: 1;  /* 确保猫爪在遮罩层之上 */
+            z-index: 1;
+            /* 确保猫爪在遮罩层之上 */
         }
-        
+
         @keyframes pawBounce {
-            0%, 100% {
-                transform: translateY(-50%) rotate(0deg);  /* 保持垂直居中 */
+
+            0%,
+            100% {
+                transform: translateY(-50%) rotate(0deg);
+                /* 保持垂直居中 */
             }
+
             25% {
-                transform: translateY(calc(-50% - 3px)) rotate(-5deg);  /* 保持垂直居中并添加动画 */
+                transform: translateY(calc(-50% - 3px)) rotate(-5deg);
+                /* 保持垂直居中并添加动画 */
             }
+
             75% {
-                transform: translateY(calc(-50% - 3px)) rotate(5deg);  /* 保持垂直居中并添加动画 */
+                transform: translateY(calc(-50% - 3px)) rotate(5deg);
+                /* 保持垂直居中并添加动画 */
             }
         }
-        
+
         #status-toast.show {
             opacity: 1;
             transform: translateY(0) scale(1);
             pointer-events: auto;
             animation: slideIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
-        
+
         @keyframes slideIn {
             0% {
                 opacity: 0;
                 transform: translateY(-20px) scale(0.8);
             }
+
             100% {
                 opacity: 1;
                 transform: translateY(0) scale(1);
             }
         }
-        
+
         #status-toast.hide {
             opacity: 0;
             transform: translateY(-20px) scale(0.95);
             animation: none;
         }
-        
+
         @media (max-width: 600px) {
             #status-toast {
                 top: 10px;
                 right: 10px;
                 left: 10px;
                 max-width: none;
-                font-size: 17px;  /* 移动端字体大小 */
+                font-size: 17px;
+                /* 移动端字体大小 */
                 padding: 16px 20px;
-                padding-left: 45px;  /* 为左上角的猫爪留出空间 */
+                padding-left: 45px;
+                /* 为左上角的猫爪留出空间 */
             }
-            
+
             #status-toast::before {
                 top: 6px;
                 left: 10px;
-                font-size: 40px;  /* 增大移动端猫爪图标 */
+                font-size: 40px;
+                /* 增大移动端猫爪图标 */
             }
-            
+
             #status-toast.show {
                 transform: translateY(0) scale(1);
             }
-            
+
             #status-toast.hide {
                 transform: translateY(-20px) scale(0.95);
             }
         }
-        
+
         /* 全局按钮样式 - 防止文字被选中 */
         button {
             user-select: none;
@@ -179,7 +221,7 @@
             -moz-user-select: none;
             -ms-user-select: none;
         }
-        
+
         /* 防止所有图标、图片、按钮内容被选中和拖动 */
         img {
             user-select: none;
@@ -190,16 +232,18 @@
             -khtml-user-drag: none;
             -moz-user-drag: none;
             -o-user-drag: none;
-            pointer-events: none; /* 图标不响应鼠标事件 */
+            pointer-events: none;
+            /* 图标不响应鼠标事件 */
         }
-        
+
         /* 按钮内的所有内容（包括emoji图标）不可选中 */
         button * {
             user-select: none;
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
-            pointer-events: none; /* 按钮内部元素不响应事件，由按钮本身处理 */
+            pointer-events: none;
+            /* 按钮内部元素不响应事件，由按钮本身处理 */
         }
 
         /* 响应式设计 */
@@ -226,7 +270,8 @@
         }
 
         #live2d-container.minimized {
-            right: -800px; /* 向右侧移出屏幕 */
+            right: -800px;
+            /* 向右侧移出屏幕 */
             opacity: 0;
             visibility: hidden;
         }
@@ -250,7 +295,8 @@
 
         #chat-container {
             margin-bottom: 50px;
-            pointer-events: auto; /* 恢复鼠标交互 */
+            pointer-events: auto;
+            /* 恢复鼠标交互 */
             position: fixed;
             left: 20px;
             bottom: 20px;
@@ -259,16 +305,19 @@
             height: 500px;
             /* Fluent Design Acrylic 材质 */
             background: rgba(255, 255, 255, 0.65);
-            backdrop-filter: saturate(180%) blur(20px);  /* Fluent Design 标准模糊值 */
+            backdrop-filter: saturate(180%) blur(20px);
+            /* Fluent Design 标准模糊值 */
             -webkit-backdrop-filter: saturate(180%) blur(20px);
-            border-radius: 8px;  /* Fluent Design 标准圆角 */
-            border: 1px solid rgba(255, 255, 255, 0.18);  /* 微妙的高光边框 */
+            border-radius: 8px;
+            /* Fluent Design 标准圆角 */
+            border: 1px solid rgba(255, 255, 255, 0.18);
+            /* 微妙的高光边框 */
             padding: 0;
             box-sizing: border-box;
             overflow: hidden;
             z-index: 20;
             /* Fluent Design 多层阴影创造深度 */
-            box-shadow: 
+            box-shadow:
                 0 2px 4px rgba(0, 0, 0, 0.04),
                 0 8px 16px rgba(0, 0, 0, 0.08),
                 0 16px 32px rgba(0, 0, 0, 0.04);
@@ -289,38 +338,51 @@
             transition: opacity 0.2s ease, visibility 0.2s ease;
             opacity: 1;
             visibility: visible;
-            background: rgba(249, 249, 249, 0.7);  /* Fluent Design 背景层 */
+            background: rgba(249, 249, 249, 0.7);
+            /* Fluent Design 背景层 */
         }
 
         /* 切换按钮样式 - 更醒目的设计 */
         #toggle-chat-btn {
-            pointer-events: auto; /* 恢复鼠标交互 */
-            position: absolute; /* 绝对定位于容器内 */
+            pointer-events: auto;
+            /* 恢复鼠标交互 */
+            position: absolute;
+            /* 绝对定位于容器内 */
             top: 8px;
             right: 8px;
-            width: 24px;  /* 按钮尺寸以容纳图标 */
-            height: 24px;  /* 按钮尺寸以容纳图标 */
-            background: transparent; /* 透明背景，去掉深蓝色方框 */
+            width: 24px;
+            /* 按钮尺寸以容纳图标 */
+            height: 24px;
+            /* 按钮尺寸以容纳图标 */
+            background: transparent;
+            /* 透明背景，去掉深蓝色方框 */
             opacity: 1;
-            border: none; /* 去掉边框 */
-            border-radius: 0; /* 去掉圆角 */
-            cursor: grab; /* 拖拽手势 */
+            border: none;
+            /* 去掉边框 */
+            border-radius: 0;
+            /* 去掉圆角 */
+            cursor: grab;
+            /* 拖拽手势 */
             font-weight: bold;
-            font-size: 14px; /* 改为固定像素值，确保一致性 */
-            line-height: 24px; /* 与按钮高度一致，确保垂直居中 */
+            font-size: 14px;
+            /* 改为固定像素值，确保一致性 */
+            line-height: 24px;
+            /* 与按钮高度一致，确保垂直居中 */
             text-align: center;
             color: #fff;
-            z-index: 21; /* 确保在内容之上 */   
+            z-index: 21;
+            /* 确保在内容之上 */
             padding: 0;
             user-select: none;
-            box-shadow: none; /* 去掉阴影 */
+            box-shadow: none;
+            /* 去掉阴影 */
             transition: all 0.3s ease;
         }
-        
+
         #toggle-chat-btn:hover {
             transform: scale(1.1);
         }
-        
+
         /* 聊天框标题 - Fluent Design 风格 */
         #chat-header {
             position: absolute;
@@ -328,8 +390,10 @@
             left: 0;
             right: 0;
             height: 48px;
-            background: rgba(255, 255, 255, 0.5);  /* 更透明的 Mica 效果 */
-            border-bottom: 1px solid rgba(0, 0, 0, 0.06);  /* Fluent Design 中性分隔线 */
+            background: rgba(255, 255, 255, 0.5);
+            /* 更透明的 Mica 效果 */
+            border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+            /* Fluent Design 中性分隔线 */
             display: flex;
             align-items: center;
             padding: 0 16px;
@@ -341,7 +405,7 @@
             -moz-user-select: none;
             -ms-user-select: none;
         }
-        
+
         /* 标题栏内的所有元素都不可选中 */
         #chat-header * {
             user-select: none;
@@ -349,11 +413,13 @@
             -moz-user-select: none;
             -ms-user-select: none;
         }
-        
+
         #chat-title {
-            font-size: 0.875rem;  /* Fluent Design 标准字号 14px */
+            font-size: 0.875rem;
+            /* Fluent Design 标准字号 14px */
             font-weight: 600;
-            color: rgba(0, 0, 0, 0.9);  /* Fluent Design 高对比度文本 */
+            color: rgba(0, 0, 0, 0.9);
+            /* Fluent Design 高对比度文本 */
             user-select: none;
             -webkit-user-select: none;
             -moz-user-select: none;
@@ -386,7 +452,8 @@
             position: absolute;
             top: 60px;
             left: 16px;
-            background: rgba(68, 183, 254, 0.95);  /* 与主色调一致 #44b7fe */
+            background: rgba(68, 183, 254, 0.95);
+            /* 与主色调一致 #44b7fe */
             color: white;
             padding: 12px 20px;
             border-radius: 8px;
@@ -422,23 +489,25 @@
                 opacity: 0;
                 transform: translateX(-30px) scale(0.8);
             }
+
             60% {
                 opacity: 1;
                 transform: translateX(5px) scale(1.05);
             }
+
             100% {
                 opacity: 1;
                 transform: translateX(0) scale(1);
             }
         }
-        
+
         /* 聊天消息样式 */
         #chatContainer {
             display: flex;
             flex-direction: column;
             gap: 12px;
         }
-        
+
         .message {
             padding: 10px 14px;
             border-radius: 12px;
@@ -448,34 +517,38 @@
             font-size: 0.95rem;
             animation: fadeIn 0.3s ease;
         }
-        
+
         .message.user {
             align-self: flex-end;
-            background: #44b7fe;  /* 与按钮一致的浅蓝色 */
+            background: #44b7fe;
+            /* 与按钮一致的浅蓝色 */
             color: #fff;
             margin-left: auto;
             border-bottom-right-radius: 4px;
         }
-        
+
         .message.gemini {
             align-self: flex-start;
-            background: rgba(68, 183, 254, 0.12);  /* 与主色调协调的浅蓝背景 */
+            background: rgba(68, 183, 254, 0.12);
+            /* 与主色调协调的浅蓝背景 */
             color: #333;
             margin-right: auto;
             border-bottom-left-radius: 4px;
+            white-space: pre-wrap; /* 保留换行，配合 textContent 使用避免 XSS 风险 */
         }
-        
+
         @keyframes fadeIn {
             from {
                 opacity: 0;
                 transform: translateY(10px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
             }
         }
-        
+
         /* 文本输入区域样式 - Fluent Design */
         #text-input-area {
             pointer-events: auto;
@@ -483,8 +556,10 @@
             flex-direction: column;
             gap: 8px;
             padding: 12px;
-            background: rgba(255, 255, 255, 0.5);  /* Fluent Acrylic */
-            border-top: 1px solid rgba(0, 0, 0, 0.06);  /* 中性分隔线 */
+            background: rgba(255, 255, 255, 0.5);
+            /* Fluent Acrylic */
+            border-top: 1px solid rgba(0, 0, 0, 0.06);
+            /* 中性分隔线 */
             box-sizing: border-box;
             transition: all 0.3s ease;
             position: relative;
@@ -494,7 +569,7 @@
             -moz-user-select: none;
             -ms-user-select: none;
         }
-        
+
         /* 文本输入区域内的所有元素（除了输入框）不可选中 */
         #text-input-area * {
             user-select: none;
@@ -502,12 +577,161 @@
             -moz-user-select: none;
             -ms-user-select: none;
         }
-        
+
         /* 语音模式下隐藏文本输入区 */
         #text-input-area.hidden {
             display: none;
         }
-        
+
+        /* 字幕提示框样式（放在输入框区域中，与输入框对齐） */
+        .subtitle-prompt-message {
+            width: 100%;
+            background: linear-gradient(135deg, rgba(68, 183, 254, 0.08) 0%, rgba(68, 183, 254, 0.12) 100%);
+            border: 1px solid rgba(68, 183, 254, 0.2);
+            border-radius: 8px;
+            padding: 0;
+            margin-top: 8px;
+            box-shadow: 0 2px 8px rgba(68, 183, 254, 0.1);
+            box-sizing: border-box;
+        }
+
+        .subtitle-prompt-content {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 8px 16px;
+        }
+
+        .subtitle-toggle-wrapper {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-shrink: 0;
+            cursor: pointer;
+        }
+
+        .subtitle-toggle-indicator {
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 2px solid #ccc;
+            background-color: transparent;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: all 0.2s ease;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .subtitle-toggle-indicator::after {
+            content: '✓';
+            color: #fff;
+            font-size: 12px;
+            font-weight: bold;
+            line-height: 1;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+            pointer-events: none;
+            user-select: none;
+        }
+
+        .subtitle-toggle-indicator.active {
+            border-color: #44b7fe;
+            background-color: #44b7fe;
+        }
+
+        .subtitle-toggle-indicator.active::after {
+            opacity: 1;
+        }
+
+        .subtitle-toggle-label {
+            font-size: 15px;
+            color: #333;
+            user-select: none;
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        /* 语音模式下的字幕提示框样式（放在 chat-container 底部） */
+        .subtitle-prompt-message.voice-mode {
+            width: auto;
+            margin: 8px 12px;
+            pointer-events: auto;
+        }
+
+        /* 最小化时隐藏字幕提示框 */
+        #chat-container.minimized .subtitle-prompt-message {
+            display: none !important;
+        }
+
+
+        /* 字幕显示区域样式（参考Xiao8项目优化，性能优化版本） */
+        #subtitle-display {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 99998;
+            max-width: 85%;
+            min-width: 320px;
+            padding: 20px 28px;
+            background: linear-gradient(135deg, rgba(68, 183, 254, 0.95) 0%, rgba(68, 183, 254, 0.9) 50%, rgba(100, 200, 255, 0.95) 100%);
+            color: #fff;
+            border-radius: 20px;
+            font-size: 19px;
+            font-weight: 500;
+            line-height: 1.7;
+            text-align: center;
+            word-wrap: break-word;
+            white-space: pre-wrap;
+            opacity: 0;
+            visibility: hidden;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+            pointer-events: none;
+            /* 简化为2层shadow以提升性能 */
+            box-shadow: 0 8px 32px rgba(68, 183, 254, 0.4), 
+                        0 0 0 1px rgba(255, 255, 255, 0.3) inset;
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            /* 简化为单层text-shadow */
+            text-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+        }
+
+        #subtitle-display.hidden {
+            display: none;
+        }
+
+        #subtitle-display.show {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+            animation: subtitleFadeIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+        }
+
+        @keyframes subtitleFadeIn {
+            0% {
+                opacity: 0;
+                transform: translateX(-50%) translateY(20px) scale(0.95);
+            }
+            100% {
+                opacity: 1;
+                transform: translateX(-50%) translateY(0) scale(1);
+            }
+        }
+
+        /* 移动端优化：禁用backdrop-filter以提升性能，调整位置避免重叠 */
+        @media only screen and (max-width: 768px) {
+            #subtitle-display {
+                bottom: 80px; /* 避免与输入框重叠 */
+                min-width: 280px;
+                max-width: 90%;
+                font-size: 17px;
+                padding: 16px 20px;
+            }
+        }
+
         /* 截图缩略图容器 - 横向滚动布局 */
         #screenshot-thumbnail-container {
             display: none;
@@ -519,22 +743,23 @@
             border: 1px solid rgba(68, 183, 254, 0.2);
             animation: slideDown 0.3s ease;
         }
-        
+
         #screenshot-thumbnail-container.show {
             display: flex;
         }
-        
+
         @keyframes slideDown {
             from {
                 opacity: 0;
                 transform: translateY(-10px);
             }
+
             to {
                 opacity: 1;
                 transform: translateY(0);
             }
         }
-        
+
         /* 截图列表头部 */
         #screenshots-header {
             display: flex;
@@ -542,13 +767,19 @@
             align-items: center;
             padding: 0 4px;
         }
-        
+
         #screenshots-title {
             font-size: 0.85rem;
             color: #44b7fe;
             font-weight: 600;
         }
-        
+
+        #screenshot-count-wrapper {
+            font-size: 0.85rem;
+            color: #44b7fe;
+            font-weight: 600;
+        }
+
         #clear-all-screenshots {
             padding: 2px 8px;
             font-size: 0.75rem;
@@ -559,11 +790,11 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        
+
         #clear-all-screenshots:hover {
             background: #c82333;
         }
-        
+
         /* 截图列表 - 横向滚动 */
         #screenshots-list {
             display: flex;
@@ -574,24 +805,24 @@
             scrollbar-width: thin;
             scrollbar-color: #ccc transparent;
         }
-        
+
         #screenshots-list::-webkit-scrollbar {
             height: 6px;
         }
-        
+
         #screenshots-list::-webkit-scrollbar-track {
             background: transparent;
         }
-        
+
         #screenshots-list::-webkit-scrollbar-thumb {
             background: rgba(68, 183, 254, 0.4);
             border-radius: 3px;
         }
-        
+
         #screenshots-list::-webkit-scrollbar-thumb:hover {
             background: rgba(68, 183, 254, 0.6);
         }
-        
+
         /* 单个截图卡片 */
         .screenshot-item {
             position: relative;
@@ -603,29 +834,31 @@
             gap: 4px;
             animation: slideIn 0.3s ease;
         }
-        
+
         @keyframes slideIn {
             from {
                 opacity: 0;
                 transform: scale(0.8);
             }
+
             to {
                 opacity: 1;
                 transform: scale(1);
             }
         }
-        
+
         @keyframes slideOut {
             from {
                 opacity: 1;
                 transform: scale(1);
             }
+
             to {
                 opacity: 0;
                 transform: scale(0.8);
             }
         }
-        
+
         .screenshot-thumbnail {
             width: 100px;
             height: 75px;
@@ -636,12 +869,12 @@
             transition: border-color 0.2s, transform 0.2s;
             cursor: pointer;
         }
-        
+
         .screenshot-thumbnail:hover {
             border-color: #44b7fe;
             transform: scale(1.05);
         }
-        
+
         .screenshot-remove {
             position: absolute;
             top: -6px;
@@ -661,14 +894,14 @@
             justify-content: center;
             transition: background 0.2s, transform 0.2s;
             padding: 0;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
         }
-        
+
         .screenshot-remove:hover {
             background: #c82333;
             transform: scale(1.1);
         }
-        
+
         .screenshot-index {
             font-size: 0.7rem;
             color: #44b7fe;
@@ -677,15 +910,16 @@
             border-radius: 10px;
             border: 1px solid rgba(68, 183, 254, 0.3);
         }
-        
+
         #text-input-row {
             display: flex;
             gap: 8px;
-            align-items: flex-start; /* 顶部对齐，确保上沿对齐 */
+            align-items: flex-start;
+            /* 顶部对齐，确保上沿对齐 */
             position: relative;
             z-index: 1;
         }
-        
+
         #textInputBox {
             pointer-events: auto;
             flex: 1;
@@ -717,26 +951,27 @@
             -moz-user-select: text !important;
             -ms-user-select: text !important;
         }
-        
+
         #textInputBox:focus {
             outline: none;
             border-color: #44b7fe;
             box-shadow: none;
         }
-        
+
         #textInputBox:disabled {
             background: #f5f5f5;
             color: #999;
             cursor: not-allowed;
         }
-        
+
         #button-group {
             display: flex;
             flex-direction: column;
             gap: 6px;
         }
-        
-        #textSendButton, #screenshotButton {
+
+        #textSendButton,
+        #screenshotButton {
             pointer-events: auto;
             padding: 8px 16px;
             border-radius: 8px;
@@ -747,56 +982,64 @@
             white-space: nowrap;
             min-width: 80px;
             display: flex;
-            align-items: center; /* 图标和文字垂直居中对齐 */
-            justify-content: flex-start; /* 内容左对齐，图标在左边 */
+            align-items: center;
+            /* 图标和文字垂直居中对齐 */
+            justify-content: flex-start;
+            /* 内容左对齐，图标在左边 */
             gap: 6px;
             box-sizing: border-box;
         }
-        
+
         /* 确保两个按钮的图标和文字对齐 */
-        #textSendButton img, #screenshotButton img {
-            flex-shrink: 0; /* 图标不收缩 */
-            width: 22px; /* 统一图标宽度，确保对齐 */
+        #textSendButton img,
+        #screenshotButton img {
+            flex-shrink: 0;
+            /* 图标不收缩 */
+            width: 22px;
+            /* 统一图标宽度，确保对齐 */
             height: 22px;
             object-fit: contain;
             pointer-events: none;
         }
-        
-        #textSendButton span, #screenshotButton span {
-            flex-shrink: 0; /* 文字不收缩 */
-            text-align: left; /* 文字左对齐 */
+
+        #textSendButton span,
+        #screenshotButton span {
+            flex-shrink: 0;
+            /* 文字不收缩 */
+            text-align: left;
+            /* 文字左对齐 */
         }
-        
+
         /* 发送按钮：蓝色背景 */
         #textSendButton {
             border: 2px solid transparent;
             background: #44b7fe;
             color: #fff;
         }
-        
+
         #textSendButton:hover:not(:disabled) {
             background: #2ea0e0;
         }
-        
+
         #textSendButton:disabled {
             background: #b0c4de;
             cursor: not-allowed;
             opacity: 0.6;
         }
-        
+
         /* 截图按钮：白色背景 + 蓝色边框 */
         #screenshotButton {
             border: 2px solid #44b7fe;
             background: #fff;
             color: #44b7fe;
         }
-        
+
         #screenshotButton:hover:not(:disabled) {
             background: #f0f9ff;
             border-color: #2ea0e0;
             border-width: 2px;
         }
-        
+
         #screenshotButton:disabled {
             border-color: #b0c4de;
             border-width: 2px;
@@ -804,12 +1047,12 @@
             cursor: not-allowed;
             opacity: 0.6;
         }
-        
+
         /* 桌面端和移动端文本显示控制 */
         .desktop-text {
             display: inline;
         }
-        
+
         .mobile-text {
             display: none;
         }
@@ -818,12 +1061,17 @@
         #chat-container.minimized {
             background: rgba(68, 183, 254, 0.15);
             opacity: 1;
-            width: 50px; /* 最小化宽度（正方形） */
-            height: 50px; /* 最小化高度（正方形） */
+            width: 50px;
+            /* 最小化宽度（正方形） */
+            height: 50px;
+            /* 最小化高度（正方形） */
             max-height: 50px;
-            padding: 0; /* 移除内边距 */
-            cursor: pointer; /* 让整个小方块可点击（虽然按钮也在） */
-            border-radius: 50%; /* 圆形 */
+            padding: 0;
+            /* 移除内边距 */
+            cursor: pointer;
+            /* 让整个小方块可点击（虽然按钮也在） */
+            border-radius: 50%;
+            /* 圆形 */
             animation: breathingGlow 2s ease-in-out infinite;
         }
 
@@ -835,9 +1083,11 @@
             /* 隐藏内容区域 */
             opacity: 0;
             visibility: hidden;
-            height: 0; /* 确保不占空间 */
+            height: 0;
+            /* 确保不占空间 */
             padding: 0;
-            overflow: hidden; /* 隐藏滚动条 */
+            overflow: hidden;
+            /* 隐藏滚动条 */
         }
 
         #chat-container.minimized #text-input-area {
@@ -858,16 +1108,19 @@
             line-height: 24px;
             /* 防止hover效果在最小化状态下放大按钮 */
         }
-        
+
         #chat-container.minimized #toggle-chat-btn:hover {
             transform: translate(-50%, -50%) scale(1.1);
         }
-        
+
         /* 折叠状态下的呼吸特效动画 */
         @keyframes breathingGlow {
-            0%, 100% {
+
+            0%,
+            100% {
                 box-shadow: 0 0 8px rgba(68, 183, 254, 0.6);
             }
+
             50% {
                 box-shadow: 0 0 16px rgba(68, 183, 254, 1);
             }
@@ -912,11 +1165,13 @@
 
 
         @media only screen and (max-width: 768px) {
+
             /* 手机端背景设为黑色 */
-            html, body {
+            html,
+            body {
                 background: #000 !important;
             }
-            
+
             #live2d-container {
                 position: fixed;
                 right: 0;
@@ -939,72 +1194,78 @@
                 background: transparent;
                 box-shadow: none;
             }
-            
+
             #chat-header {
                 height: 40px;
                 font-size: 0.9rem;
             }
-            
+
             #chat-content-wrapper {
                 padding: 12px;
                 padding-top: 44px;
                 /* 禁用内容区过渡，避免折叠时对子元素产生影响 */
                 transition: none !important;
-                background: rgba(249, 249, 249, 0.5);  /* Fluent 背景层 */
+                background: rgba(249, 249, 249, 0.5);
+                /* Fluent 背景层 */
             }
-            
+
             #text-input-area {
                 padding: 8px;
                 /* 输入区不参与任何过渡动画 */
                 transition: none !important;
-                background: rgba(255, 255, 255, 0.4);  /* Fluent Acrylic */
-                border-top: 1px solid rgba(0, 0, 0, 0.06);  /* Fluent 分隔线 */
+                background: rgba(255, 255, 255, 0.4);
+                /* Fluent Acrylic */
+                border-top: 1px solid rgba(0, 0, 0, 0.06);
+                /* Fluent 分隔线 */
             }
+
             /* 输入区内部元素也不参与过渡，避免细微跳动 */
             #text-input-row,
             #textInputBox,
             #button-group {
                 transition: none !important;
             }
-            
+
             #textInputBox {
                 font-size: 0.9rem;
                 /* 移动端：按钮组高度 = 两个按钮(6px*2+内容) + gap(4px) */
-                height: 62px; /* 保持移动端原有高度 */
+                height: 62px;
+                /* 保持移动端原有高度 */
             }
-            
+
             #button-group {
                 gap: 4px;
             }
-            
-            #textSendButton, #screenshotButton {
+
+            #textSendButton,
+            #screenshotButton {
                 padding: 6px 12px;
                 font-size: 0.8rem;
                 min-width: 70px;
             }
-            
+
             .screenshot-item {
                 width: 80px;
             }
-            
+
             .screenshot-thumbnail {
                 width: 80px;
                 height: 60px;
             }
-            
+
             #screenshots-title {
                 font-size: 0.8rem;
             }
-            
+
             #clear-all-screenshots {
                 font-size: 0.7rem;
                 padding: 2px 6px;
             }
-            
+
             .screenshot-index {
                 font-size: 0.65rem;
             }
-            
+
             .message {
                 font-size: 0.9rem;
                 max-width: 85%;
@@ -1014,17 +1275,19 @@
             .desktop-text {
                 display: none;
             }
-            
+
             .mobile-text {
                 display: inline;
             }
         }
 
         @media only screen and (max-width: 768px) {
+
             /* 移动端：折叠（mobile-collapsed）时，聊天框高度为12vh */
             #chat-container.mobile-collapsed {
                 height: 12vh;
             }
+
             /* 移动端：折叠（mobile-collapsed）时，切换按钮固定到左上角 */
             #chat-container.mobile-collapsed #toggle-chat-btn {
                 left: 8px;
@@ -1033,18 +1296,20 @@
                 transform: none;
                 position: relative;
             }
+
             /* 避免按钮覆盖输入区顶边，给输入区微小顶距 */
             #chat-container.mobile-collapsed #text-input-area {
                 margin-top: 6px;
             }
         }
-        
+
         @media only screen and (max-width: 768px) {
+
             /* 移动端：最小化仅折叠内容区，输入区常驻显示 */
             #chat-container.minimized #text-input-area {
                 display: block;
             }
-            
+
             /* 移动端：最小化时保持容器尺寸，让输入区可见可用 */
             #chat-container.minimized {
                 width: 90vw;
@@ -1054,56 +1319,28 @@
                 max-height: none;
                 padding: 0;
                 cursor: default;
-                border-radius: 8px; /* 移动端保持矩形圆角 */
-                animation: none; /* 移动端不需要呼吸效果 */
+                border-radius: 8px;
+                /* 移动端保持矩形圆角 */
+                animation: none;
+                /* 移动端不需要呼吸效果 */
                 background: transparent;
             }
         }
-        
     </style>
 </head>
+
 <body>
 
-<!-- 旧的按钮面板已迁移到浮动按钮系统（live2d.js），保留隐藏的旧按钮元素供功能触发使用 -->
-<div id="sidebar" style="display: none;">
-    <div id="sidebarbox">
-        <button id="micButton" class="side-btn" data-i18n="voiceControl.startVoice">🎤 开始语音</button>
-        <button id="muteButton" class="side-btn" disabled data-i18n="voiceControl.rest">⏸️ 休息一下</button>
-        <button id="screenButton" class="side-btn" disabled data-i18n="voiceControl.screenShare">🖥️ 屏幕共享</button>
-        <button id="stopButton" class="side-btn" disabled data-i18n="voiceControl.stopShare">🛑 停止共享</button>
-        <button id="resetSessionButton" class="side-btn" data-i18n="voiceControl.leave">👋 请她离开</button>
-        <button id="returnSessionButton" class="side-btn" data-i18n="voiceControl.return">🫴 请她回来</button>
-        <div id="status"></div>
-    </div>
-</div>
-
-<!-- Status 气泡框 -->
-<div id="status-toast"></div>
-<div id="chat-container">
-    <div id="chat-header">
-        <span id="chat-title" data-i18n="chat.title">💬 对话</span>
-    </div>
-    <button id="toggle-chat-btn" data-i18n-title="common.minimize" title="最小化"><img src="/static/icons/minimize_icon.png" alt="最小化" data-i18n-alt="common.minimize" style="width: 24px; height: 24px; object-fit: contain; pointer-events: none;"></button>
-    <div id="chat-tooltip" data-i18n="chat.tooltip">✨ 对话区</div>
-    <div id="chat-content-wrapper">
-        <div id="chatContainer"></div>
-    </div>
-    <div id="text-input-area">
-        <div id="screenshot-thumbnail-container">
-            <div id="screenshots-header">
-                <span id="screenshots-title" data-i18n="chat.screenshotsTitle">📸 待发送截图</span> (<span id="screenshot-count">0</span>)
-                <button id="clear-all-screenshots" data-i18n="chat.clearAll">清空全部</button>
-            </div>
-            <div id="screenshots-list">
-                <!-- 截图项将动态添加到这里 -->
-            </div>
-        </div>
-        <div id="text-input-row">
-            <textarea id="textInputBox" data-i18n-placeholder="chat.textInputPlaceholder" placeholder="文字聊天模式...回车发送，Shift+回车换行" tabindex="0"></textarea>
-            <div id="button-group">
-                <button id="textSendButton"><img src="/static/icons/send_icon.png" alt=""><span data-i18n="chat.send">发送</span></button>
-                <button id="screenshotButton"><img src="/static/icons/screenshot_icon.png" alt=""><span class="desktop-text" data-i18n="chat.screenshot">截图</span><span class="mobile-text" data-i18n="chat.takePhoto">拍照</span></button>
-            </div>
+    <!-- 旧的按钮面板已迁移到浮动按钮系统（live2d.js），保留隐藏的旧按钮元素供功能触发使用 -->
+    <div id="sidebar" style="display: none;">
+        <div id="sidebarbox">
+            <button id="micButton" class="side-btn" data-i18n="voiceControl.startVoice">🎤 开始语音</button>
+            <button id="muteButton" class="side-btn" disabled data-i18n="voiceControl.rest">⏸️ 休息一下</button>
+            <button id="screenButton" class="side-btn" disabled data-i18n="voiceControl.screenShare">🖥️ 屏幕共享</button>
+            <button id="stopButton" class="side-btn" disabled data-i18n="voiceControl.stopShare">🛑 停止共享</button>
+            <button id="resetSessionButton" class="side-btn" data-i18n="voiceControl.leave">👋 请她离开</button>
+            <button id="returnSessionButton" class="side-btn" data-i18n="voiceControl.return">🫴 请她回来</button>
+            <div id="status"></div>
         </div>
     </div>
 </div>
@@ -1113,103 +1350,121 @@
 <!-- VRM 模型容器 -->
 <div id="vrm-container" class="hidden"></div>
 
-<script>
-    // 页面配置 - 从 URL 或 API 获取
-    let lanlan_config = {
-        lanlan_name: ""
-    };
-    window.lanlan_config = lanlan_config;
-    let cubism4Model = "";
-    
-    // 异步获取页面配置
-    async function loadPageConfig() {
-        try {
-            // 优先从 URL 获取 lanlan_name
-            const urlParams = new URLSearchParams(window.location.search);
-            let lanlanNameFromUrl = urlParams.get('lanlan_name') || "";
-            
-            // 从路径中提取 lanlan_name (例如 /{lanlan_name})
-            if (!lanlanNameFromUrl) {
-                const pathParts = window.location.pathname.split('/').filter(Boolean);
-                if (pathParts.length > 0 && !['focus', 'api', 'static', 'templates'].includes(pathParts[0])) {
-                    lanlanNameFromUrl = decodeURIComponent(pathParts[0]);
+    <!-- Status 气泡框 -->
+    <div id="status-toast"></div>
+    <div id="chat-container">
+        <div id="chat-header">
+            <span id="chat-title" data-i18n="chat.title">💬 对话</span>
+        </div>
+        <button id="toggle-chat-btn" data-i18n-title="common.minimize" title="最小化"><img
+                src="/static/icons/minimize_icon.png" alt="最小化" data-i18n-alt="common.minimize"
+                style="width: 24px; height: 24px; object-fit: contain; pointer-events: none;"></button>
+        <div id="chat-tooltip" data-i18n="chat.tooltip">✨ 对话区</div>
+        <div id="chat-content-wrapper">
+            <div id="chatContainer"></div>
+        </div>
+        <div id="text-input-area">
+            <div id="screenshot-thumbnail-container">
+                <div id="screenshots-header">
+                    <span id="screenshots-title" data-i18n="chat.screenshotsTitle">📸 待发送截图</span><span
+                        id="screenshot-count-wrapper"> (<span id="screenshot-count">0</span>)</span>
+                    <button id="clear-all-screenshots" data-i18n="chat.clearAll">清空全部</button>
+                </div>
+                <div id="screenshots-list">
+                    <!-- 截图项将动态添加到这里 -->
+                </div>
+            </div>
+            <div id="text-input-row">
+                <textarea id="textInputBox" data-i18n-placeholder="chat.textInputPlaceholder"
+                    placeholder="文字聊天模式...回车发送，Shift+回车换行" tabindex="0"></textarea>
+                <div id="button-group">
+                    <button id="textSendButton"><img src="/static/icons/send_icon.png" alt=""><span
+                            data-i18n="chat.send">发送</span></button>
+                    <button id="screenshotButton"><img src="/static/icons/screenshot_icon.png" alt=""><span
+                            class="desktop-text" data-i18n="chat.screenshot">截图</span><span class="mobile-text"
+                            data-i18n="chat.takePhoto">拍照</span></button>
+                </div>
+            </div>
+        </div>
+        <!-- 字幕提示框现在通过JavaScript动态创建为系统消息，不再需要静态HTML -->
+    </div>
+    <!-- 字幕显示区域 -->
+    <div id="subtitle-display" class="hidden"></div>
+    <div id="live2d-container">
+        <canvas id="live2d-canvas"></canvas>
+    </div>
+
+    <script>
+        // 页面配置 - 从 URL 或 API 获取
+        let lanlan_config = {
+            lanlan_name: ""
+        };
+        window.lanlan_config = lanlan_config;
+        let cubism4Model = "";
+
+        // 异步获取页面配置
+        async function loadPageConfig() {
+            try {
+                // 优先从 URL 获取 lanlan_name
+                const urlParams = new URLSearchParams(window.location.search);
+                let lanlanNameFromUrl = urlParams.get('lanlan_name') || "";
+
+                // 从路径中提取 lanlan_name (例如 /{lanlan_name})
+                if (!lanlanNameFromUrl) {
+                    const pathParts = window.location.pathname.split('/').filter(Boolean);
+                    if (pathParts.length > 0 && !['focus', 'api', 'static', 'templates'].includes(pathParts[0])) {
+                        lanlanNameFromUrl = decodeURIComponent(pathParts[0]);
+                    }
                 }
-            }
-            
-            // 从 API 获取配置
-            const apiUrl = lanlanNameFromUrl 
-                ? `/api/config/page_config?lanlan_name=${encodeURIComponent(lanlanNameFromUrl)}`
-                : '/api/config/page_config';
-            
-            const response = await fetch(apiUrl);
-            const data = await response.json();
-            
-            if (data.success) {
-                // 使用 URL 中的 lanlan_name（如果有），否则使用 API 返回的
-                lanlan_config.lanlan_name = lanlanNameFromUrl || data.lanlan_name || "";
-                window.lanlan_config = lanlan_config;
-                cubism4Model = data.model_path || "";
-                window.cubism4Model = cubism4Model;
-                
-                // 动态设置页面标题
-                document.title = `${lanlan_config.lanlan_name} Terminal - Project N.E.K.O.`;
-                
-                console.log('页面配置加载成功:', { lanlan_name: lanlan_config.lanlan_name, model_path: cubism4Model });
-                return true;
-            } else {
-                console.error('获取页面配置失败:', data.error);
+
+                // 从 API 获取配置
+                const apiUrl = lanlanNameFromUrl
+                    ? `/api/config/page_config?lanlan_name=${encodeURIComponent(lanlanNameFromUrl)}`
+                    : '/api/config/page_config';
+
+                const response = await fetch(apiUrl);
+                const data = await response.json();
+
+                if (data.success) {
+                    // 使用 URL 中的 lanlan_name（如果有），否则使用 API 返回的
+                    lanlan_config.lanlan_name = lanlanNameFromUrl || data.lanlan_name || "";
+                    window.lanlan_config = lanlan_config;
+                    cubism4Model = data.model_path || "";
+                    window.cubism4Model = cubism4Model;
+
+                    // 动态设置页面标题
+                    document.title = `${lanlan_config.lanlan_name} Terminal - Project N.E.K.O.`;
+
+                    console.log('页面配置加载成功:', { lanlan_name: lanlan_config.lanlan_name, model_path: cubism4Model });
+                    return true;
+                } else {
+                    console.error('获取页面配置失败:', data.error);
+                    // 使用默认值
+                    lanlan_config.lanlan_name = "";
+                    cubism4Model = "";
+                    return false;
+                }
+            } catch (error) {
+                console.error('加载页面配置时出错:', error);
                 // 使用默认值
                 lanlan_config.lanlan_name = "";
                 cubism4Model = "";
                 return false;
             }
-        } catch (error) {
-            console.error('加载页面配置时出错:', error);
-            // 使用默认值
-            lanlan_config.lanlan_name = "";
-            cubism4Model = "";
-            return false;
         }
-    }
-    
-    // 标记配置是否已加载
-    window.pageConfigReady = loadPageConfig();
-</script>
-<script>
-    // Beacon功能 - 页面关闭时发送信号给服务器
-    let beaconSent = false;
 
-    function sendBeacon() {
-        if (beaconSent) return; // 防止重复发送
-        beaconSent = true;
-        
-        try {
-            // 使用navigator.sendBeacon确保信号不被拦截
-            const success = navigator.sendBeacon('/api/beacon/shutdown', JSON.stringify({
-                timestamp: Date.now(),
-                action: 'shutdown'
-            }));
-            
-            if (success) {
-                console.log('Beacon信号已发送');
-            } else {
-                console.warn('Beacon发送失败，尝试使用fetch');
-                // 备用方案：使用fetch
-                fetch('/api/beacon/shutdown', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        timestamp: Date.now(),
-                        action: 'shutdown'
-                    }),
-                    keepalive: true // 确保请求在页面关闭时仍能发送
-                }).catch(err => console.log('备用beacon发送失败:', err));
-            }
-        } catch (e) {
-            console.log('Beacon发送异常:', e);
-        }
-    }
+        // 标记配置是否已加载
+        window.pageConfigReady = loadPageConfig();
+    </script>
+    <script>
+        // Beacon功能 - 页面关闭时发送信号给服务器
+        let beaconSent = false;
 
+        function sendBeacon() {
+            if (beaconSent) return; // 防止重复发送
+            beaconSent = true;
+
+<<<<<<< HEAD
     // 监听页面关闭事件
     window.addEventListener('beforeunload', sendBeacon);
     window.addEventListener('unload', sendBeacon);
@@ -1266,348 +1521,338 @@
                             await loadModelBasedOnCharacterConfig();
                             break;
                     }
+                } catch (e) {
+                    console.error('处理页面消息失败:', e);
                 }
-            } catch (e) {
-                console.log('解析页面消息失败:', e);
             }
         }
     }
     
-    // 隐藏主界面的函数
-    function hideMainUI() {
-        // 隐藏主要UI元素
-        const live2dContainer = document.getElementById('live2d-container');
-        const chatContainer = document.getElementById('chat-container');
-        
-        if (live2dContainer) {
-            live2dContainer.style.display = 'none';
-        }
-        if (chatContainer) {
-            chatContainer.style.display = 'none';
-        }
-        
-        // 可以添加一个标记，记录当前隐藏状态
-        document.body.setAttribute('data-ui-hidden', 'true');
-    }
-    
-    // 显示主界面的函数（仅用于弹出窗口关闭时恢复UI）
-    // 记录页面加载时间，防止初始加载时误触发模型重新加载
-    const pageLoadTime = Date.now();
-    
-    async function showMainUI() {
-        // 防止在初始加载时（3秒内）触发模型检查
-        const now = Date.now();
-        if (now - pageLoadTime < 3000) {
-            return;
-        }
-        
-        // 显示主要UI元素
-        const live2dContainer = document.getElementById('live2d-container');
-        const chatContainer = document.getElementById('chat-container');
-        
-        if (live2dContainer) {
-            live2dContainer.style.display = '';
-        }
-        if (chatContainer) {
-            chatContainer.style.display = '';
-        }
-        
-        // 移除隐藏状态标记
-        document.body.removeAttribute('data-ui-hidden');
-        
-        // 检查模型是否需要重新加载（弹出窗口可能修改了模型配置）
+    // Beacon shutdown 功能
+    function sendBeacon() {
         try {
-            console.log('检查模型配置是否有更新...');
-            
-            // 1. 获取当前角色名称
-            let currentLanlanName = lanlan_config.lanlan_name;
-            console.log('BEFORE currentLanlanName: ', currentLanlanName);
-            
-            // 2. 获取最新的角色配置（包含所有猫娘的完整配置）
-            const charResponse = await fetch('/api/characters');
-            if (!charResponse.ok) {
-                console.warn('获取角色配置失败，跳过模型检查');
-                return;
-            }
-            const charactersData = await charResponse.json();
+            // 使用navigator.sendBeacon确保信号不被拦截
+            const success = navigator.sendBeacon('/api/beacon/shutdown', JSON.stringify({
+                timestamp: Date.now(),
+                action: 'shutdown'
+            }));
 
-            // 确保 lanlan_config.lanlan_name 更新到 chara_manager.html 当前选中的猫娘
-            currentLanlanName = lanlan_config.lanlan_name = charactersData['当前猫娘'];
-            console.log('AFTER currentLanlanName: ', currentLanlanName);
-            
-            // 从猫娘配置中获取当前角色的模型配置
-            const catgirlConfig = charactersData['猫娘']?.[currentLanlanName];
-            if (!catgirlConfig) {
-                console.warn(`未找到角色 ${currentLanlanName} 的配置，跳过模型检查`);
-                return;
-            }
-            
-            // 检查是否有 VRM 模型配置
-            const vrmModelPath = catgirlConfig.vrm;
-            const modelType = catgirlConfig.model_type || (vrmModelPath ? 'vrm' : 'live2d');
-            
-            if (modelType === 'vrm' && vrmModelPath) {
-                // 如果有 VRM 模型配置，加载 VRM 模型（会包含动作播放逻辑）
-                await loadVRMModelFromConfig(vrmModelPath, catgirlConfig);
-                return;
-            }
-            
-            // 否则使用 Live2D 模型
-            const newModelName = catgirlConfig.live2d || 'mao_pro';
-            console.log('AFTER newModelName: ', newModelName);
-            
-            // 3. 获取所有可用模型列表
-            const modelsResponse = await fetch('/api/live2d/models');
-            if (!modelsResponse.ok) {
-                console.warn('获取模型列表失败，跳过模型检查');
-                return;
-            }
-            const models = await modelsResponse.json();
-            
-            // 4. 根据模型名称查找对应的模型路径
-            const modelInfo = models.find(m => m.name === newModelName);
-            if (!modelInfo) {
-                console.warn(`未找到模型 ${newModelName}，跳过模型检查`);
-                return;
-            }
-            const newModelPath = modelInfo.path;
-            console.log('AFTER newModelPath: ', newModelPath);
-            
-            // 5. 检查当前加载的模型路径（优先使用 _lastLoadedModelPath）
-            const currentModel = window.live2dManager?.getCurrentModel();
-            let currentModelPath = '';
-            if (window.live2dManager?._lastLoadedModelPath) {
-                currentModelPath = window.live2dManager._lastLoadedModelPath;
-            } else if (currentModel && currentModel.url) {
-                currentModelPath = currentModel.url;
-            } else if (window.live2dManager?.modelRootPath && window.live2dManager?.modelName) {
-                currentModelPath = `${window.live2dManager.modelRootPath}/${window.live2dManager.modelName}.model3.json`;
-            }
-            
-            // 6. 总是重新加载用户偏好（位置、缩放等可能被修改）
-            const preferences = await window.live2dManager.loadUserPreferences();
-            let modelPreferences = null;
-            if (preferences && preferences.length > 0) {
-                modelPreferences = preferences.find(p => p && p.model_path === newModelPath);
-            }
-            
-            // 7. 比较模型路径，判断是否需要完全重新加载模型（使用更准确的路径比较）
-            let needReload = false;
-            if (!currentModelPath) {
-                needReload = true;
+            if (success) {
+                console.log('Beacon信号已发送');
             } else {
-                // 标准化路径进行比较
-                const normalizePath = (path) => {
-                    if (!path) return '';
-                    return path.split('#')[0].split('?')[0].toLowerCase();
-                };
-                const normalizedCurrent = normalizePath(currentModelPath);
-                const normalizedNew = normalizePath(newModelPath);
-                
-                // 提取模型名称进行比较
-                const currentModelName = normalizedCurrent.split('/').filter(Boolean).pop()?.replace('.model3.json', '') || '';
-                const newModelNameCompare = normalizedNew.split('/').filter(Boolean).pop()?.replace('.model3.json', '') || '';
-                
-                if (normalizedCurrent === normalizedNew) {
-                    needReload = false;
-                } else if (currentModelName && newModelNameCompare && currentModelName === newModelNameCompare) {
-                    needReload = false;
-                } else {
-                    needReload = true;
-                }
+                console.warn('Beacon发送失败，尝试使用fetch');
+                // 备用方案：使用fetch
+                fetch('/api/beacon/shutdown', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        timestamp: Date.now(),
+                        action: 'shutdown'
+                    }),
+                    keepalive: true // 确保请求在页面关闭时仍能发送
+                }).catch(err => console.log('备用beacon发送失败:', err));
             }
-            
-            if (needReload) {
-                // 模型改变了，需要完全重新加载
-                console.log(`检测到模型变化，重新加载: ${newModelPath}`);
-                console.log(`当前模型: ${currentModelPath}`);
-                console.log(`新模型: ${newModelPath}`);
-                
-                await window.live2dManager.loadModel(newModelPath, {
-                    preferences: modelPreferences,
-                    isMobile: window.innerWidth <= 768
-                });
-                
-                // 更新全局引用
-                window.LanLan1.live2dModel = window.live2dManager.getCurrentModel();
-                window.LanLan1.currentModel = window.live2dManager.getCurrentModel();
-                window.LanLan1.emotionMapping = window.live2dManager.getEmotionMapping();
-                
-                console.log('模型已重新加载');
-            } else {
-                // 模型未变，但需要更新位置和缩放设置
-                console.log('模型未改变，但重新应用用户偏好设置');
-                
-                if (modelPreferences && currentModel) {
-                    // 应用位置设置
-                    if (modelPreferences.position) {
-                        currentModel.x = modelPreferences.position.x || currentModel.x;
-                        currentModel.y = modelPreferences.position.y || currentModel.y;
-                        console.log('已应用位置设置:', modelPreferences.position);
-                    }
-                    
-                    // 应用缩放设置
-                    if (modelPreferences.scale) {
-                        currentModel.scale.set(
-                            modelPreferences.scale.x || currentModel.scale.x,
-                            modelPreferences.scale.y || currentModel.scale.y
-                        );
-                        console.log('已应用缩放设置:', modelPreferences.scale);
-                    }
-                    
-                    // 应用保存的模型参数
-                    if (modelPreferences.parameters && currentModel.internalModel && currentModel.internalModel.coreModel) {
-                        window.live2dManager.applyModelParameters(currentModel, modelPreferences.parameters);
-                        console.log('已应用保存的模型参数');
-                    }
-                } else {
-                    console.log('无需应用偏好设置（未找到或模型未加载）');
-                }
-            }
-            
-        } catch (error) {
-            console.error('检查/重新加载模型时出错:', error);
-            // 出错时不影响UI显示
+        } catch (e) {
+            console.log('Beacon发送异常:', e);
         }
     }
     
-    // 重新加载模型参数（用于参数编辑器保存后）
-    async function reloadModelParameters() {
-        try {
-            console.log('=== 开始重新加载模型参数 ===');
-            const currentModel = window.live2dManager?.getCurrentModel();
-            if (!currentModel) {
-                console.log('模型未加载，跳过参数重新加载');
-                return;
-            }
-            
-            // 获取当前模型路径（尝试多种方式）
-            let currentModelPath = '';
-            
-            // 方式1: 从live2dManager的_lastLoadedModelPath获取（最可靠）
-            if (window.live2dManager?._lastLoadedModelPath) {
-                currentModelPath = window.live2dManager._lastLoadedModelPath;
-                console.log('使用 _lastLoadedModelPath:', currentModelPath);
-            }
-            // 方式2: 从模型的url获取
-            else if (currentModel.url) {
-                currentModelPath = currentModel.url;
-                console.log('使用 currentModel.url:', currentModelPath);
-            }
-            // 方式3: 从modelRootPath和modelName构建
-            else if (window.live2dManager?.modelRootPath && window.live2dManager?.modelName) {
-                currentModelPath = `${window.live2dManager.modelRootPath}/${window.live2dManager.modelName}.model3.json`;
-                console.log('使用 modelRootPath + modelName:', currentModelPath);
-            }
-            // 方式4: 从cubism4Model获取
-            else if (typeof cubism4Model !== 'undefined' && cubism4Model) {
-                currentModelPath = cubism4Model;
-                console.log('使用 cubism4Model:', currentModelPath);
-            }
-            
-            if (!currentModelPath) {
-                console.warn('无法确定当前模型路径，跳过参数重新加载');
-                console.log('live2dManager状态:', {
-                    hasManager: !!window.live2dManager,
-                    _lastLoadedModelPath: window.live2dManager?._lastLoadedModelPath,
-                    modelRootPath: window.live2dManager?.modelRootPath,
-                    modelName: window.live2dManager?.modelName,
-                    currentModelUrl: currentModel?.url
-                });
-                return;
-            }
-            
-            console.log('当前模型路径:', currentModelPath);
-            
-            // 重新加载用户偏好
-            const preferences = await window.live2dManager.loadUserPreferences();
-            console.log('加载到的偏好设置数量:', preferences.length);
-            console.log('所有偏好设置的路径:', preferences.map(p => p?.model_path).filter(Boolean));
-            
-            // 尝试多种匹配方式
-            let modelPreferences = null;
-            
-            // 首先尝试精确匹配
-            modelPreferences = preferences.find(p => {
-                if (!p || !p.model_path) return false;
-                return p.model_path === currentModelPath;
-            });
-            
-            if (modelPreferences) {
-                console.log('找到精确匹配的偏好设置');
-            } else {
-                // 尝试文件名匹配
-                const currentFileName = currentModelPath.split('/').pop() || '';
-                console.log('尝试文件名匹配，当前文件名:', currentFileName);
-                
-                modelPreferences = preferences.find(p => {
-                    if (!p || !p.model_path) return false;
-                    const prefFileName = p.model_path.split('/').pop() || '';
-                    if (currentFileName && prefFileName && currentFileName === prefFileName) {
-                        console.log('文件名匹配成功:', p.model_path);
-                        return true;
+    // 监听页面关闭事件
+    window.addEventListener('beforeunload', sendBeacon);
+    window.addEventListener('unload', sendBeacon);
+</script>
+    <script src="/static/libs/live2dcubismcore.min.js"></script> <!-- Cubism 4核心库（支持Cubism 3/4模型） -->
+    <script>
+        // 全局菜单跟踪机制 - 必须在所有其他脚本之前定义
+        // 用于跟踪当前是否有活动的菜单（麦克风列表、Agent面板、侧边栏等）
+        window.activeMenuCount = 0;
+
+        // 辅助函数：标记菜单打开
+        window.markMenuOpen = function () {
+            window.activeMenuCount++;
+        };
+
+        // 辅助函数：标记菜单关闭
+        window.markMenuClosed = function () {
+            window.activeMenuCount = Math.max(0, window.activeMenuCount - 1);
+        };
+
+        // 页面间通信：监听来自模型设置页面的消息
+        async function handlePageMessage(event) {
+            if (event.key === 'nekopage_message') {
+                try {
+                    const message = JSON.parse(event.newValue);
+                    if (message && message.action) {
+                        switch (message.action) {
+                            case 'hide_main_ui':
+                                console.log('接收到隐藏主界面命令');
+                                hideMainUI();
+                                break;
+                            case 'show_main_ui':
+                                console.log('接收到显示主界面命令');
+                                await showMainUI();
+                                break;
+                            case 'reload_model_parameters':
+                                console.log('接收到重新加载模型参数命令');
+                                await reloadModelParameters();
+                                break;
+                        }
                     }
-                    return false;
-                });
-            }
-            
-            // 如果还是没找到，尝试通过模型名称匹配
-            if (!modelPreferences && window.live2dManager?.modelName) {
-                const modelName = window.live2dManager.modelName;
-                console.log('尝试模型名称匹配:', modelName);
-                modelPreferences = preferences.find(p => {
-                    if (!p || !p.model_path) return false;
-                    if (p.model_path.includes(modelName)) {
-                        console.log('模型名称匹配成功:', p.model_path);
-                        return true;
-                    }
-                    return false;
-                });
-            }
-            
-            // 如果还是没找到，尝试部分匹配
-            if (!modelPreferences) {
-                console.log('尝试部分匹配...');
-                const currentPathParts = currentModelPath.split('/').filter(p => p);
-                modelPreferences = preferences.find(p => {
-                    if (!p || !p.model_path) return false;
-                    const prefPathParts = p.model_path.split('/').filter(p => p);
-                    // 检查是否有共同的部分
-                    const commonParts = currentPathParts.filter(part => prefPathParts.includes(part));
-                    if (commonParts.length >= 2) { // 至少有两个共同部分
-                        console.log('部分匹配成功:', p.model_path, '共同部分:', commonParts);
-                        return true;
-                    }
-                    return false;
-                });
-            }
-            
-            if (modelPreferences) {
-                console.log('找到匹配的偏好设置:', modelPreferences.model_path);
-                console.log('是否有参数:', !!modelPreferences.parameters);
-                
-                if (modelPreferences.parameters) {
-                    const paramCount = Object.keys(modelPreferences.parameters).length;
-                    console.log('参数数量:', paramCount);
-                    console.log('参数示例:', Object.keys(modelPreferences.parameters).slice(0, 5));
-                    
-                    // 应用保存的参数
-                    if (currentModel.internalModel && currentModel.internalModel.coreModel) {
-                        window.live2dManager.applyModelParameters(currentModel, modelPreferences.parameters);
-                        console.log('✓ 已重新应用保存的模型参数，参数数量:', paramCount);
-                    } else {
-                        console.warn('模型未完全加载，无法应用参数');
-                    }
-                } else {
-                    console.log('偏好设置中没有参数数据');
+                } catch (e) {
+                    console.log('解析页面消息失败:', e);
                 }
-            } else {
-                console.warn('未找到匹配的偏好设置');
+            }
+        }
+
+        // 隐藏主界面的函数
+        function hideMainUI() {
+            // 隐藏主要UI元素
+            const live2dContainer = document.getElementById('live2d-container');
+            const chatContainer = document.getElementById('chat-container');
+
+            if (live2dContainer) {
+                live2dContainer.style.display = 'none';
+            }
+            if (chatContainer) {
+                chatContainer.style.display = 'none';
+            }
+
+            // 可以添加一个标记，记录当前隐藏状态
+            document.body.setAttribute('data-ui-hidden', 'true');
+        }
+
+        // 显示主界面的函数（仅用于弹出窗口关闭时恢复UI）
+        // 记录页面加载时间，防止初始加载时误触发模型重新加载
+        const pageLoadTime = Date.now();
+
+        async function showMainUI() {
+            // 防止在初始加载时（3秒内）触发模型检查
+            const now = Date.now();
+            if (now - pageLoadTime < 3000) {
+                return;
+            }
+
+            // 显示主要UI元素
+            const live2dContainer = document.getElementById('live2d-container');
+            const chatContainer = document.getElementById('chat-container');
+
+            if (live2dContainer) {
+                live2dContainer.style.display = '';
+>>>>>>> upstream/main
+            }
+            if (chatContainer) {
+                chatContainer.style.display = '';
+            }
+
+            // 移除隐藏状态标记
+            document.body.removeAttribute('data-ui-hidden');
+
+            // 检查模型是否需要重新加载（弹出窗口可能修改了模型配置）
+            try {
+                console.log('检查模型配置是否有更新...');
+
+                // 1. 获取当前角色名称
+                let currentLanlanName = lanlan_config.lanlan_name;
+                console.log('BEFORE currentLanlanName: ', currentLanlanName);
+
+                // 2. 获取最新的角色配置（包含所有猫娘的完整配置）
+                const charResponse = await fetch('/api/characters');
+                if (!charResponse.ok) {
+                    console.warn('获取角色配置失败，跳过模型检查');
+                    return;
+                }
+                const charactersData = await charResponse.json();
+
+                // 确保 lanlan_config.lanlan_name 更新到 chara_manager.html 当前选中的猫娘
+                currentLanlanName = lanlan_config.lanlan_name = charactersData['当前猫娘'];
+                console.log('AFTER currentLanlanName: ', currentLanlanName);
+
+                // 从猫娘配置中获取当前角色的 live2d 模型名称
+                const catgirlConfig = charactersData['猫娘']?.[currentLanlanName];
+                if (!catgirlConfig) {
+                    console.warn(`未找到角色 ${currentLanlanName} 的配置，跳过模型检查`);
+                    return;
+                }
+                const newModelName = catgirlConfig.live2d || 'mao_pro';
+                console.log('AFTER newModelName: ', newModelName);
+
+                // 3. 获取所有可用模型列表
+                const modelsResponse = await fetch('/api/live2d/models');
+                if (!modelsResponse.ok) {
+                    console.warn('获取模型列表失败，跳过模型检查');
+                    return;
+                }
+                const models = await modelsResponse.json();
+
+                // 4. 根据模型名称查找对应的模型路径
+                const modelInfo = models.find(m => m.name === newModelName);
+                if (!modelInfo) {
+                    console.warn(`未找到模型 ${newModelName}，跳过模型检查`);
+                    return;
+                }
+                const newModelPath = modelInfo.path;
+                console.log('AFTER newModelPath: ', newModelPath);
+
+                // 5. 检查当前加载的模型路径（优先使用 _lastLoadedModelPath）
+                const currentModel = window.live2dManager?.getCurrentModel();
+                let currentModelPath = '';
+                if (window.live2dManager?._lastLoadedModelPath) {
+                    currentModelPath = window.live2dManager._lastLoadedModelPath;
+                } else if (currentModel && currentModel.url) {
+                    currentModelPath = currentModel.url;
+                } else if (window.live2dManager?.modelRootPath && window.live2dManager?.modelName) {
+                    currentModelPath = `${window.live2dManager.modelRootPath}/${window.live2dManager.modelName}.model3.json`;
+                }
+
+                // 6. 总是重新加载用户偏好（位置、缩放等可能被修改）
+                const preferences = await window.live2dManager.loadUserPreferences();
+                let modelPreferences = null;
+                if (preferences && preferences.length > 0) {
+                    modelPreferences = preferences.find(p => p && p.model_path === newModelPath);
+                }
+
+                // 7. 比较模型路径，判断是否需要完全重新加载模型（使用更准确的路径比较）
+                let needReload = false;
+                if (!currentModelPath) {
+                    needReload = true;
+                } else {
+                    // 标准化路径进行比较
+                    const normalizePath = (path) => {
+                        if (!path) return '';
+                        return path.split('#')[0].split('?')[0].toLowerCase();
+                    };
+                    const normalizedCurrent = normalizePath(currentModelPath);
+                    const normalizedNew = normalizePath(newModelPath);
+
+                    // 提取模型名称进行比较
+                    const currentModelName = normalizedCurrent.split('/').filter(Boolean).pop()?.replace('.model3.json', '') || '';
+                    const newModelNameCompare = normalizedNew.split('/').filter(Boolean).pop()?.replace('.model3.json', '') || '';
+
+                    if (normalizedCurrent === normalizedNew) {
+                        needReload = false;
+                    } else if (currentModelName && newModelNameCompare && currentModelName === newModelNameCompare) {
+                        needReload = false;
+                    } else {
+                        needReload = true;
+                    }
+                }
+
+                if (needReload) {
+                    // 模型改变了，需要完全重新加载
+                    console.log(`检测到模型变化，重新加载: ${newModelPath}`);
+                    console.log(`当前模型: ${currentModelPath}`);
+                    console.log(`新模型: ${newModelPath}`);
+
+                    await window.live2dManager.loadModel(newModelPath, {
+                        preferences: modelPreferences,
+                        isMobile: window.innerWidth <= 768
+                    });
+
+                    // 更新全局引用
+                    window.LanLan1.live2dModel = window.live2dManager.getCurrentModel();
+                    window.LanLan1.currentModel = window.live2dManager.getCurrentModel();
+                    window.LanLan1.emotionMapping = window.live2dManager.getEmotionMapping();
+
+                    console.log('模型已重新加载');
+                } else {
+                    // 模型未变，但需要更新位置和缩放设置
+                    console.log('模型未改变，但重新应用用户偏好设置');
+
+                    if (modelPreferences && currentModel) {
+                        // 应用位置设置
+                        if (modelPreferences.position) {
+                            currentModel.x = modelPreferences.position.x || currentModel.x;
+                            currentModel.y = modelPreferences.position.y || currentModel.y;
+                            console.log('已应用位置设置:', modelPreferences.position);
+                        }
+
+                        // 应用缩放设置
+                        if (modelPreferences.scale) {
+                            currentModel.scale.set(
+                                modelPreferences.scale.x || currentModel.scale.x,
+                                modelPreferences.scale.y || currentModel.scale.y
+                            );
+                            console.log('已应用缩放设置:', modelPreferences.scale);
+                        }
+
+                        // 应用保存的模型参数
+                        if (modelPreferences.parameters && currentModel.internalModel && currentModel.internalModel.coreModel) {
+                            window.live2dManager.applyModelParameters(currentModel, modelPreferences.parameters);
+                            console.log('已应用保存的模型参数');
+                        }
+                    } else {
+                        console.log('无需应用偏好设置（未找到或模型未加载）');
+                    }
+                }
+
+            } catch (error) {
+                console.error('检查/重新加载模型时出错:', error);
+                // 出错时不影响UI显示
+            }
+        }
+
+        // 重新加载模型参数（用于参数编辑器保存后）
+        async function reloadModelParameters() {
+            try {
+                console.log('=== 开始重新加载模型参数 ===');
+                const currentModel = window.live2dManager?.getCurrentModel();
+                if (!currentModel) {
+                    console.log('模型未加载，跳过参数重新加载');
+                    return;
+                }
+
+                // 获取当前模型路径（尝试多种方式）
+                let currentModelPath = '';
+
+                // 方式1: 从live2dManager的_lastLoadedModelPath获取（最可靠）
+                if (window.live2dManager?._lastLoadedModelPath) {
+                    currentModelPath = window.live2dManager._lastLoadedModelPath;
+                    console.log('使用 _lastLoadedModelPath:', currentModelPath);
+                }
+                // 方式2: 从模型的url获取
+                else if (currentModel.url) {
+                    currentModelPath = currentModel.url;
+                    console.log('使用 currentModel.url:', currentModelPath);
+                }
+                // 方式3: 从modelRootPath和modelName构建
+                else if (window.live2dManager?.modelRootPath && window.live2dManager?.modelName) {
+                    currentModelPath = `${window.live2dManager.modelRootPath}/${window.live2dManager.modelName}.model3.json`;
+                    console.log('使用 modelRootPath + modelName:', currentModelPath);
+                }
+                // 方式4: 从cubism4Model获取
+                else if (typeof cubism4Model !== 'undefined' && cubism4Model) {
+                    currentModelPath = cubism4Model;
+                    console.log('使用 cubism4Model:', currentModelPath);
+                }
+
+                if (!currentModelPath) {
+                    console.warn('无法确定当前模型路径，跳过参数重新加载');
+                    console.log('live2dManager状态:', {
+                        hasManager: !!window.live2dManager,
+                        _lastLoadedModelPath: window.live2dManager?._lastLoadedModelPath,
+                        modelRootPath: window.live2dManager?.modelRootPath,
+                        modelName: window.live2dManager?.modelName,
+                        currentModelUrl: currentModel?.url
+                    });
+                    return;
+                }
+
                 console.log('当前模型路径:', currentModelPath);
-                console.log('所有可用偏好设置的路径:');
-                preferences.forEach((p, i) => {
-                    console.log(`  [${i}] ${p?.model_path || 'N/A'}`);
+
+                // 重新加载用户偏好
+                const preferences = await window.live2dManager.loadUserPreferences();
+                console.log('加载到的偏好设置数量:', preferences.length);
+                console.log('所有偏好设置的路径:', preferences.map(p => p?.model_path).filter(Boolean));
+
+                // 尝试多种匹配方式
+                let modelPreferences = null;
+
+                // 首先尝试精确匹配
+                modelPreferences = preferences.find(p => {
+                    if (!p || !p.model_path) return false;
+                    return p.model_path === currentModelPath;
                 });
+<<<<<<< HEAD
             }
             
             console.log('=== 重新加载模型参数完成 ===');
@@ -2116,103 +2361,280 @@
                     });
                 }
             }
-            
-            // 加载所有 live2d 模块
-            await loadScriptsSequentially(live2dModules);
-            
-            // 等待 live2d 模块加载完成后再加载 app.js
-            const appScript = document.createElement('script');
-            appScript.src = '/static/app.js';
-            document.body.appendChild(appScript);
-        } catch (error) {
-            console.error('加载脚本时出错:', error);
+
+                // 如果还是没找到，尝试通过模型名称匹配
+                if (!modelPreferences && window.live2dManager?.modelName) {
+                    const modelName = window.live2dManager.modelName;
+                    console.log('尝试模型名称匹配:', modelName);
+                    modelPreferences = preferences.find(p => {
+                        if (!p || !p.model_path) return false;
+                        if (p.model_path.includes(modelName)) {
+                            console.log('模型名称匹配成功:', p.model_path);
+                            return true;
+                        }
+                        return false;
+                    });
+                }
+
+                // 如果还是没找到，尝试部分匹配
+                if (!modelPreferences) {
+                    console.log('尝试部分匹配...');
+                    const currentPathParts = currentModelPath.split('/').filter(p => p);
+                    modelPreferences = preferences.find(p => {
+                        if (!p || !p.model_path) return false;
+                        const prefPathParts = p.model_path.split('/').filter(p => p);
+                        // 检查是否有共同的部分
+                        const commonParts = currentPathParts.filter(part => prefPathParts.includes(part));
+                        if (commonParts.length >= 2) { // 至少有两个共同部分
+                            console.log('部分匹配成功:', p.model_path, '共同部分:', commonParts);
+                            return true;
+                        }
+                        return false;
+                    });
+                }
+
+                if (modelPreferences) {
+                    console.log('找到匹配的偏好设置:', modelPreferences.model_path);
+                    console.log('是否有参数:', !!modelPreferences.parameters);
+
+                    if (modelPreferences.parameters) {
+                        const paramCount = Object.keys(modelPreferences.parameters).length;
+                        console.log('参数数量:', paramCount);
+                        console.log('参数示例:', Object.keys(modelPreferences.parameters).slice(0, 5));
+
+                        // 应用保存的参数
+                        if (currentModel.internalModel && currentModel.internalModel.coreModel) {
+                            window.live2dManager.applyModelParameters(currentModel, modelPreferences.parameters);
+                            console.log('✓ 已重新应用保存的模型参数，参数数量:', paramCount);
+                        } else {
+                            console.warn('模型未完全加载，无法应用参数');
+                        }
+                    } else {
+                        console.log('偏好设置中没有参数数据');
+                    }
+                } else {
+                    console.warn('未找到匹配的偏好设置');
+                    console.log('当前模型路径:', currentModelPath);
+                    console.log('所有可用偏好设置的路径:');
+                    preferences.forEach((p, i) => {
+                        console.log(`  [${i}] ${p?.model_path || 'N/A'}`);
+                    });
+                }
+
+                console.log('=== 重新加载模型参数完成 ===');
+            } catch (error) {
+                console.error('重新加载模型参数失败:', error);
+                console.error('错误堆栈:', error.stack);
+            }
         }
-    })();
-</script>
-<script>
-  // 对话区提示框逻辑 - 仅在第一次访问时显示
-  (function() {
-    
-    // 等待 DOM 和所有脚本完全加载
-    window.addEventListener('load', function() {
-      // 再等待一小段时间，确保 common_ui.js 的事件监听器已设置
-      setTimeout(function() {
-        const chatTooltip = document.getElementById('chat-tooltip');
-        const textInputBox = document.getElementById('textInputBox');
-        const chatContainer = document.getElementById('chat-container');
-        const toggleBtn = document.getElementById('toggle-chat-btn');
-        let autoCollapseTimer = null;
-        
-        // 检查是否是第一次访问（只影响提示框显示）
-        const hasVisitedBefore = localStorage.getItem('chat_tooltip_shown');
-        
-        if (chatTooltip && textInputBox && chatContainer && toggleBtn) {
-          // 提示框只在第一次访问时显示
-          if (!hasVisitedBefore) {
-            chatTooltip.classList.remove('hidden');
-            localStorage.setItem('chat_tooltip_shown', 'true');
-          } else {
-            chatTooltip.classList.add('hidden');
-          }
-          
-          // 监听文本框焦点事件
-          const handleFocus = () => {
-            // 用户聚焦了文本框，立即隐藏提示并取消自动折叠
-            if (autoCollapseTimer) {
-              clearTimeout(autoCollapseTimer);
-              autoCollapseTimer = null;
-              console.log('用户聚焦文本框，取消自动折叠');
+
+        // 注册localStorage事件监听器
+        window.addEventListener('storage', handlePageMessage);
+
+        // 页面可见性变化时检查参数更新（用户从其他页面返回时）
+        let lastParameterCheckTime = 0;
+        document.addEventListener('visibilitychange', async () => {
+            const now = Date.now();
+            // 防止在初始加载时（3秒内）触发
+            if (document.visibilityState === 'visible' && now - pageLoadTime > 3000 && now - lastParameterCheckTime > 1000) {
+                lastParameterCheckTime = now;
+                await reloadModelParameters();
             }
-            chatTooltip.classList.add('hidden');
-            // 移除监听器，因为已经完成任务
-            textInputBox.removeEventListener('focus', handleFocus);
-          };
-          
-          // 监听手动折叠按钮点击事件
-          const handleToggleClick = () => {
-            // 用户手动点击了折叠按钮，取消自动折叠
-            if (autoCollapseTimer) {
-              clearTimeout(autoCollapseTimer);
-              autoCollapseTimer = null;
-              console.log('用户手动折叠对话区，取消自动折叠');
+        });
+
+        // 页面获得焦点时也检查（备用机制）
+        window.addEventListener('focus', async () => {
+            const now = Date.now();
+            // 防止在初始加载时（3秒内）触发
+            if (now - pageLoadTime > 3000 && now - lastParameterCheckTime > 1000) {
+                lastParameterCheckTime = now;
+                await reloadModelParameters();
             }
-            chatTooltip.classList.add('hidden');
-            // 移除监听器，因为已经完成任务
-            toggleBtn.removeEventListener('click', handleToggleClick);
-          };
-          
-          // 注册事件监听器
-          textInputBox.addEventListener('focus', handleFocus);
-          toggleBtn.addEventListener('click', handleToggleClick);
-          
-          // 每次页面加载都执行：5秒后自动折叠整个对话区（除非有活动菜单）
-          autoCollapseTimer = setTimeout(() => {
-            // 检查是否有活动菜单，如果有则不自动折叠
-            if (window.activeMenuCount > 0) {
-              console.log('检测到活动菜单，跳过自动折叠');
-              return;
-            }
-            
-            // 先隐藏提示框（带动画）
-            chatTooltip.classList.add('hidden');
-            // 等待提示框动画完成后再折叠对话区
+        });
+
+        // 页面加载完成后，等待模型加载完成后再检查参数
+        // 使用MutationObserver或定时器检查模型是否已加载
+        let modelLoadCheckInterval = null;
+        function startModelLoadCheck() {
+            if (modelLoadCheckInterval) return;
+
+            modelLoadCheckInterval = setInterval(async () => {
+                const currentModel = window.live2dManager?.getCurrentModel();
+                if (currentModel && currentModel.internalModel && currentModel.internalModel.coreModel) {
+                    // 模型已加载，停止检查
+                    clearInterval(modelLoadCheckInterval);
+                    modelLoadCheckInterval = null;
+
+                    // 等待一小段时间确保模型完全初始化
+                    setTimeout(async () => {
+                        console.log('模型已加载，检查参数更新...');
+                        await reloadModelParameters();
+                    }, 500);
+                }
+            }, 500);
+
+            // 30秒后停止检查（避免无限检查）
             setTimeout(() => {
-              // 再次检查是否有活动菜单
-              if (window.activeMenuCount > 0) {
-                console.log('检测到活动菜单，跳过自动折叠');
-                return;
-              }
-              // 直接模拟点击事件
-              toggleBtn.click();
-              console.log('自动折叠对话区');
-            }, 300);
-          }, 5000);
-          
-          console.log('页面加载完成，5秒后将自动折叠对话区（除非有活动菜单）');
+                if (modelLoadCheckInterval) {
+                    clearInterval(modelLoadCheckInterval);
+                    modelLoadCheckInterval = null;
+                }
+            }, 30000);
         }
-      }, 100); // 100ms 延迟确保所有初始化完成
-    });
-  })();
-</script>
+
+        // 页面加载时开始检查
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startModelLoadCheck);
+        } else {
+            startModelLoadCheck();
+        }
+
+        // 页面卸载时清理监听器
+        window.addEventListener('beforeunload', () => {
+            window.removeEventListener('storage', handlePageMessage);
+            if (modelLoadCheckInterval) {
+                clearInterval(modelLoadCheckInterval);
+            }
+        });
+    </script>
+    <script src="/static/libs/live2d.min.js"></script> <!-- Cubism 2.1核心库（支持旧模型） -->
+    <script src="/static/libs/pixi.min.js"></script> <!-- PixiJS v7 CDN -->
+    <script src="/static/libs/index.min.js"></script> <!-- pixi-live2d-display v0.5.0-ls-6（RaSan147 fork，支持v7） -->
+    <!-- i18next 已在 head 中加载，这里不再需要 -->
+    <!-- OGG OPUS WASM 解码器 (@wasm-audio-decoders/ogg-opus-decoder) -->
+    <script>window.webpackChunkogg_opus_decoder = window.webpackChunkogg_opus_decoder || [];</script>
+    <script src="/static/libs/ogg-opus-decoder.min.js" charset="UTF-8"></script>
+    <script src="/static/common_ui.js"></script>
+    <script>
+        // 等待配置加载完成后再加载 Live2D 和 app.js
+        (async function () {
+            try {
+                // 等待配置加载完成
+                await window.pageConfigReady;
+
+                // 动态加载 live2d 模块（按顺序加载拆分后的文件）
+                const live2dModules = [
+                    '/static/live2d-core.js',
+                    '/static/live2d-emotion.js',
+                    '/static/live2d-model.js',
+                    '/static/live2d-interaction.js',
+                    '/static/live2d-ui-buttons.js',
+                    '/static/live2d-ui-popup.js',
+                    '/static/live2d-ui-hud.js',
+                    '/static/live2d-ui-drag.js',
+                    '/static/live2d-init.js'
+                ];
+
+                // 按顺序加载脚本的辅助函数
+                async function loadScriptsSequentially(scripts) {
+                    for (const src of scripts) {
+                        await new Promise((resolve, reject) => {
+                            const script = document.createElement('script');
+                            script.src = src;
+                            script.onload = resolve;
+                            script.onerror = reject;
+                            document.body.appendChild(script);
+                        });
+                    }
+                }
+
+                // 加载所有 live2d 模块
+                await loadScriptsSequentially(live2dModules);
+
+                // 等待 live2d 模块加载完成后再加载 app.js
+                const appScript = document.createElement('script');
+                appScript.src = '/static/app.js';
+                document.body.appendChild(appScript);
+            } catch (error) {
+                console.error('加载脚本时出错:', error);
+            }
+        })();
+    </script>
+    <script>
+        // 对话区提示框逻辑 - 仅在第一次访问时显示
+        (function () {
+
+            // 等待 DOM 和所有脚本完全加载
+            window.addEventListener('load', function () {
+                // 再等待一小段时间，确保 common_ui.js 的事件监听器已设置
+                setTimeout(function () {
+                    const chatTooltip = document.getElementById('chat-tooltip');
+                    const textInputBox = document.getElementById('textInputBox');
+                    const chatContainer = document.getElementById('chat-container');
+                    const toggleBtn = document.getElementById('toggle-chat-btn');
+                    let autoCollapseTimer = null;
+
+                    // 检查是否是第一次访问（只影响提示框显示）
+                    const hasVisitedBefore = localStorage.getItem('chat_tooltip_shown');
+
+                    if (chatTooltip && textInputBox && chatContainer && toggleBtn) {
+                        // 提示框只在第一次访问时显示
+                        if (!hasVisitedBefore) {
+                            chatTooltip.classList.remove('hidden');
+                            localStorage.setItem('chat_tooltip_shown', 'true');
+                        } else {
+                            chatTooltip.classList.add('hidden');
+                        }
+
+                        // 监听文本框焦点事件
+                        const handleFocus = () => {
+                            // 用户聚焦了文本框，立即隐藏提示并取消自动折叠
+                            if (autoCollapseTimer) {
+                                clearTimeout(autoCollapseTimer);
+                                autoCollapseTimer = null;
+                                console.log('用户聚焦文本框，取消自动折叠');
+                            }
+                            chatTooltip.classList.add('hidden');
+                            // 移除监听器，因为已经完成任务
+                            textInputBox.removeEventListener('focus', handleFocus);
+                        };
+
+                        // 监听手动折叠按钮点击事件
+                        const handleToggleClick = () => {
+                            // 用户手动点击了折叠按钮，取消自动折叠
+                            if (autoCollapseTimer) {
+                                clearTimeout(autoCollapseTimer);
+                                autoCollapseTimer = null;
+                                console.log('用户手动折叠对话区，取消自动折叠');
+                            }
+                            chatTooltip.classList.add('hidden');
+                            // 移除监听器，因为已经完成任务
+                            toggleBtn.removeEventListener('click', handleToggleClick);
+                        };
+
+                        // 注册事件监听器
+                        textInputBox.addEventListener('focus', handleFocus);
+                        toggleBtn.addEventListener('click', handleToggleClick);
+
+                        // 每次页面加载都执行：5秒后自动折叠整个对话区（除非有活动菜单）
+                        autoCollapseTimer = setTimeout(() => {
+                            // 检查是否有活动菜单，如果有则不自动折叠
+                            if (window.activeMenuCount > 0) {
+                                console.log('检测到活动菜单，跳过自动折叠');
+                                return;
+                            }
+
+                            // 先隐藏提示框（带动画）
+                            chatTooltip.classList.add('hidden');
+                            // 等待提示框动画完成后再折叠对话区
+                            setTimeout(() => {
+                                // 再次检查是否有活动菜单
+                                if (window.activeMenuCount > 0) {
+                                    console.log('检测到活动菜单，跳过自动折叠');
+                                    return;
+                                }
+                                // 直接模拟点击事件
+                                toggleBtn.click();
+                                console.log('自动折叠对话区');
+                            }, 300);
+                        }, 5000);
+
+                        console.log('页面加载完成，5秒后将自动折叠对话区（除非有活动菜单）');
+                    }
+                }, 100); // 100ms 延迟确保所有初始化完成
+            });
+        })();
+    </script>
 </body>
+
 </html>

@@ -607,10 +607,11 @@
                     availableModels.forEach(model => {
                         const option = document.createElement('option');
                         option.value = model.name;
-                        option.textContent = model.name;
+                        // 使用display_name（如果存在）显示更友好的名称
+                        option.textContent = model.display_name || model.name;
                         // 使用data属性存储item_id，这样更容易在change事件中获取
                         option.dataset.itemId = model.item_id;
-                        console.log('添加模型选项:', model.name, 'item_id:', model.item_id);
+                        console.log('添加模型选项:', model.name, 'display_name:', model.display_name, 'item_id:', model.item_id);
                         modelSelect.appendChild(option);
                     });
 
@@ -660,6 +661,22 @@
 
                 return lanlanName;
             }
+
+            // 动态设置参数编辑器链接，传递 lanlan_name 参数
+            (async function updateParameterEditorLink() {
+                try {
+                    const paramEditorLink = document.querySelector('a[href="/live2d_parameter_editor"]');
+                    if (paramEditorLink) {
+                        const lanlanName = await getLanlanName();
+                        if (lanlanName) {
+                            paramEditorLink.href = `/live2d_parameter_editor?lanlan_name=${encodeURIComponent(lanlanName)}`;
+                            console.log('参数编辑器链接已更新，角色:', lanlanName);
+                        }
+                    }
+                } catch (error) {
+                    console.error('更新参数编辑器链接失败:', error);
+                }
+            })();
 
             // 保存模型设置到角色的函数
             async function saveModelToCharacter(modelName, itemId = null, vrmAnimation = null) {
@@ -1228,8 +1245,7 @@
             // 修改模型选择事件，自动保存模型设置
             modelSelect.addEventListener('change', async (e) => {
                 const modelName = e.target.value;
-                const modelId = e.target.dataset.itemId
-                console.log("id:", modelId)
+
                 if (!modelName) return;
 
                 // 检查语音模式状态
@@ -1246,15 +1262,16 @@
                 }
 
                 currentModelInfo = availableModels.find(m => m.name === modelName);
-                if (currentModelInfo) {
-                    // 设置item_id，确保从dataset中获取
-                    currentModelInfo.item_id = modelId || currentModelInfo.item_id;
-                }
                 if (!currentModelInfo) return;
 
                 // 获取选中的option元素，从中获取item_id
                 const selectedOption = e.target[e.target.selectedIndex];
                 const modelSteamId = selectedOption ? selectedOption.dataset.itemId : currentModelInfo.item_id;
+                
+                // 更新currentModelInfo的item_id（如果从option获取到了）
+                if (modelSteamId && modelSteamId !== 'undefined') {
+                    currentModelInfo.item_id = modelSteamId;
+                }
 
                 await loadModel(modelName, currentModelInfo, modelSteamId);
 
@@ -1598,7 +1615,8 @@
                                 availableModels.forEach(model => {
                                     const option = document.createElement('option');
                                     option.value = model.name;
-                                    option.textContent = model.name;
+                                    // 使用display_name（如果存在）显示更友好的名称
+                                    option.textContent = model.display_name || model.name;
                                     modelSelect.appendChild(option);
                                 });
 

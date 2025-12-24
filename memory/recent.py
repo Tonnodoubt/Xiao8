@@ -1,5 +1,5 @@
 from datetime import datetime
-from config import MODELS_WITH_EXTRA_BODY
+from config import get_extra_body
 from utils.config_manager import get_config_manager
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import SystemMessage, messages_to_dict, messages_from_dict, HumanMessage, AIMessage
@@ -33,15 +33,25 @@ class CompressedRecentHistoryManager:
     
     def _get_llm(self):
         """动态获取LLM实例以支持配置热重载"""
-        core_config = self._config_manager.get_core_config()
-        api_key = core_config['OPENROUTER_API_KEY'] if core_config['OPENROUTER_API_KEY'] else None
-        return ChatOpenAI(model=core_config['SUMMARY_MODEL'], base_url=core_config['OPENROUTER_URL'], api_key=api_key, temperature=0.3, extra_body={"enable_thinking": False} if core_config['SUMMARY_MODEL'] in MODELS_WITH_EXTRA_BODY else None)
+        api_config = self._config_manager.get_model_api_config('summary')
+        return ChatOpenAI(
+            model=api_config['model'],
+            base_url=api_config['base_url'],
+            api_key=api_config['api_key'] if api_config['api_key'] else None,
+            temperature=0.3,
+            extra_body=get_extra_body(api_config['model']) or None
+        )
     
     def _get_review_llm(self):
         """动态获取审核LLM实例以支持配置热重载"""
-        core_config = self._config_manager.get_core_config()
-        api_key = core_config['OPENROUTER_API_KEY'] if core_config['OPENROUTER_API_KEY'] else None
-        return ChatOpenAI(model=core_config['CORRECTION_MODEL'], base_url=core_config['OPENROUTER_URL'], api_key=api_key, temperature=0.1, extra_body={"enable_thinking": False} if core_config['CORRECTION_MODEL'] in MODELS_WITH_EXTRA_BODY else None)
+        api_config = self._config_manager.get_model_api_config('correction')
+        return ChatOpenAI(
+            model=api_config['model'],
+            base_url=api_config['base_url'],
+            api_key=api_config['api_key'] if api_config['api_key'] else None,
+            temperature=0.1,
+            extra_body=get_extra_body(api_config['model']) or None
+        )
 
     async def update_history(self, new_messages, lanlan_name, detailed=False):
         # 检查角色是否存在于配置中，如果不存在则创建默认路径
@@ -185,6 +195,7 @@ class CompressedRecentHistoryManager:
                     print('💥 摘要failed: ', response_content)
                     retries += 1
             except (APIConnectionError, InternalServerError, RateLimitError) as e:
+                logger.info(f"ℹ️ 捕获到 {type(e).__name__} 错误")
                 retries += 1
                 if retries >= max_retries:
                     print(f'❌ 摘要模型失败，已达到最大重试次数: {e}')
@@ -222,6 +233,7 @@ class CompressedRecentHistoryManager:
                     print('💥 第二轮摘要failed: ', response_content)
                     retries += 1
             except (APIConnectionError, InternalServerError, RateLimitError) as e:
+                logger.info(f"ℹ️ 捕获到 {type(e).__name__} 错误")
                 retries += 1
                 if retries >= max_retries:
                     print(f'❌ 第二轮摘要模型失败，已达到最大重试次数: {e}')
@@ -403,6 +415,7 @@ class CompressedRecentHistoryManager:
                     return False
                     
             except (APIConnectionError, InternalServerError, RateLimitError) as e:
+                logger.info(f"ℹ️ 捕获到 {type(e).__name__} 错误")
                 retries += 1
                 if retries >= max_retries:
                     print(f'❌ 记忆整理失败，已达到最大重试次数: {e}')
@@ -422,9 +435,3 @@ class CompressedRecentHistoryManager:
         # 如果所有重试都失败
         print(f"❌ {lanlan_name} 的记忆整理失败，已达到最大重试次数")
         return False
-
-    def clear_history(self, lanlan_name):
-        """
-        清除用户的聊天历史
-        """
-        self.user_histories[lanlan_name] = []

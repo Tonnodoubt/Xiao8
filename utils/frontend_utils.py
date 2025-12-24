@@ -16,7 +16,8 @@ import re
 import regex
 import os
 import logging
-import json
+import locale
+from datetime import datetime
 from pathlib import Path
 import httpx
 
@@ -88,6 +89,33 @@ def is_only_punctuation(text):
     return bool(regex.fullmatch(punctuation_pattern, text))
 
 
+def calculate_text_similarity(text1: str, text2: str) -> float:
+    """
+    计算两段文本的相似度（使用字符级 trigram 的 Jaccard 相似度）。
+    返回 0.0 到 1.0 之间的值。
+    """
+    if not text1 or not text2:
+        return 0.0
+    
+    # 生成字符级 trigrams
+    def get_trigrams(text: str) -> set:
+        text = text.lower().strip()
+        if len(text) < 3:
+            return {text}
+        return {text[i:i+3] for i in range(len(text) - 2)}
+    
+    trigrams1 = get_trigrams(text1)
+    trigrams2 = get_trigrams(text2)
+    
+    if not trigrams1 or not trigrams2:
+        return 0.0
+    
+    intersection = len(trigrams1 & trigrams2)
+    union = len(trigrams1 | trigrams2)
+    
+    return intersection / union if union > 0 else 0.0
+
+
 def find_models():
     """
     递归扫描 'static' 文件夹、用户文档下的 'live2d' 文件夹和用户mod路径，查找所有包含 '.model3.json' 文件的子目录。
@@ -114,15 +142,6 @@ def find_models():
     except Exception as e:
         logging.warning(f"无法访问用户文档live2d目录: {e}")
     
-    # 添加用户mod路径
-    try:
-        config_mgr = get_config_manager()
-        user_mod_dir = config_mgr.get_workshop_path()
-        if os.path.exists(user_mod_dir):
-            search_dirs.append(('user_mods', user_mod_dir, '/user_mods'))
-            logging.info(f"已添加用户mod路径: {user_mod_dir}")
-    except Exception as e:
-        logging.warning(f"无法访问用户mod路径: {e}")
     
     # 遍历所有搜索目录
     for source, search_root_dir, url_prefix in search_dirs:
@@ -132,22 +151,34 @@ def find_models():
                 for file in files:
                     if file.endswith('.model3.json'):
                         # 获取模型名称 (使用其所在的文件夹名，更加直观)
-                        model_name = os.path.basename(root)
+                        folder_name = os.path.basename(root)
+                        
+                        # 使用文件夹名作为模型名称和显示名称
+                        display_name = folder_name
+                        model_name = folder_name
                         
                         # 构建可被浏览器访问的URL路径
                         # 1. 计算文件相对于 search_root_dir 的路径
                         relative_path = os.path.relpath(os.path.join(root, file), search_root_dir)
-                        # 2. 将本地路径分隔符 (如'\') 替换为URL分隔符 ('/')
+                        # 2. 将本地路径分隔符 (如'\\') 替换为URL分隔符 ('/')
                         model_path = relative_path.replace(os.path.sep, '/')
                         
                         # 如果模型名称已存在，添加来源后缀以区分
                         existing_names = [m["name"] for m in found_models]
-                        display_name = model_name
+                        final_name = model_name
                         if model_name in existing_names:
-                            display_name = f"{model_name}_{source}"
+                            final_name = f"{model_name}_{source}"
+                            # 如果加后缀后还是重复，再加个数字后缀
+                            counter = 1
+                            while final_name in existing_names:
+                                final_name = f"{model_name}_{source}_{counter}"
+                                counter += 1
+                            # 同时更新display_name以区分
+                            display_name = f"{display_name} ({source})"
                         
                         found_models.append({
-                            "name": display_name,
+                            "name": final_name,
+                            "display_name": display_name,
                             "path": f"{url_prefix}/{model_path}",
                             "source": source
                         })
@@ -203,9 +234,9 @@ def find_model_directory(model_name: str):
     返回 (实际路径, URL前缀) 元组
     """
     from utils.config_manager import get_config_manager
-    # 从配置文件获取WORKSHOP_PATH
+    # 从配置文件获取WORKSHOP_PATH，如果不存在则使用steam_workshop_path
     workshop_config_data = load_workshop_config()
-    WORKSHOP_SEARCH_DIR = workshop_config_data.get("WORKSHOP_PATH")
+    WORKSHOP_SEARCH_DIR = workshop_config_data.get("WORKSHOP_PATH", workshop_config_data.get("steam_workshop_path", workshop_config_data.get("default_workshop_folder")))
     # 首先尝试在用户文档目录
     try:
         config_mgr = get_config_manager()
@@ -290,9 +321,9 @@ def find_workshop_item_by_id(item_id: str) -> tuple:
         (物品路径, URL前缀) 元组，即使找不到也会返回默认值
     """
     try:
-        # 从配置文件获取WORKSHOP_PATH，如果不存在则使用默认路径
+        # 从配置文件获取WORKSHOP_PATH，如果不存在则使用steam_workshop_path或默认路径
         workshop_config = load_workshop_config()
-        workshop_dir = workshop_config.get("WORKSHOP_PATH", workshop_config.get("default_workshop_folder", "static"))
+        workshop_dir = workshop_config.get("WORKSHOP_PATH", workshop_config.get("steam_workshop_path", workshop_config.get("default_workshop_folder", "static")))
         
         # 如果路径不存在或为空，使用默认的static目录
         if not workshop_dir or not os.path.exists(workshop_dir):
@@ -394,7 +425,6 @@ def find_model_config_file(model_name: str) -> str:
     # 如果都不存在，返回static默认路径
     url_prefix = '/static'
     return f"{url_prefix}/{model_name}/{model_name}.model3.json"
-
 
 def find_vrm_models():
     """
@@ -513,3 +543,26 @@ def find_vrma_animations():
     found_animations.sort(key=lambda x: x["name"])
     
     return found_animations
+
+def get_timestamp():
+    """Generate formatted timestamp like: Sunday, December 14, 2025 at 12:27 PM"""
+    import locale
+    from datetime import datetime
+    try:
+        old_locale = locale.getlocale(locale.LC_TIME)
+        try:
+            locale.setlocale(locale.LC_TIME, 'en_US.UTF-8')
+        except locale.Error:
+            try:
+                locale.setlocale(locale.LC_TIME, 'English_United States.1252')
+            except locale.Error:
+                pass
+        now = datetime.now()
+        timestamp = now.strftime("%A, %B %d, %Y at %I:%M %p")
+        try:
+            locale.setlocale(locale.LC_TIME, old_locale)
+        except: # noqa
+            pass
+        return timestamp
+    except Exception:
+        return datetime.now().strftime("%Y-%m-%d %H:%M")

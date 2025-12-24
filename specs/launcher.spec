@@ -1,8 +1,21 @@
 # -*- mode: python ; coding: utf-8 -*-
 import sys
 import os
+import platform
 from PyInstaller.utils.hooks import collect_all
 from PyInstaller.building.build_main import Tree
+
+# 获取 spec 文件所在目录和项目根目录
+SPEC_DIR = os.path.dirname(os.path.abspath(SPEC))
+PROJECT_ROOT = os.path.dirname(SPEC_DIR)
+
+# 切换到项目根目录，以便所有路径都是相对于根目录
+original_dir = os.getcwd()
+os.chdir(PROJECT_ROOT)
+
+print(f"[Build] SPEC_DIR: {SPEC_DIR}")
+print(f"[Build] PROJECT_ROOT: {PROJECT_ROOT}")
+print(f"[Build] Working from: {os.getcwd()}")
 
 # 收集所有必要的依赖
 datas = []
@@ -11,7 +24,7 @@ hiddenimports = []
 
 # 收集关键包的所有内容（根据实际 import 检查）
 critical_packages = [
-    'dashscope',         # main_helper 使用
+    'dashscope',         # main_logic 使用
     'openai',            # langchain_openai 需要
     'langchain',         # brain 和 memory 使用
     'langchain_community',
@@ -30,38 +43,66 @@ for pkg in critical_packages:
 
 # 添加配置文件（只添加 .json 文件，不包含 .py 代码）
 import glob
-config_json_files = glob.glob('config/*.json')
+config_json_files = glob.glob(os.path.join(PROJECT_ROOT, 'config/*.json'))
 print(f"[Build] Packing {len(config_json_files)} config files:")
 for json_file in config_json_files:
     print(f"  - {json_file}")
+    # 使用绝对路径，目标路径为 'config'
     datas.append((json_file, 'config'))
 
-# 添加项目目录和文件
+# 添加项目目录和文件（使用绝对路径）
 # 受版权保护的 live2d 模型打包到 _internal（用户不可见）
-datas += [
-    ('static/mao_pro', 'static/mao_pro'),           # 打包到 _internal
-    ('static/ziraitikuwa', 'static/ziraitikuwa'),   # 打包到 _internal
-    ('static/libs', 'static/libs'),                 # live2d 库
-    ('static/icons', 'static/icons'),               # 图标目录（包含所有 UI 图标）
-    ('static/locales', 'static/locales'),           # i18n 国际化翻译文件
-    ('static/*.js', 'static'),                      # JS 文件
-    ('static/*.json', 'static'),                    # manifest 等
-    ('static/*.ico', 'static'),                     # favicon
-    ('static/*.png', 'static'),                     # 根目录图标
-    ('assets', 'assets'),
-    ('templates', 'templates'),
-    ('steam_appid.txt', '.'),                       # Steam App ID 文件
-]
+def add_data(src, dest):
+    """ 添加数据文件，支持通配符 """
+    src_path = os.path.join(PROJECT_ROOT, src)
+    if '*' in src:
+        # 处理通配符
+        files = glob.glob(src_path)
+        if files:
+            for f in files:
+                datas.append((f, dest))
+        else:
+            print(f"[Build] Warning: No files matched pattern '{src}', skipping")
+    elif os.path.exists(src_path):
+        datas.append((src_path, dest))
+    else:
+        print(f"[Build] Warning: {src_path} not found, skipping")
+
+add_data('static/mao_pro', 'static/mao_pro')
+add_data('static/ziraitikuwa', 'static/ziraitikuwa') 
+add_data('static/libs', 'static/libs')
+add_data('static/icons', 'static/icons')
+add_data('static/locales', 'static/locales')
+add_data('static/*.js', 'static')
+add_data('static/*.json', 'static')
+add_data('static/*.ico', 'static')
+add_data('static/*.png', 'static')
+add_data('assets', 'assets')
+add_data('templates', 'templates')
+add_data('steam_appid.txt', '.')
 
 # 添加 Steam 相关的 DLL 和库文件（必须放在根目录）
-binaries += [
-    ('steam_api64.dll', '.'),                       # Steam API DLL
-    ('SteamworksPy64.dll', '.'),                    # SteamworksPy 64位 DLL
-]
-
-# 添加 steam_api64.lib（如果存在，供编译时使用）
-if os.path.exists('steam_api64.lib'):
-    binaries.append(('steam_api64.lib', '.'))
+# macOS 上使用 dylib，Windows 上使用 dll
+if sys.platform == 'darwin':
+    # macOS (Apple Silicon) 使用 .dylib
+    libsteam_api = os.path.join(PROJECT_ROOT, 'libsteam_api.dylib')
+    libSteamworksPy = os.path.join(PROJECT_ROOT, 'libSteamworksPy.dylib')
+    if os.path.exists(libsteam_api):
+        binaries.append((libsteam_api, '.'))
+    if os.path.exists(libSteamworksPy):
+        binaries.append((libSteamworksPy, '.'))
+elif sys.platform == 'win32':
+    # Windows 使用 .dll
+    steam_api_dll = os.path.join(PROJECT_ROOT, 'steam_api64.dll')
+    steamworks_dll = os.path.join(PROJECT_ROOT, 'SteamworksPy64.dll')
+    if os.path.exists(steam_api_dll):
+        binaries.append((steam_api_dll, '.'))
+    if os.path.exists(steamworks_dll):
+        binaries.append((steamworks_dll, '.'))
+    # 添加 steam_api64.lib（如果存在，供编译时使用）
+    steam_lib = os.path.join(PROJECT_ROOT, 'steam_api64.lib')
+    if os.path.exists(steam_lib):
+        binaries.append((steam_lib, '.'))
 
 # 注意：lanlan_frd.exe 不打包进去，应该和 Xiao8.exe 放在同一目录
 
@@ -149,13 +190,26 @@ hiddenimports += [
     'brain.deduper',
     'brain.mcp_client',
     
-    # main_helper 子模块
-    'main_helper',
-    'main_helper.core',
-    'main_helper.cross_server',
-    'main_helper.omni_offline_client',
-    'main_helper.omni_realtime_client',
-    'main_helper.tts_helper',
+    # main_logic 子模块
+    'main_logic',
+    'main_logic.core',
+    'main_logic.cross_server',
+    'main_logic.omni_offline_client',
+    'main_logic.omni_realtime_client',
+    'main_logic.tts_client',
+    
+    # main_routers 子模块
+    'main_routers',
+    'main_routers.config_router',
+    'main_routers.characters_router',
+    'main_routers.live2d_router',
+    'main_routers.workshop_router',
+    'main_routers.memory_router',
+    'main_routers.pages_router',
+    'main_routers.websocket_router',
+    'main_routers.agent_router',
+    'main_routers.system_router',
+    'main_routers.shared_state',
     
     # memory 子模块
     'memory',
@@ -172,7 +226,6 @@ hiddenimports += [
     'utils.frontend_utils',
     'utils.logger_config',
     'utils.preferences',
-    'utils.qwen_tts_vc_realtime',
     'utils.web_scraper',
     
     # Steam 相关模块
@@ -194,17 +247,44 @@ hiddenimports += [
     'steamworks.interfaces.workshop',
     'steamworks.interfaces.microtxn',
     'steamworks.interfaces.input',
+    
+    # plugin 子模块
+    'plugin',
+    'plugin.settings',
+    'plugin.user_plugin_server',
+    'plugin.api',
+    'plugin.api.exceptions',
+    'plugin.api.models',
+    'plugin.core',
+    'plugin.core.context',
+    'plugin.core.state',
+    'plugin.runtime',
+    'plugin.runtime.communication',
+    'plugin.runtime.host',
+    'plugin.runtime.registry',
+    'plugin.runtime.status',
+    'plugin.sdk',
+    'plugin.sdk.base',
+    'plugin.sdk.decorators',
+    'plugin.sdk.events',
+    'plugin.sdk.logger',
+    'plugin.sdk.version',
+    'plugin.server',
+    'plugin.server.exceptions',
+    'plugin.server.lifecycle',
+    'plugin.server.services',
+    'plugin.server.utils',
 ]
 
 a = Analysis(
-    ['launcher.py'],
-    pathex=[],
+    [os.path.join(PROJECT_ROOT, 'launcher.py')],  # 使用绝对路径
+    pathex=[PROJECT_ROOT],  # 添加项目根目录到路径
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=['.'],  # 查找当前目录的 hook 文件
     hooksconfig={},
-    runtime_hooks=['runtime_hook_inflect.py'],  # 运行时 hook
+    runtime_hooks=[],  # 移除不存在的 runtime hook
     excludes=[],
     noarchive=False,
     optimize=0,
@@ -226,11 +306,11 @@ exe = EXE(
     runtime_tmpdir=None,
     console=True,
     disable_windowed_traceback=False,
-    argv_emulation=False,
-    target_arch=None,
+    argv_emulation=True if sys.platform == 'darwin' else False,  # macOS 需要开启
+    target_arch=platform.machine() if sys.platform == 'darwin' else None,  # 自动检测 macOS 架构 (arm64/x86_64)
     codesign_identity=None,
     entitlements_file=None,
-    icon='assets/icon.ico' if sys.platform == 'win32' else None,
+    icon='assets/icon.ico' if sys.platform == 'win32' else None,  # macOS 暂不使用图标
     version='version_info.txt' if sys.platform == 'win32' else None,  # 添加版本信息减少误报
 )
 
@@ -244,4 +324,7 @@ coll = COLLECT(
     upx_exclude=[],
     name='N.E.K.O',
 )
+
+# 恢复原始工作目录
+os.chdir(original_dir)
 

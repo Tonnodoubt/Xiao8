@@ -49,6 +49,7 @@ class ConfigManager:
         self.memory_dir = self.app_docs_dir / "memory"
         self.live2d_dir = self.app_docs_dir / "live2d"
         self.workshop_dir = self.app_docs_dir / "workshop"
+        self.chara_dir = self.app_docs_dir / "character_cards"
 
         self.project_config_dir = self._get_project_config_directory()
         self.project_memory_dir = self._get_project_memory_directory()
@@ -302,6 +303,19 @@ class ConfigManager:
             return True
         except Exception as e:
             print(f"Warning: Failed to create live2d directory: {e}", file=sys.stderr)
+            return False
+        
+    def ensure_chara_directory(self):
+        """确保我的文档下的character_cards目录存在"""
+        try:
+            # 先确保app_docs_dir存在
+            if not self._ensure_app_docs_directory():
+                return False
+            
+            self.chara_dir.mkdir(exist_ok=True)
+            return True
+        except Exception as e:
+            print(f"Warning: Failed to create character_cards directory: {e}", file=sys.stderr)
             return False
     
     def get_config_path(self, filename):
@@ -598,7 +612,7 @@ class ConfigManager:
             DEFAULT_CORRECTION_MODEL,
             DEFAULT_EMOTION_MODEL,
             DEFAULT_VISION_MODEL,
-            DEFAULT_OMNI_MODEL,
+            DEFAULT_REALTIME_MODEL,
             DEFAULT_TTS_MODEL,
             DEFAULT_SUMMARY_MODEL_PROVIDER,
             DEFAULT_SUMMARY_MODEL_URL,
@@ -612,9 +626,9 @@ class ConfigManager:
             DEFAULT_VISION_MODEL_PROVIDER,
             DEFAULT_VISION_MODEL_URL,
             DEFAULT_VISION_MODEL_API_KEY,
-            DEFAULT_OMNI_MODEL_PROVIDER,
-            DEFAULT_OMNI_MODEL_URL,
-            DEFAULT_OMNI_MODEL_API_KEY,
+            DEFAULT_REALTIME_MODEL_PROVIDER,
+            DEFAULT_REALTIME_MODEL_URL,
+            DEFAULT_REALTIME_MODEL_API_KEY,
             DEFAULT_TTS_MODEL_PROVIDER,
             DEFAULT_TTS_MODEL_URL,
             DEFAULT_TTS_MODEL_API_KEY,
@@ -651,7 +665,7 @@ class ConfigManager:
             'COMPUTER_USE_GROUND_API_KEY': DEFAULT_COMPUTER_USE_GROUND_API_KEY,
             'IS_FREE_VERSION': False,
             'VISION_MODEL': DEFAULT_VISION_MODEL,
-            'OMNI_MODEL': DEFAULT_OMNI_MODEL,
+            'REALTIME_MODEL': DEFAULT_REALTIME_MODEL,
             'TTS_MODEL': DEFAULT_TTS_MODEL,
             'SUMMARY_MODEL_PROVIDER': DEFAULT_SUMMARY_MODEL_PROVIDER,
             'SUMMARY_MODEL_URL': DEFAULT_SUMMARY_MODEL_URL,
@@ -665,9 +679,9 @@ class ConfigManager:
             'VISION_MODEL_PROVIDER': DEFAULT_VISION_MODEL_PROVIDER,
             'VISION_MODEL_URL': DEFAULT_VISION_MODEL_URL,
             'VISION_MODEL_API_KEY': DEFAULT_VISION_MODEL_API_KEY,
-            'OMNI_MODEL_PROVIDER': DEFAULT_OMNI_MODEL_PROVIDER,
-            'OMNI_MODEL_URL': DEFAULT_OMNI_MODEL_URL,
-            'OMNI_MODEL_API_KEY': DEFAULT_OMNI_MODEL_API_KEY,
+            'REALTIME_MODEL_PROVIDER': DEFAULT_REALTIME_MODEL_PROVIDER,
+            'REALTIME_MODEL_URL': DEFAULT_REALTIME_MODEL_URL,
+            'REALTIME_MODEL_API_KEY': DEFAULT_REALTIME_MODEL_API_KEY,
             'TTS_MODEL_PROVIDER': DEFAULT_TTS_MODEL_PROVIDER,
             'TTS_MODEL_URL': DEFAULT_TTS_MODEL_URL,
             'TTS_MODEL_API_KEY': DEFAULT_TTS_MODEL_API_KEY,
@@ -768,7 +782,155 @@ class ConfigManager:
         if not config.get('COMPUTER_USE_GROUND_API_KEY'):
             config['COMPUTER_USE_GROUND_API_KEY'] = derived_key if derived_key else config['CORE_API_KEY']
 
+        # 自定义API配置映射（使用大写下划线形式的内部键，且在未提供时保留已有默认值）
+        enable_custom_api = core_cfg.get('enableCustomApi', False)
+        config['ENABLE_CUSTOM_API'] = enable_custom_api
+        
+        # 只有在启用自定义API时才允许覆盖视觉模型相关字段
+        if enable_custom_api:
+            if core_cfg.get('visionModelApiKey') is not None:
+                config['VISION_MODEL_API_KEY'] = core_cfg.get('visionModelApiKey', '') or config.get('VISION_MODEL_API_KEY', '')
+            if core_cfg.get('visionModelUrl') is not None:
+                config['VISION_MODEL_URL'] = core_cfg.get('visionModelUrl', '') or config.get('VISION_MODEL_URL', '')
+            if core_cfg.get('visionModelId') is not None:
+                # 将 core_cfg 中的 visionModelId 映射到内部的 VISION_MODEL（模型ID）
+                config['VISION_MODEL'] = core_cfg.get('visionModelId', '') or config.get('VISION_MODEL', '')
+
         return config
+
+    def get_model_api_config(self, model_type: str) -> dict:
+        """
+        获取指定模型类型的 API 配置（自动处理自定义 API 优先级）
+        
+        Args:
+            model_type: 模型类型，可选值：
+                - 'summary': 摘要模型（回退到辅助API）
+                - 'correction': 纠错模型（回退到辅助API）
+                - 'emotion': 情感分析模型（回退到辅助API）
+                - 'vision': 视觉模型（回退到辅助API）
+                - 'realtime': 实时语音模型（回退到核心API）
+                - 'tts_default': 默认TTS（回退到核心API，用于OmniOfflineClient）
+                - 'tts_custom': 自定义TTS（回退到辅助API，用于voice_id场景）
+                
+        Returns:
+            dict: 包含以下字段的配置：
+                - 'model': 模型名称
+                - 'api_key': API密钥
+                - 'base_url': API端点URL
+                - 'is_custom': 是否使用自定义API配置
+        """
+        core_config = self.get_core_config()
+        enable_custom_api = core_config.get('ENABLE_CUSTOM_API', False)
+        
+        # 模型类型到配置字段的映射
+        # fallback_type: 'assist' = 辅助API, 'core' = 核心API
+        model_type_mapping = {
+            'summary': {
+                'custom_model': 'SUMMARY_MODEL',
+                'custom_url': 'SUMMARY_MODEL_URL',
+                'custom_key': 'SUMMARY_MODEL_API_KEY',
+                'default_model': 'SUMMARY_MODEL',
+                'fallback_type': 'assist',
+            },
+            'correction': {
+                'custom_model': 'CORRECTION_MODEL',
+                'custom_url': 'CORRECTION_MODEL_URL',
+                'custom_key': 'CORRECTION_MODEL_API_KEY',
+                'default_model': 'CORRECTION_MODEL',
+                'fallback_type': 'assist',
+            },
+            'emotion': {
+                'custom_model': 'EMOTION_MODEL',
+                'custom_url': 'EMOTION_MODEL_URL',
+                'custom_key': 'EMOTION_MODEL_API_KEY',
+                'default_model': 'EMOTION_MODEL',
+                'fallback_type': 'assist',
+            },
+            'vision': {
+                'custom_model': 'VISION_MODEL',
+                'custom_url': 'VISION_MODEL_URL',
+                'custom_key': 'VISION_MODEL_API_KEY',
+                'default_model': 'VISION_MODEL',
+                'fallback_type': 'assist',
+            },
+            'realtime': {
+                'custom_model': 'REALTIME_MODEL',
+                'custom_url': 'REALTIME_MODEL_URL',
+                'custom_key': 'REALTIME_MODEL_API_KEY',
+                'default_model': 'CORE_MODEL',
+                'fallback_type': 'core',  # 实时模型回退到核心API
+            },
+            'tts_default': {
+                'custom_model': 'TTS_MODEL',
+                'custom_url': 'TTS_MODEL_URL',
+                'custom_key': 'TTS_MODEL_API_KEY',
+                'default_model': 'CORE_MODEL',
+                'fallback_type': 'core',  # 默认TTS回退到核心API
+            },
+            'tts_custom': {
+                'custom_model': 'TTS_MODEL',
+                'custom_url': 'TTS_MODEL_URL',
+                'custom_key': 'TTS_MODEL_API_KEY',
+                'default_model': 'CORE_MODEL',
+                'fallback_type': 'assist',  # 自定义TTS回退到辅助API
+            },
+        }
+        
+        if model_type not in model_type_mapping:
+            raise ValueError(f"Unknown model_type: {model_type}. Valid types: {list(model_type_mapping.keys())}")
+        
+        mapping = model_type_mapping[model_type]
+        
+        # 优先使用自定义 API 配置
+        if enable_custom_api:
+            custom_model = core_config.get(mapping['custom_model'], '')
+            custom_url = core_config.get(mapping['custom_url'], '')
+            custom_key = core_config.get(mapping['custom_key'], '')
+            
+            # 自定义配置完整时使用自定义配置
+            if custom_model and custom_url and custom_key:
+                return {
+                    'model': custom_model,
+                    'api_key': custom_key,
+                    'base_url': custom_url,
+                    'is_custom': True,
+                    # 对于 realtime 模型，自定义配置时 api_type 设为 'local'
+                    # TODO: 后续完善 'local' 类型的具体实现（如本地推理服务等）
+                    'api_type': 'local' if model_type == 'realtime' else None,
+                }
+        
+        # 自定义音色(CosyVoice)的特殊回退逻辑：优先尝试用户保存的 Qwen Cosyvoice API，
+        # 只有在缺少 Qwen Cosyvoice API 时才再回退到辅助 API（CosyVoice 目前是唯一支持 voice clone 的）
+        if model_type == 'tts_custom':
+            qwen_api_key = (core_config.get('ASSIST_API_KEY_QWEN') or '').strip()
+            if qwen_api_key:
+                qwen_profile = get_assist_api_profiles().get('qwen', {})
+                return {
+                    'model': core_config.get(mapping['default_model'], ''), # Placeholder only, will be overridden by the actual model
+                    'api_key': qwen_api_key,
+                    'base_url': qwen_profile.get('OPENROUTER_URL', core_config.get('OPENROUTER_URL', '')), # Placeholder only, will be overridden by the actual url
+                    'is_custom': False,
+                }
+
+        # 根据 fallback_type 回退到不同的 API
+        if mapping['fallback_type'] == 'core':
+            # 回退到核心 API 配置
+            return {
+                'model': core_config.get(mapping['default_model'], ''),
+                'api_key': core_config.get('CORE_API_KEY', ''),
+                'base_url': core_config.get('CORE_URL', ''),
+                'is_custom': False,
+                # 对于 realtime 模型，回退到核心API时使用配置的 CORE_API_TYPE
+                'api_type': core_config.get('CORE_API_TYPE', '') if model_type == 'realtime' else None,
+            }
+        else:
+            # 回退到辅助 API 配置
+            return {
+                'model': core_config.get(mapping['default_model'], ''),
+                'api_key': core_config.get('OPENROUTER_API_KEY', ''),
+                'base_url': core_config.get('OPENROUTER_URL', ''),
+                'is_custom': False,
+            }
 
     def load_json_config(self, filename, default_value=None):
         """
@@ -853,6 +1015,7 @@ class ConfigManager:
             "memory_dir": str(self.memory_dir),
             "live2d_dir": str(self.live2d_dir),
             "workshop_dir": str(self.workshop_dir),
+            "chara_dir": str(self.chara_dir),
             "project_config_dir": str(self.project_config_dir),
             "project_memory_dir": str(self.project_memory_dir),
             "config_files": {

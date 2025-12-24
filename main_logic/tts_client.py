@@ -5,19 +5,46 @@ TTS Helper模块
 import numpy as np
 import soxr
 import time
-import asyncio
 import json
 import base64
 import logging
 import websockets
-from enum import Enum
-from multiprocessing import Queue as MPQueue, Process
-import threading
 import io
 import wave
 import aiohttp
 from functools import partial
 logger = logging.getLogger(__name__)
+
+
+def _resample_audio(audio_int16: np.ndarray, src_rate: int, dst_rate: int, 
+                    resampler: 'soxr.ResampleStream | None' = None) -> bytes:
+    """使用 soxr 进行高质量音频重采样
+    
+    Args:
+        audio_int16: int16 格式的音频 numpy 数组
+        src_rate: 源采样率
+        dst_rate: 目标采样率
+        resampler: 可选的流式重采样器，用于维护 chunk 间状态
+        
+    Returns:
+        重采样后的 bytes
+    """
+    if src_rate == dst_rate:
+        return audio_int16.tobytes()
+    
+    # 转换为 float32 进行高质量重采样
+    audio_float = audio_int16.astype(np.float32) / 32768.0
+    
+    if resampler is not None:
+        # 使用流式重采样器（维护 chunk 边界状态）
+        resampled_float = resampler.resample_chunk(audio_float)
+    else:
+        # 无状态重采样（不推荐用于流式音频）
+        resampled_float = soxr.resample(audio_float, src_rate, dst_rate, quality='HQ')
+    
+    # 转回 int16
+    resampled_int16 = (resampled_float * 32768.0).clip(-32768, 32767).astype(np.int16)
+    return resampled_int16.tobytes()
 
 
 def step_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice_id, free_mode=False):
@@ -42,13 +69,15 @@ def step_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
         if free_mode:
             tts_url = "wss://lanlan.tech/tts"
         else:
-            tts_url = "wss://api.stepfun.com/v1/realtime/audio?model=step-tts-mini"
+            tts_url = "wss://api.stepfun.com/v1/realtime/audio?model=step-tts-2"
         ws = None
         current_speech_id = None
         receive_task = None
         session_id = None
         session_ready = asyncio.Event()
         response_done = asyncio.Event()  # 用于标记当前响应是否完成
+        # 流式重采样器（24kHz→48kHz）- 维护 chunk 边界状态
+        resampler = soxr.ResampleStream(24000, 48000, 1, dtype='float32')
         
         try:
             # 连接WebSocket
@@ -150,9 +179,8 @@ def step_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
                                     
                                     # 转换为 numpy 数组
                                     audio_array = np.frombuffer(pcm_data, dtype=np.int16)
-                                    # 重采样 24000Hz -> 48000Hz
-                                    resampled = np.repeat(audio_array, 48000 // 24000)
-                                    response_queue.put(resampled.tobytes())
+                                    # 使用流式重采样器 24000Hz -> 48000Hz
+                                    response_queue.put(_resample_audio(audio_array, 24000, 48000, resampler))
                             except Exception as e:
                                 logger.error(f"处理音频数据时出错: {e}")
                         elif event_type in ["tts.response.done", "tts.response.audio.done"]:
@@ -186,7 +214,7 @@ def step_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
                             await ws.send(json.dumps(done_event))
                             # 等待服务器返回响应完成事件，然后关闭连接
                             try:
-                                await asyncio.wait_for(response_done.wait(), timeout=30.0)
+                                await asyncio.wait_for(response_done.wait(), timeout=20.0)
                                 logger.debug("音频生成完成，主动关闭连接")
                             except asyncio.TimeoutError:
                                 logger.warning("等待响应完成超时（30秒），强制关闭连接")
@@ -195,7 +223,7 @@ def step_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
                             if ws:
                                 try:
                                     await ws.close()
-                                except:
+                                except:  # noqa: E722
                                     pass
                                 ws = None
                             if receive_task and not receive_task.done():
@@ -216,10 +244,11 @@ def step_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
                 if current_speech_id != sid:
                     current_speech_id = sid
                     response_done.clear()
+                    resampler.clear()  # 重置重采样器状态（新轮次音频不应与上轮次连续）
                     if ws:
                         try:
                             await ws.close()
-                        except:
+                        except:  # noqa: E722
                             pass
                     if receive_task and not receive_task.done():
                         receive_task.cancel()
@@ -290,9 +319,8 @@ def step_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
                                                 
                                                 # 转换为 numpy 数组
                                                 audio_array = np.frombuffer(pcm_data, dtype=np.int16)
-                                                # 重采样 24000Hz -> 48000Hz
-                                                resampled = np.repeat(audio_array, 48000 // 24000)
-                                                response_queue.put(resampled.tobytes())
+                                                # 使用流式重采样器 24000Hz -> 48000Hz
+                                                response_queue.put(_resample_audio(audio_array, 24000, 48000, resampler))
                                         except Exception as e:
                                             logger.error(f"处理音频数据时出错: {e}")
                                     elif event_type in ["tts.response.done", "tts.response.audio.done"]:
@@ -384,6 +412,8 @@ def qwen_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
         receive_task = None
         session_ready = asyncio.Event()
         response_done = asyncio.Event()  # 用于标记当前响应是否完成
+        # 流式重采样器（24kHz→48kHz）- 维护 chunk 边界状态
+        resampler = soxr.ResampleStream(24000, 48000, 1, dtype='float32')
         
         try:
             # 连接WebSocket
@@ -459,8 +489,8 @@ def qwen_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
                             try:
                                 audio_bytes = base64.b64decode(event.get("delta", ""))
                                 audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
-                                resampled = np.repeat(audio_array, 2)
-                                response_queue.put(resampled.tobytes())
+                                # 使用流式重采样器 24000Hz -> 48000Hz
+                                response_queue.put(_resample_audio(audio_array, 24000, 48000, resampler))
                             except Exception as e:
                                 logger.error(f"处理音频数据时出错: {e}")
                         elif event_type in ["response.done", "response.audio.done", "output.done"]:
@@ -494,7 +524,7 @@ def qwen_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
                             }))
                             # 等待服务器返回响应完成事件，然后关闭连接
                             try:
-                                await asyncio.wait_for(response_done.wait(), timeout=30.0)
+                                await asyncio.wait_for(response_done.wait(), timeout=20.0)
                                 logger.debug("音频生成完成，主动关闭连接")
                             except asyncio.TimeoutError:
                                 logger.warning("等待响应完成超时（30秒），强制关闭连接")
@@ -503,7 +533,7 @@ def qwen_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
                             if ws:
                                 try:
                                     await ws.close()
-                                except:
+                                except:  # noqa: E722
                                     pass
                                 ws = None
                             if receive_task and not receive_task.done():
@@ -524,10 +554,11 @@ def qwen_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
                 if current_speech_id != sid:
                     current_speech_id = sid
                     response_done.clear()
+                    resampler.clear()  # 重置重采样器状态（新轮次音频不应与上轮次连续）
                     if ws:
                         try:
                             await ws.close()
-                        except:
+                        except:  # noqa: E722
                             pass
                     if receive_task and not receive_task.done():
                         receive_task.cancel()
@@ -577,8 +608,8 @@ def qwen_realtime_tts_worker(request_queue, response_queue, audio_api_key, voice
                                         try:
                                             audio_bytes = base64.b64decode(event.get("delta", ""))
                                             audio_array = np.frombuffer(audio_bytes, dtype=np.int16)
-                                            resampled = np.repeat(audio_array, 2)
-                                            response_queue.put(resampled.tobytes())
+                                            # 使用流式重采样器 24000Hz -> 48000Hz
+                                            response_queue.put(_resample_audio(audio_array, 24000, 48000, resampler))
                                         except Exception as e:
                                             logger.error(f"处理音频数据时出错: {e}")
                                     elif event_type in ["response.done", "response.audio.done", "output.done"]:
@@ -665,19 +696,18 @@ def cosyvoice_vc_tts_worker(request_queue, response_queue, audio_api_key, voice_
     class Callback(ResultCallback):
         def __init__(self, response_queue):
             self.response_queue = response_queue
-            self.cache = np.zeros(0).astype(np.float32)
             
         def on_open(self): 
-            pass
+            # 连接已建立，发送就绪信号
+            elapsed = time.time() - self.construct_start_time if hasattr(self, 'construct_start_time') else -1
+            print(f"TTS 连接已建立!! (构造到open耗时: {elapsed:.2f}s)")
             
         def on_complete(self): 
-            if len(self.cache) > 0:
-                data = (soxr.resample(self.cache, 24000, 48000, quality='HQ') * 32768.).clip(-32768, 32767).astype(np.int16).tobytes()
-                self.response_queue.put(data)
-                self.cache = np.zeros(0).astype(np.float32)
+            pass
                 
         def on_error(self, message: str): 
-            print(f"TTS Error: {message}")
+            if "request timeout after 23 seconds" not in message:
+                print(f"TTS Error: {message}")
             
         def on_close(self): 
             pass
@@ -686,13 +716,8 @@ def cosyvoice_vc_tts_worker(request_queue, response_queue, audio_api_key, voice_
             pass
             
         def on_data(self, data: bytes) -> None:
-            audio = np.frombuffer(data, dtype=np.int16).astype(np.float32) / 32768.0
-            self.cache = np.concatenate([self.cache, audio])
-            if len(self.cache) >= 8000:
-                data = self.cache[:8000]
-                data = (soxr.resample(data, 24000, 48000, quality='HQ') * 32768.).clip(-32768, 32767).astype(np.int16).tobytes()
-                self.response_queue.put(data)
-                self.cache = self.cache[8000:]
+            # 直接转发 OGG OPUS 数据到前端解码
+            self.response_queue.put(data)
             
     callback = Callback(response_queue)
     current_speech_id = None
@@ -707,44 +732,70 @@ def cosyvoice_vc_tts_worker(request_queue, response_queue, audio_api_key, voice_
         sid, tts_text = request_queue.get()
 
         if sid is None:
-            # 停止当前合成
+            # 停止当前合成 - 告诉TTS没有更多文本了
+            # 注意：streaming_complete() 只是标记输入结束，音频还会继续回传
+            # close() 应该在下次需要新 synthesizer 时再调用，不能立即调用
             if synthesizer is not None:
                 try:
-                    synthesizer.streaming_complete()
-                except Exception:
-                    synthesizer = None
-            continue
-            
-        if current_speech_id is None or current_speech_id != sid or synthesizer is None:
-            current_speech_id = sid
-            try:
-                if synthesizer is not None:
+                    synthesizer.streaming_complete(complete_timeout_millis=20000)
+                except Exception as e:
+                    logger.warning(f"TTS streaming_complete 失败: {e}")
+                finally:
                     try:
                         synthesizer.close()
                     except Exception:
                         pass
+                    synthesizer = None   
+            current_speech_id = None
+
+        if current_speech_id is None:
+            current_speech_id = sid
+
+        if current_speech_id != sid:
+            if synthesizer is not None:
+                try:
+                    synthesizer.close()
+                except Exception:
+                    pass
+            synthesizer = None
+            current_speech_id = sid
+            
+        # 需要重建 synthesizer
+        if synthesizer is None:
+            current_speech_id = sid
+            
+            # 创建新的 synthesizer
+            try:
+                callback.construct_start_time = time.time()
                 synthesizer = SpeechSynthesizer(
                     model="cosyvoice-v3-plus",
                     voice=voice_id,
                     speech_rate=1.1,
-                    format=AudioFormat.PCM_24000HZ_MONO_16BIT,
+                    format=AudioFormat.OGG_OPUS_48KHZ_MONO_64KBPS,
                     callback=callback,
                 )
+                synthesizer.streaming_call("。")
             except Exception as e:
-                print("TTS Error: ", e)
+                print("TTS Init Error: ", e)
                 synthesizer = None
                 current_speech_id = None
+                time.sleep(0.1)
                 continue
                     
         if tts_text is None or not tts_text.strip():
             time.sleep(0.01)
             continue
             
-        # 处理表情等逻辑
+        # 发送文本到 TTS
         try:
             synthesizer.streaming_call(tts_text)
         except Exception as e:
-            print("TTS Error: ", e)
+            print("TTS Call Error: ", e)
+            if synthesizer is not None:
+                try:
+                    synthesizer.close()
+                except Exception:
+                    pass
             synthesizer = None
             current_speech_id = None
             continue

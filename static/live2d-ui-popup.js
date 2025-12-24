@@ -65,10 +65,11 @@ Live2DManager.prototype.createPopup = function (buttonId) {
 
 // 创建设置弹出框内容
 Live2DManager.prototype._createSettingsPopupContent = function (popup) {
-    // 先添加 Focus 模式和主动搭话开关（在最上面）
+    // 先添加 Focus 模式、主动搭话和自主视觉开关（在最上面）
     const settingsToggles = [
         { id: 'focus-mode', label: window.t ? window.t('settings.toggles.allowInterrupt') : '允许打断', labelKey: 'settings.toggles.allowInterrupt', storageKey: 'focusModeEnabled', inverted: true }, // inverted表示值与focusModeEnabled相反
-        { id: 'proactive-chat', label: window.t ? window.t('settings.toggles.proactiveChat') : '主动搭话', labelKey: 'settings.toggles.proactiveChat', storageKey: 'proactiveChatEnabled' }
+        { id: 'proactive-chat', label: window.t ? window.t('settings.toggles.proactiveChat') : '主动搭话', labelKey: 'settings.toggles.proactiveChat', storageKey: 'proactiveChatEnabled' },
+        { id: 'proactive-vision', label: window.t ? window.t('settings.toggles.proactiveVision') : '自主视觉', labelKey: 'settings.toggles.proactiveVision', storageKey: 'proactiveVisionEnabled' }
     ];
 
     settingsToggles.forEach(toggle => {
@@ -336,6 +337,8 @@ Live2DManager.prototype._createSettingsToggleItem = function (toggle, popup) {
         checkbox.checked = toggle.inverted ? !window.focusModeEnabled : window.focusModeEnabled;
     } else if (toggle.id === 'proactive-chat' && typeof window.proactiveChatEnabled !== 'undefined') {
         checkbox.checked = window.proactiveChatEnabled;
+    } else if (toggle.id === 'proactive-vision' && typeof window.proactiveVisionEnabled !== 'undefined') {
+        checkbox.checked = window.proactiveVisionEnabled;
     }
 
     // 创建自定义圆形指示器
@@ -454,6 +457,37 @@ Live2DManager.prototype._createSettingsToggleItem = function (toggle, popup) {
                 window.stopProactiveChatSchedule();
             }
             console.log(`主动搭话已${isChecked ? '开启' : '关闭'}`);
+        } else if (toggle.id === 'proactive-vision') {
+            window.proactiveVisionEnabled = isChecked;
+
+            // 保存到localStorage
+            if (typeof window.saveNEKOSettings === 'function') {
+                window.saveNEKOSettings();
+            }
+
+            if (isChecked) {
+                if (typeof window.resetProactiveChatBackoff === 'function') {
+                    window.resetProactiveChatBackoff();
+                }
+                // 如果正在语音对话中，启动15秒1帧定时器
+                if (typeof window.isRecording !== 'undefined' && window.isRecording) {
+                    if (typeof window.startProactiveVisionDuringSpeech === 'function') {
+                        window.startProactiveVisionDuringSpeech();
+                    }
+                }
+            } else {
+                if (typeof window.stopProactiveChatSchedule === 'function') {
+                    // 只有当主动搭话也关闭时才停止调度
+                    if (!window.proactiveChatEnabled) {
+                        window.stopProactiveChatSchedule();
+                    }
+                }
+                // 停止语音期间的主动视觉定时器
+                if (typeof window.stopProactiveVisionDuringSpeech === 'function') {
+                    window.stopProactiveVisionDuringSpeech();
+                }
+            }
+            console.log(`主动视觉已${isChecked ? '开启' : '关闭'}`);
         }
     };
 

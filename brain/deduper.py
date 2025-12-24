@@ -2,7 +2,7 @@ from typing import List, Dict, Any, Optional, Tuple
 import asyncio
 from langchain_openai import ChatOpenAI
 from openai import APIConnectionError, InternalServerError, RateLimitError
-from config import MODELS_WITH_EXTRA_BODY
+from config import get_extra_body
 from utils.config_manager import get_config_manager
 import logging
 import json
@@ -19,13 +19,13 @@ class TaskDeduper:
 
     def __init__(self):
         config_manager = get_config_manager()
-        core_config = config_manager.get_core_config()
+        api_config = config_manager.get_model_api_config('summary')
         self.llm = ChatOpenAI(
-            model=core_config['SUMMARY_MODEL'],
-            base_url=core_config['OPENROUTER_URL'],
-            api_key=core_config['OPENROUTER_API_KEY'],
+            model=api_config['model'],
+            base_url=api_config['base_url'],
+            api_key=api_config['api_key'],
             temperature=0,
-            extra_body={"enable_thinking": False} if core_config['SUMMARY_MODEL'] in MODELS_WITH_EXTRA_BODY else None
+            extra_body=get_extra_body(api_config['model']) or None
         )
 
     def _build_prompt(self, new_task: str, candidates: List[Tuple[str, str]]) -> str:
@@ -77,6 +77,7 @@ class TaskDeduper:
                 except Exception:
                     return {"duplicate": False, "matched_id": None}
             except (APIConnectionError, InternalServerError, RateLimitError) as e:
+                logger.info(f"ℹ️ 捕获到 {type(e).__name__} 错误")
                 if attempt < max_retries - 1:
                     wait_time = retry_delays[attempt]
                     logger.warning(f"[Deduper] LLM调用失败 (尝试 {attempt + 1}/{max_retries})，{wait_time}秒后重试: {e}")

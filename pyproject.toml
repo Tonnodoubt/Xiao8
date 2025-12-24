@@ -13,28 +13,31 @@ dependencies = [
   "websockets~=15.0.1",
   "soxr~=0.5.0",
   "numpy~=1.26.4",
-  "pyaudio~=0.2.14",
   "websocket-client~=1.8.0",
   "langchain==1.0.0",
   "langchain-core==1.0.0",
   "langchain-openai>=1.0.0,<2.0.0",
   "langchain_community",
   "jinja2",
-  "dashscope",
+  "dashscope==1.25.4",
   "python-multipart",
   "pillow",
   "pyautogui",
-  "pyinstaller>=6.16.0",
   "backoff",
   "toml",
   "openai",
-  "google-genai",
+  "google-genai>=1.56.0",
   "anthropic",
   "uvicorn",
   "pyobjc; sys_platform == 'darwin'",
   "pytesseract",
   "pywin32; sys_platform == 'win32'",
   "pywinauto; sys_platform == 'win32'",
+  "pygetwindow; sys_platform == 'win32'",
+  "pyrnnoise>=0.4.0",
+  "beautifulsoup4>=4.12.0",
+  "googletrans>=4.0.2",
+  "translatepy",
 ]
 
 
@@ -42,26 +45,39 @@ dependencies = [
 packages = [
   "brain",
   "config",
-  "main_helper",
+  "main_logic",
+  "main_routers",
   "memory",
+  "plugin",
+  "steamworks",
   "utils",
+]
+exclude = [
+  "plugin/plugins",
 ]
 
 [tool.hatch.build.targets.sdist]
 include = [
   "brain",
   "config",
-  "main_helper",
+  "main_logic",
+  "main_routers",
   "memory",
+  "plugin",
+  "steamworks",
   "utils",
   "static",
   "templates",
   "assets",
   "main_server.py",
   "memory_server.py",
-  "tool_server.py",
+  "agent_server.py",
+  "launcher.py",
   "monitor.py",
   "README.MD",
   "LICENSE",
+]
+exclude = [
+  "plugin/plugins",
 ]
 
