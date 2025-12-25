@@ -778,19 +778,37 @@ class VRMCore {
             }
 
             // 自动播放wait03动画（循环播放）
-            if (this.manager.animation && typeof this.manager.animation.playVRMAAnimation === 'function') {
-                try {
-                    console.log('[VRM] 开始自动播放wait03动画...');
-                    await this.manager.animation.playVRMAAnimation('/static/vrm/animation/wait03.vrma', {
-                        loop: true,  // 循环播放
-                        fadeIn: 0.5,  // 淡入时间
-                        fadeOut: 0.5  // 淡出时间
-                    });
-                    console.log('[VRM] wait03动画播放成功');
-                } catch (error) {
-                    console.warn('[VRM] 自动播放wait03动画失败（不会影响模型显示）:', error);
+            // 延迟一点确保所有资源都已准备好
+            setTimeout(async () => {
+                if (this.manager.animation && typeof this.manager.animation.playVRMAAnimation === 'function') {
+                    try {
+                        console.log('[VRM] 开始自动播放wait03动画...');
+                        const animationPath = '/static/vrm/animation/wait03.vrma';
+                        await this.manager.animation.playVRMAAnimation(animationPath, {
+                            loop: true,  // 循环播放
+                            fadeIn: 0.5,  // 淡入时间
+                            fadeOut: 0.5  // 淡出时间
+                        });
+                        console.log('[VRM] wait03动画播放成功');
+                    } catch (error) {
+                        console.error('[VRM] 自动播放wait03动画失败:', error);
+                        // 如果失败，尝试重试一次
+                        setTimeout(async () => {
+                            try {
+                                console.log('[VRM] 重试播放wait03动画...');
+                                await this.manager.animation.playVRMAAnimation('/static/vrm/animation/wait03.vrma', {
+                                    loop: true
+                                });
+                                console.log('[VRM] wait03动画重试播放成功');
+                            } catch (retryError) {
+                                console.error('[VRM] wait03动画重试也失败:', retryError);
+                            }
+                        }, 1000);
+                    }
+                } else {
+                    console.warn('[VRM] animation模块未初始化，无法播放wait03动画');
                 }
-            }
+            }, 500);
 
             // 设置锁按钮（在模型加载完成后）
             this.setupLockIcon();

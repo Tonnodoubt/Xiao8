@@ -150,6 +150,26 @@ async function initVRMModel() {
         
         console.log('✓ VRM 管理器自动初始化完成');
 
+        // 确保wait03动画播放（备用方案，如果loadModel中的自动播放失败）
+        setTimeout(async () => {
+            if (window.vrmManager && window.vrmManager.currentModel && window.vrmManager.animation) {
+                // 检查动画是否已经在播放
+                if (!window.vrmManager.animation.vrmaIsPlaying) {
+                    try {
+                        console.log('[VRM Init] 备用方案：开始播放wait03动画...');
+                        await window.vrmManager.animation.playVRMAAnimation('/static/vrm/animation/wait03.vrma', {
+                            loop: true
+                        });
+                        console.log('[VRM Init] wait03动画播放成功（备用方案）');
+                    } catch (error) {
+                        console.error('[VRM Init] 备用方案播放wait03动画失败:', error);
+                    }
+                } else {
+                    console.log('[VRM Init] wait03动画已在播放中');
+                }
+            }
+        }, 2000);
+
     // 延迟检查模型加载状态
     setTimeout(() => {
         console.log('[VRM Init] 延迟检查模型加载状态...');
@@ -160,6 +180,14 @@ async function initVRMModel() {
                 hasScene: !!window.vrmManager.currentModel.scene,
                 hasVRM: !!window.vrmManager.currentModel.vrm
             });
+            // 再次检查动画状态
+            if (window.vrmManager.animation) {
+                console.log('[VRM Init] 动画状态:', {
+                    isPlaying: window.vrmManager.animation.vrmaIsPlaying,
+                    hasAction: !!window.vrmManager.animation.vrmaAction,
+                    hasMixer: !!window.vrmManager.animation.vrmaMixer
+                });
+            }
         } else {
             console.log('[VRM Init] ❌ 模型加载可能失败或仍在进行中');
             console.log('vrmManager存在:', !!window.vrmManager);
