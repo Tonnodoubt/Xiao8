@@ -101,13 +101,6 @@ class VRMManager {
 
         this._animationFrameId = requestAnimationFrame(() => this.animate());
 
-        // 每秒输出一次渲染状态（减少日志频率）
-        if (this._frameCount === undefined) this._frameCount = 0;
-        this._frameCount++;
-        if (this._frameCount % 60 === 0) { // 大约每秒输出一次
-            console.log('[VRM Animate] 渲染循环运行中，场景子对象数量:', this.scene.children.length, 'hasModel:', !!this.currentModel);
-        }
-
         const delta = this.clock ? this.clock.getDelta() : 0.016;
 
         // 更新控制器
@@ -123,6 +116,14 @@ class VRMManager {
         // 更新VRM模型
         if (this.currentModel && this.currentModel.vrm) {
             this.currentModel.vrm.update(delta);
+        }
+
+        // 更新浮动按钮位置（如果按钮已显示）
+        if (this.interaction && typeof this.interaction.updateFloatingButtonsPosition === 'function') {
+            const buttonsContainer = document.getElementById('live2d-floating-buttons');
+            if (buttonsContainer && buttonsContainer.style.display === 'flex') {
+                this.interaction.updateFloatingButtonsPosition();
+            }
         }
 
         // 渲染场景

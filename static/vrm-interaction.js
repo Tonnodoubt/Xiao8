@@ -498,11 +498,6 @@ class VRMInteraction {
     updateFloatingButtonsPosition() {
         const buttonsContainer = document.getElementById('live2d-floating-buttons');
         if (!buttonsContainer || !this.manager.currentModel || !this.manager.currentModel.vrm) {
-            console.log('[VRM] 无法更新按钮位置：条件不满足', {
-                hasContainer: !!buttonsContainer,
-                hasModel: !!this.manager.currentModel,
-                hasVRM: !!(this.manager.currentModel && this.manager.currentModel.vrm)
-            });
             return;
         }
 
@@ -548,10 +543,8 @@ class VRMInteraction {
             buttonsContainer.style.left = `${clampedX}px`;
             buttonsContainer.style.top = `${clampedY}px`;
 
-
-
         } catch (error) {
-            console.error('[VRM] 更新按钮位置出错:', error);
+            // 忽略位置更新错误
         }
     }
 
@@ -603,59 +596,36 @@ class VRMInteraction {
                 this._hideButtonsTimer = null;
             }
         };
-
-        // 辅助函数：更新浮动按钮位置
-        const updateButtonsPosition = () => {
-            if (!this.manager.currentModel || !this.manager.currentModel.vrm) return;
-
-            try {
-                const vrm = this.manager.currentModel.vrm;
-                const camera = this.manager.camera;
-                const renderer = this.manager.renderer;
-
-                // 获取模型的边界框
-                const box = new THREE.Box3().setFromObject(vrm.scene);
-                const size = box.getSize(new THREE.Vector3());
-                const center = box.getCenter(new THREE.Vector3());
-
-                // 计算模型在屏幕上的投影
-                const screenPos = center.clone();
-                screenPos.project(camera);
-
-                const screenWidth = renderer.domElement.width;
-                const screenHeight = renderer.domElement.height;
-
-                // 将投影坐标转换为屏幕坐标
-                const screenX = (screenPos.x * 0.5 + 0.5) * screenWidth;
-                const screenY = (-screenPos.y * 0.5 + 0.5) * screenHeight;
-
-                // 计算按钮位置（模型左侧）
-                const buttonX = screenX - 80; // 在模型左侧80px
-                const buttonY = screenY - 50; // 稍微高于模型中心
-
-                // 边界限制
-                const clampedX = Math.max(10, Math.min(buttonX, screenWidth - 120));
-                const clampedY = Math.max(10, Math.min(buttonY, screenHeight - 100));
-
-                buttonsContainer.style.left = `${clampedX}px`;
-                buttonsContainer.style.top = `${clampedY}px`;
-
-            } catch (error) {
-                // 忽略位置更新错误
-            }
-        };
         
         // 辅助函数：启动隐藏定时器
         const startHideTimer = (delay = 1000) => {
             if (this.checkLocked()) return; // 锁定时不隐藏
             
-            // 如果已有定时器，不重复创建
-            if (this._hideButtonsTimer) return;
+            // 清除之前的定时器
+            if (this._hideButtonsTimer) {
+                clearTimeout(this._hideButtonsTimer);
+                this._hideButtonsTimer = null;
+            }
             
             this._hideButtonsTimer = setTimeout(() => {
                 // 检查鼠标是否在按钮区域内
                 if (this._isMouseOverButtons) {
                     // 鼠标在按钮上，不隐藏，重新启动定时器
+                    this._hideButtonsTimer = null;
+                    startHideTimer(delay);
+                    return;
+                }
+                
+                // 再次检查鼠标是否在canvas上（防止在定时器执行期间鼠标移入）
+                const canvas = this.manager.renderer.domElement;
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = this._lastMouseX || 0;
+                const mouseY = this._lastMouseY || 0;
+                const isInCanvas = mouseX >= rect.left && mouseX <= rect.right &&
+                                   mouseY >= rect.top && mouseY <= rect.bottom;
+                
+                if (isInCanvas) {
+                    // 鼠标在canvas上，不隐藏，重新启动定时器
                     this._hideButtonsTimer = null;
                     startHideTimer(delay);
                     return;
@@ -688,17 +658,25 @@ class VRMInteraction {
             const mouseX = event.clientX;
             const mouseY = event.clientY;
             
+            // 保存鼠标位置，供隐藏定时器使用
+            this._lastMouseX = mouseX;
+            this._lastMouseY = mouseY;
+            
             // 检查鼠标是否在画布区域内
             const isInCanvas = mouseX >= rect.left && mouseX <= rect.right &&
                                mouseY >= rect.top && mouseY <= rect.bottom;
             
-            // 检查鼠标是否在浮动按钮区域内
-            const buttonsRect = buttonsContainer.getBoundingClientRect();
-            const isOverButtons = mouseX >= buttonsRect.left && mouseX <= buttonsRect.right &&
-                                  mouseY >= buttonsRect.top && mouseY <= buttonsRect.bottom;
+            // 检查鼠标是否在浮动按钮区域内（仅在按钮显示时检查）
+            let isOverButtons = false;
+            if (buttonsContainer.style.display === 'flex') {
+                const buttonsRect = buttonsContainer.getBoundingClientRect();
+                isOverButtons = mouseX >= buttonsRect.left && mouseX <= buttonsRect.right &&
+                                mouseY >= buttonsRect.top && mouseY <= buttonsRect.bottom;
+            }
             this._isMouseOverButtons = isOverButtons;
             
             if (isInCanvas || isOverButtons) {
+                // 鼠标在画布或按钮上，显示按钮
                 showButtons();
             } else {
                 // 鼠标不在画布或按钮区域内，启动隐藏定时器
