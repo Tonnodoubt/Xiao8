@@ -113,13 +113,11 @@ class VRMCore {
                         window.live2dManager.getPixiApp();
                     }
                 } catch (initError) {
-                    console.warn('[VRM] 初始化 PixiJS 应用失败:', initError);
                 }
             }
 
             // 如果 pixi_app 仍然不存在，创建一个虚拟的 ticker
             if (!window.live2dManager.pixi_app) {
-                console.warn('[VRM] PixiJS 应用未初始化，创建虚拟 ticker 用于浮动按钮');
                 // 创建一个虚拟的 pixi_app 对象，只包含 ticker
                 window.live2dManager.pixi_app = {
                     ticker: {
@@ -175,9 +173,7 @@ class VRMCore {
 
             try {
                 window.live2dManager.setupFloatingButtons(virtualModel);
-                console.log('[VRM] 已通过 Live2D 管理器初始化浮动按钮');
             } catch (e) {
-                console.warn('[VRM] 通过 Live2D 管理器初始化浮动按钮失败:', e);
             }
         }
     }
@@ -212,7 +208,6 @@ class VRMCore {
             
             return '0.0';
         } catch (error) {
-            console.warn('[VRM] 检测模型版本时出错，默认使用 0.0:', error);
             return '0.0';
         }
     }
@@ -353,7 +348,6 @@ class VRMCore {
         };
         this._lockIconAnimationFrame = requestAnimationFrame(updateLockIconPosition);
 
-        console.log('[VRM] 锁图标已创建');
     }
 
     /**
@@ -517,7 +511,6 @@ class VRMCore {
         canvas.style.width = '100%';
         canvas.style.height = '100%';
         canvas.style.display = 'block';
-        console.log('[VRM Core] Canvas 样式设置完成:', {
             pointerEvents: canvas.style.pointerEvents,
             computedPointerEvents: window.getComputedStyle(canvas).pointerEvents
         });
@@ -590,17 +583,13 @@ class VRMCore {
             let GLTFLoader, VRMLoaderPlugin;
             
             // 使用 ES 模块导入（与动画模块保持一致）
-            console.log('[VRM] 开始导入GLTFLoader模块...');
             try {
                 const loaderModule = await import('three/addons/loaders/GLTFLoader.js');
                 GLTFLoader = loaderModule.GLTFLoader;
-                console.log('[VRM] GLTFLoader导入成功');
 
                 const vrmModule = await import('@pixiv/three-vrm');
                 VRMLoaderPlugin = vrmModule.VRMLoaderPlugin;
-                console.log('[VRM] VRMLoaderPlugin导入成功');
             } catch (e) {
-                console.error('[VRM] ES模块导入失败:', e);
                 throw new Error(`无法加载必要的VRM模块: ${e.message}`);
             }
 
@@ -641,7 +630,6 @@ class VRMCore {
             
             // 检测 VRM 模型版本（0.0 或 1.0）
             this.vrmVersion = this.detectVRMVersion(vrm);
-            console.log(`[VRM] 检测到模型版本: ${this.vrmVersion}`);
 
             // 计算模型的边界框，用于确定合适的初始大小
             const box = new THREE.Box3().setFromObject(vrm.scene);
@@ -671,7 +659,6 @@ class VRMCore {
                     
                     // 如果forward向量指向Z轴正方向（远离相机），说明是背面，需要旋转
                     if (forwardVec.z > 0.3) {
-                        console.log('[VRM] 检测到模型朝向为背面（通过骨骼检测），旋转180度使其正面朝向');
                         needsRotation = true;
                     }
                 }
@@ -681,7 +668,6 @@ class VRMCore {
             vrm.scene.rotation.set(0, needsRotation ? Math.PI : 0, 0);
             
             if (needsRotation) {
-                console.log('[VRM] 模型已旋转180度，确保正面朝向相机');
             }
             
             // 计算合适的初始缩放（参考Live2D的默认大小计算，参考 vrm.js）
@@ -729,7 +715,6 @@ class VRMCore {
             
             // 添加到场景
             this.manager.scene.add(vrm.scene);
-            console.log('[VRM] 模型已添加到场景，场景子对象数量:', this.manager.scene.children.length);
 
             // 优化材质设置（根据性能模式）
             this.optimizeMaterials();
@@ -762,7 +747,6 @@ class VRMCore {
                 url: modelUrl
             };
 
-            console.log('[VRM] 模型引用已设置:', {
                 hasModel: !!this.manager.currentModel,
                 hasScene: !!this.manager.currentModel.scene,
                 hasVRM: !!this.manager.currentModel.vrm
@@ -778,31 +762,22 @@ class VRMCore {
             setTimeout(async () => {
                 if (this.manager.animation && typeof this.manager.animation.playVRMAAnimation === 'function') {
                     try {
-                        console.log('[VRM] 开始自动播放wait03动画...');
                         const animationPath = '/static/vrm/animation/wait03.vrma';
                         await this.manager.animation.playVRMAAnimation(animationPath, {
-                            loop: true,  // 循环播放
-                            fadeIn: 0.5,  // 淡入时间
-                            fadeOut: 0.5  // 淡出时间
+                            loop: true,
+                            fadeIn: 0.5,
+                            fadeOut: 0.5
                         });
-                        console.log('[VRM] wait03动画播放成功');
                     } catch (error) {
-                        console.error('[VRM] 自动播放wait03动画失败:', error);
-                        // 如果失败，尝试重试一次
                         setTimeout(async () => {
                             try {
-                                console.log('[VRM] 重试播放wait03动画...');
                                 await this.manager.animation.playVRMAAnimation('/static/vrm/animation/wait03.vrma', {
                                     loop: true
                                 });
-                                console.log('[VRM] wait03动画重试播放成功');
                             } catch (retryError) {
-                                console.error('[VRM] wait03动画重试也失败:', retryError);
                             }
                         }, 1000);
                     }
-                } else {
-                    console.warn('[VRM] animation模块未初始化，无法播放wait03动画');
                 }
             }, 500);
 
@@ -812,7 +787,6 @@ class VRMCore {
             // 启用鼠标跟踪（用于控制浮动按钮显示/隐藏）
             if (this.manager.interaction && typeof this.manager.interaction.enableMouseTracking === 'function') {
                 this.manager.interaction.enableMouseTracking(true);
-                console.log('[VRM] 已启用鼠标跟踪（用于浮动按钮控制）');
             }
 
             return this.manager.currentModel;
