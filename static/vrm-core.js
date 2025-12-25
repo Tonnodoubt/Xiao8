@@ -506,7 +506,7 @@ class VRMCore {
         this.manager.renderer.shadowMap.enabled = false;
         this.manager.renderer.outputEncoding = THREE.sRGBEncoding;
         this.manager.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.manager.renderer.toneMappingExposure = 1.0; // 平衡曝光度，既有细节又有适当亮度
+        this.manager.renderer.toneMappingExposure = 1.2; // 提高曝光度，使模型更亮
         this.manager.renderer.useLegacyLights = false;
 
         // 确保容器和 canvas 可以接收事件
@@ -542,37 +542,37 @@ class VRMCore {
             this.manager.controls.update();
         }
 
-        // 添加灯光 - 平衡亮度和立体感
-        // 环境光：提供基础照明
-        const ambientIntensity = this.performanceMode === 'low' ? 0.6 : 0.5;
+        // 添加灯光 - 增强亮度和立体感
+        // 环境光：提供基础照明，增加强度使模型更亮
+        const ambientIntensity = this.performanceMode === 'low' ? 0.8 : 0.7;
         const ambientLight = new THREE.AmbientLight(0xffffff, ambientIntensity);
         this.manager.scene.add(ambientLight);
 
-        // 主方向光：从斜上方照射，提供主要照明
-        const directionalLight1 = new THREE.DirectionalLight(0xffffff, 1.0);
+        // 主方向光：从斜上方照射，提供主要照明，增强强度
+        const directionalLight1 = new THREE.DirectionalLight(0xffffff, 1.5);
         directionalLight1.position.set(1, 2, 1.5);
         directionalLight1.castShadow = false;
         this.manager.scene.add(directionalLight1);
 
-        // 中等和高性能模式：添加轮廓光和补光
+        // 中等和高性能模式：添加轮廓光和补光，增强强度
         if (this.performanceMode !== 'low') {
-            // 轮廓光：从侧后方照射，增强轮廓立体感
-            const rimLight = new THREE.DirectionalLight(0xffffff, 0.6);
+            // 轮廓光：从侧后方照射，增强轮廓立体感，增加强度
+            const rimLight = new THREE.DirectionalLight(0xffffff, 0.9);
             rimLight.position.set(-2, 1, -1);
             rimLight.castShadow = false;
             this.manager.scene.add(rimLight);
 
-            // 高性能模式：添加柔和的补光
+            // 高性能模式：添加柔和的补光，增强强度
             if (this.performanceMode === 'high') {
-                const fillLight = new THREE.DirectionalLight(0xffffff, 0.4);
+                const fillLight = new THREE.DirectionalLight(0xffffff, 0.6);
                 fillLight.position.set(0, -1, 1);
                 fillLight.castShadow = false;
                 this.manager.scene.add(fillLight);
             }
         }
 
-        // 添加柔和的顶部光源，提供整体照明
-        const topLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        // 添加柔和的顶部光源，提供整体照明，增强强度
+        const topLight = new THREE.DirectionalLight(0xffffff, 1.0);
         topLight.position.set(0, 3, 0);
         topLight.castShadow = false;
         this.manager.scene.add(topLight);
