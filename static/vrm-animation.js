@@ -419,9 +419,30 @@ class VRMAnimation {
         try {
             this.stopVRMAAnimation();
 
-            const loader = new window.GLTFLoader();
+            // 动态导入 GLTFLoader 和 VRMLoaderPlugin（与vrm-core.js保持一致）
+            let GLTFLoader, VRMLoaderPlugin;
+            
+            // 尝试使用 ES 模块导入
+            try {
+                const loaderModule = await import('three/addons/loaders/GLTFLoader.js');
+                GLTFLoader = loaderModule.GLTFLoader;
+                const vrmModule = await import('@pixiv/three-vrm');
+                VRMLoaderPlugin = vrmModule.VRMLoaderPlugin;
+            } catch (e) {
+                // 如果 ES 模块导入失败，尝试使用全局变量
+                if (typeof window.GLTFLoader === 'undefined') {
+                    throw new Error('GLTFLoader未加载，请确保已引入three.js');
+                }
+                if (typeof window.VRMLoaderPlugin === 'undefined') {
+                    throw new Error('three-vrm库未加载');
+                }
+                GLTFLoader = window.GLTFLoader;
+                VRMLoaderPlugin = window.VRMLoaderPlugin;
+            }
+
+            const loader = new GLTFLoader();
             loader.register((parser) => {
-                return new window.VRMLoaderPlugin(parser);
+                return new VRMLoaderPlugin(parser);
             });
 
             const gltf = await new Promise((resolve, reject) => {
