@@ -372,8 +372,17 @@
     <script src="/static/live2d-ui-hud.js"></script>
     <script src="/static/live2d-ui-drag.js"></script>
     <script src="/static/live2d-init.js"></script>
-    <!-- Three.js 核心库 -->
+    <!-- Three.js 核心库和importmap（用于ES6模块导入）-->
     <script src="/static/libs/three.module.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "/static/libs/three.module.js",
+            "three/addons/": "/static/libs/three/addons/",
+            "@pixiv/three-vrm": "/static/libs/three-vrm.module.min.js"
+        }
+    }
+    </script>
     <script src="/static/libs/three-vrm.module.min.js"></script>
     <!-- VRM模块（按顺序加载，失败不影响Live2D）-->
     <script>

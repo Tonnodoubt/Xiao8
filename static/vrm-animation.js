@@ -463,25 +463,23 @@ class VRMAnimation {
             console.log('[VRMA] 停止之前的动画...');
             this.stopVRMAAnimation();
 
-            // 动态导入 GLTFLoader 和 VRMLoaderPlugin（与vrm-core.js保持一致）
+            // 动态导入 GLTFLoader 和 VRMLoaderPlugin
+            console.log('[VRMA] 开始导入必要的模块...');
             let GLTFLoader, VRMLoaderPlugin;
-            
-            // 尝试使用 ES 模块导入
+
+            // 优先使用 ES 模块导入（更可靠）
             try {
+                console.log('[VRMA] 尝试ES6模块导入...');
                 const loaderModule = await import('three/addons/loaders/GLTFLoader.js');
                 GLTFLoader = loaderModule.GLTFLoader;
+                console.log('[VRMA] GLTFLoader导入成功');
+
                 const vrmModule = await import('@pixiv/three-vrm');
                 VRMLoaderPlugin = vrmModule.VRMLoaderPlugin;
+                console.log('[VRMA] VRMLoaderPlugin导入成功');
             } catch (e) {
-                // 如果 ES 模块导入失败，尝试使用全局变量
-                if (typeof window.GLTFLoader === 'undefined') {
-                    throw new Error('GLTFLoader未加载，请确保已引入three.js');
-                }
-                if (typeof window.VRMLoaderPlugin === 'undefined') {
-                    throw new Error('three-vrm库未加载');
-                }
-                GLTFLoader = window.GLTFLoader;
-                VRMLoaderPlugin = window.VRMLoaderPlugin;
+                console.error('[VRMA] ES6模块导入失败:', e);
+                throw new Error(`无法加载必要的VRM模块: ${e.message}`);
             }
 
             console.log('[VRMA] 创建GLTFLoader并加载动画文件:', vrmaPath);
