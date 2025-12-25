@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VRM模块测试</title>
+</head>
+<body>
+    <h1>VRM模块加载测试</h1>
+    <div id="test-results"></div>
+
+    <!-- Three.js 核心库 -->
+    <script src="/static/libs/three.module.js"></script>
+    <script src="/static/libs/three-vrm.module.min.js"></script>
+
+    <!-- VRM模块（按顺序加载，失败不影响Live2D）-->
+    <script>
+    (async function() {
+        const results = document.getElementById('test-results');
+        results.innerHTML = '<p>开始加载VRM模块...</p>';
+
+        try {
+            const vrmModules = [
+                '/static/vrm-core.js',
+                '/static/vrm-expression.js',
+                '/static/vrm-animation.js',
+                '/static/vrm-interaction.js',
+                '/static/vrm-manager.js'
+            ];
+
+            for (const moduleSrc of vrmModules) {
+                results.innerHTML += `<p>加载中: ${moduleSrc}</p>`;
+                const script = document.createElement('script');
+                script.src = moduleSrc;
+                await new Promise((resolve, reject) => {
+                    script.onload = () => {
+                        results.innerHTML += `<p style="color: green;">✓ ${moduleSrc} 加载成功</p>`;
+                        resolve();
+                    };
+                    script.onerror = (error) => {
+                        results.innerHTML += `<p style="color: red;">✗ ${moduleSrc} 加载失败: ${error}</p>`;
+                        resolve(); // 即使失败也继续
+                    };
+                    document.body.appendChild(script);
+                });
+            }
+
+            // 加载VRM初始化脚本
+            results.innerHTML += '<p>加载VRM初始化脚本...</p>';
+            const vrmInitScript = document.createElement('script');
+            vrmInitScript.src = '/static/vrm-init.js';
+            await new Promise((resolve, reject) => {
+                vrmInitScript.onload = () => {
+                    results.innerHTML += '<p style="color: green;">✓ VRM初始化脚本加载成功</p>';
+                    resolve();
+                };
+                vrmInitScript.onerror = (error) => {
+                    results.innerHTML += '<p style="color: red;">✗ VRM初始化脚本加载失败</p>';
+                    resolve();
+                };
+                document.body.appendChild(vrmInitScript);
+            });
+
+            // 检查模块是否正确注册
+            setTimeout(() => {
+                results.innerHTML += '<h2>模块注册检查:</h2>';
+                const modules = ['VRMCore', 'VRMExpression', 'VRMAnimation', 'VRMInteraction', 'VRMManager'];
+                modules.forEach(module => {
+                    const exists = typeof window[module] !== 'undefined';
+                    results.innerHTML += `<p style="color: ${exists ? 'green' : 'red'};">${exists ? '✓' : '✗'} ${module}: ${exists ? '已注册' : '未注册'}</p>`;
+                });
+
+                if (typeof window.vrmManager !== 'undefined') {
+                    results.innerHTML += '<p style="color: green;">✓ vrmManager 实例已创建</p>';
+                } else {
+                    results.innerHTML += '<p style="color: red;">✗ vrmManager 实例未创建</p>';
+                }
+            }, 1000);
+
+        } catch (error) {
+            results.innerHTML += `<p style="color: red;">加载过程出现异常: ${error}</p>`;
+        }
+    })();
+    </script>
+</body>
+</html>
