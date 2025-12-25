@@ -1,7 +1,11 @@
 /**
  * VRM 动画模块
  * 负责 VRMA 动画播放和口型同步
+ * 版本: 2024-01-20 (ES6模块导入版本)
  */
+
+// 版本标识 - 用于确认代码已更新
+console.log('[VRM Animation] 模块已加载 - ES6模块导入版本');
 
 class VRMAnimation {
     constructor(manager) {
@@ -470,19 +474,54 @@ class VRMAnimation {
             // 优先使用 ES 模块导入（更可靠）
             try {
                 console.log('[VRMA] 尝试ES6模块导入...');
+                console.log('[VRMA] 检查importmap支持...');
+                
+                // 检查是否有importmap支持
+                if (!document.querySelector('script[type="importmap"]')) {
+                    console.warn('[VRMA] 警告：未找到importmap，ES6模块导入可能失败');
+                }
+                
                 const loaderModule = await import('three/addons/loaders/GLTFLoader.js');
+                console.log('[VRMA] loaderModule:', loaderModule);
+                
+                if (!loaderModule.GLTFLoader) {
+                    throw new Error('loaderModule.GLTFLoader 未定义');
+                }
+                
                 GLTFLoader = loaderModule.GLTFLoader;
-                console.log('[VRMA] GLTFLoader导入成功');
+                console.log('[VRMA] GLTFLoader导入成功，类型:', typeof GLTFLoader);
 
                 const vrmModule = await import('@pixiv/three-vrm');
+                console.log('[VRMA] vrmModule:', vrmModule);
+                
+                if (!vrmModule.VRMLoaderPlugin) {
+                    throw new Error('vrmModule.VRMLoaderPlugin 未定义');
+                }
+                
                 VRMLoaderPlugin = vrmModule.VRMLoaderPlugin;
-                console.log('[VRMA] VRMLoaderPlugin导入成功');
+                console.log('[VRMA] VRMLoaderPlugin导入成功，类型:', typeof VRMLoaderPlugin);
             } catch (e) {
                 console.error('[VRMA] ES6模块导入失败:', e);
-                throw new Error(`无法加载必要的VRM模块: ${e.message}`);
+                console.error('[VRMA] 错误详情:', {
+                    message: e.message,
+                    stack: e.stack,
+                    name: e.name
+                });
+                throw new Error(`无法加载必要的VRM模块: ${e.message}。请确保importmap已正确配置。`);
             }
 
             console.log('[VRMA] 创建GLTFLoader并加载动画文件:', vrmaPath);
+            
+            // 验证 GLTFLoader 是否已正确导入
+            if (!GLTFLoader || typeof GLTFLoader !== 'function') {
+                console.error('[VRMA] GLTFLoader 验证失败:', {
+                    GLTFLoader: typeof GLTFLoader,
+                    isFunction: typeof GLTFLoader === 'function',
+                    value: GLTFLoader
+                });
+                throw new Error('GLTFLoader 未正确导入，请检查ES6模块导入是否成功');
+            }
+            
             const loader = new GLTFLoader();
             loader.register((parser) => {
                 return new VRMLoaderPlugin(parser);

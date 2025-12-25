@@ -414,7 +414,7 @@
 
             // 加载VRM初始化脚本
             const vrmInitScript = document.createElement('script');
-            vrmInitScript.src = '/static/vrm-init.js';
+            vrmInitScript.src = '/static/vrm-init.js?v=' + Date.now();
             await new Promise((resolve, reject) => {
                 vrmInitScript.onload = () => {
                     console.log('VRM初始化脚本加载成功');
