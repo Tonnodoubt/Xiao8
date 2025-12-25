@@ -1447,8 +1447,9 @@
                     lanlan_config.lanlan_name = lanlanNameFromUrl || data.lanlan_name || "";
                     window.lanlan_config = lanlan_config;
                     const modelPath = data.model_path || "";
-                    // 根据文件扩展名判断是Live2D还是VRM
-                    if (modelPath.toLowerCase().endsWith('.vrm')) {
+                    const modelType = data.model_type || 'live2d'; // 使用API返回的model_type
+                    // 根据model_type判断是Live2D还是VRM
+                    if (modelType === 'vrm') {
                         vrmModel = modelPath;
                         window.vrmModel = vrmModel;
                         cubism4Model = "";

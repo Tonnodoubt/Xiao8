@@ -89,7 +89,8 @@ async def get_page_config(lanlan_name: str = ""):
         return {
             "success": True,
             "lanlan_name": target_name,
-            "model_path": model_path
+            "model_path": model_path,
+            "model_type": model_type
         }
     except Exception as e:
         logger.error(f"获取页面配置失败: {str(e)}")
