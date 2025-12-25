@@ -390,12 +390,19 @@ class VRMAnimation {
             if (this._debugFrameCount === undefined) this._debugFrameCount = 0;
             this._debugFrameCount++;
             if (this._debugFrameCount % 60 === 0) {
+                const mixerInfo = this.vrmaMixer ? {
+                    mixerTime: this.vrmaMixer.time.toFixed(3),
+                    mixerRoot: this.vrmaMixer.getRoot(),
+                    mixerStats: this.vrmaMixer.stats
+                } : 'no mixer';
+
                 console.log('[VRMA] 动画更新中:', {
                     time: this.vrmaAction.time.toFixed(3),
                     weight: this.vrmaAction.getEffectiveWeight().toFixed(3),
                     isRunning: this.vrmaAction.isRunning(),
                     enabled: this.vrmaAction.enabled,
-                    deltaTime: deltaTime.toFixed(4)
+                    deltaTime: deltaTime.toFixed(4),
+                    mixer: mixerInfo
                 });
             }
             
@@ -517,27 +524,32 @@ class VRMAnimation {
             // 收集所有节点名称（包括骨骼节点）
             const vrmNodeNames = new Set();
             const vrmNodeMap = new Map();
-            
+
+            console.log('[VRMA] 收集VRM模型节点...');
+
+            // 优先收集humanoid骨骼节点（VRM标准骨骼）
+            if (this.manager.currentModel.vrm.humanoid) {
+                const humanBones = this.manager.currentModel.vrm.humanoid.humanBones;
+                if (humanBones) {
+                    console.log('[VRMA] humanoid骨骼数量:', Object.keys(humanBones).length);
+                    Object.keys(humanBones).forEach(boneName => {
+                        const bone = humanBones[boneName];
+                        if (bone && bone.node && bone.node.name) {
+                            vrmNodeNames.add(bone.node.name);
+                            vrmNodeMap.set(bone.node.name, bone.node);
+                            console.log(`[VRMA] humanoid骨骼: ${boneName} -> ${bone.node.name}`);
+                        }
+                    });
+                }
+            }
+
+            // 遍历场景收集所有节点
             vrmScene.traverse((node) => {
                 if (node.name) {
                     vrmNodeNames.add(node.name);
                     vrmNodeMap.set(node.name, node);
                 }
             });
-            
-            // 也尝试从humanoid骨骼中获取节点名称
-            if (this.manager.currentModel.vrm.humanoid) {
-                const humanBones = this.manager.currentModel.vrm.humanoid.humanBones;
-                if (humanBones) {
-                    Object.keys(humanBones).forEach(boneName => {
-                        const bone = humanBones[boneName];
-                        if (bone && bone.node && bone.node.name) {
-                            vrmNodeNames.add(bone.node.name);
-                            vrmNodeMap.set(bone.node.name, bone.node);
-                        }
-                    });
-                }
-            }
             
             console.log(`[VRMA] 模型节点总数: ${vrmNodeNames.size}`);
             
@@ -546,28 +558,40 @@ class VRMAnimation {
             const trackNodeNames = new Set();
             
             // 收集动画中的所有节点名称
+            console.log('[VRMA] 分析动画轨道...');
             for (const track of originalClip.tracks) {
                 const match = track.name.match(/^([^.]+)\.(.+)$/);
                 if (match) {
                     trackNodeNames.add(match[1]);
+                    console.log(`[VRMA] 动画轨道: ${track.name} -> 节点: ${match[1]}, 属性: ${match[2]}`);
+                } else {
+                    console.log(`[VRMA] 无法解析的轨道: ${track.name}`);
                 }
             }
-            
+
             console.log(`[VRMA] 动画中的节点总数: ${trackNodeNames.size}`);
-            console.log(`[VRMA] 动画节点列表:`, Array.from(trackNodeNames).slice(0, 10));
-            
+            console.log(`[VRMA] 动画轨道总数: ${originalClip.tracks.length}`);
+            console.log(`[VRMA] 动画节点列表:`, Array.from(trackNodeNames));
+
+            // 尝试映射轨道到VRM节点
             for (const track of originalClip.tracks) {
                 const match = track.name.match(/^([^.]+)\.(.+)$/);
                 if (match) {
                     const nodeName = match[1];
-                    
+                    const property = match[2];
+
+                    console.log(`[VRMA] 检查轨道映射: ${nodeName}.${property}`);
+
                     if (vrmNodeNames.has(nodeName)) {
                         validTracks.push(track);
+                        console.log(`[VRMA] ✓ 轨道匹配: ${nodeName}`);
                     } else {
                         skippedTracks.push(nodeName);
+                        console.log(`[VRMA] ✗ 轨道不匹配: ${nodeName} (属性: ${property})`);
                     }
                 } else {
                     skippedTracks.push(track.name);
+                    console.log(`[VRMA] ✗ 无效轨道格式: ${track.name}`);
                 }
             }
             
@@ -596,8 +620,19 @@ class VRMAnimation {
                 console.log(`[VRMA] 有效轨道: ${validTracks.length} 个`);
             }
             
+            // 创建AnimationMixer - VRM动画绑定逻辑
             if (!this.vrmaMixer) {
-                this.vrmaMixer = new window.THREE.AnimationMixer(this.manager.currentModel.vrm.scene);
+                // 对于VRM模型，AnimationMixer应该绑定到GLTF的scene（包含所有骨骼变换）
+                // 而不是VRM的scene（可能只是一个包装器）
+                const bindTarget = this.manager.currentModel.scene; // 使用GLTF的scene
+                this.vrmaMixer = new window.THREE.AnimationMixer(bindTarget);
+                console.log('[VRMA] 创建AnimationMixer，绑定到GLTF.scene');
+                console.log('[VRMA] VRM对象结构:', {
+                    hasScene: !!this.manager.currentModel.vrm.scene,
+                    hasHumanoid: !!this.manager.currentModel.vrm.humanoid,
+                    gltfScene: !!this.manager.currentModel.scene,
+                    vrmSceneChildren: this.manager.currentModel.vrm.scene ? this.manager.currentModel.vrm.scene.children.length : 0
+                });
             }
 
             this.vrmaAction = this.vrmaMixer.clipAction(clip);
@@ -632,8 +667,21 @@ class VRMAnimation {
                 weight: this.vrmaAction.getEffectiveWeight(),
                 timeScale: this.vrmaAction.getEffectiveTimeScale(),
                 loop: loop,
-                clipDuration: clip.duration
+                clipDuration: clip.duration,
+                mixer: !!this.vrmaMixer,
+                tracks: validTracks.length,
+                root: this.vrmaMixer ? this.vrmaMixer.getRoot() : 'none'
             });
+
+            // 测试动画是否真的在运行
+            setTimeout(() => {
+                console.log('[VRMA] 动画启动后检查:', {
+                    time: this.vrmaAction.time,
+                    isRunning: this.vrmaAction.isRunning(),
+                    enabled: this.vrmaAction.enabled,
+                    mixerTime: this.vrmaMixer ? this.vrmaMixer.time : 'no mixer'
+                });
+            }, 100);
 
             console.log('[VRMA] 动画播放成功:', {
                 url: vrmaPath,
