@@ -777,9 +777,24 @@ class VRMCore {
                 this.manager.animation.updateMouthExpressionMapping();
             }
 
+            // 自动播放wait03动画（循环播放）
+            if (this.manager.animation && typeof this.manager.animation.playVRMAAnimation === 'function') {
+                try {
+                    console.log('[VRM] 开始自动播放wait03动画...');
+                    await this.manager.animation.playVRMAAnimation('/static/vrm/animation/wait03.vrma', {
+                        loop: true,  // 循环播放
+                        fadeIn: 0.5,  // 淡入时间
+                        fadeOut: 0.5  // 淡出时间
+                    });
+                    console.log('[VRM] wait03动画播放成功');
+                } catch (error) {
+                    console.warn('[VRM] 自动播放wait03动画失败（不会影响模型显示）:', error);
+                }
+            }
+
             // 设置锁按钮（在模型加载完成后）
             this.setupLockIcon();
-            
+
             // 启用鼠标跟踪（用于控制浮动按钮显示/隐藏）
             if (this.manager.interaction && typeof this.manager.interaction.enableMouseTracking === 'function') {
                 this.manager.interaction.enableMouseTracking(true);
