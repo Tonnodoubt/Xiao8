@@ -76,8 +76,8 @@ class VRMManager {
             }
             // 初始化core
             this.core = new window.VRMCore(this);
-            console.log('[VRM Manager] 延迟初始化 VRMCore');
         }
+
         await this.core.init(canvasId, containerId);
         if (this.interaction) {
             this.interaction.initDragAndZoom();

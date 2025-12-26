@@ -373,7 +373,6 @@
     <script src="/static/live2d-ui-drag.js"></script>
     <script src="/static/live2d-init.js"></script>
     <!-- Three.js 核心库和importmap（用于ES6模块导入）-->
-    <script src="/static/libs/three.module.js"></script>
     <script type="importmap">
     {
         "imports": {
@@ -389,7 +388,6 @@
         window.THREE = THREE;
         console.log('[Three.js] ES 模块已加载并挂载到 window.THREE');
     </script>
-    <script src="/static/libs/three-vrm.module.min.js"></script>
     <!-- VRM模块（按顺序加载，失败不影响Live2D）-->
     <script>
     (async function() {
@@ -653,6 +651,7 @@
             let currentModelType = 'live2d'; // 'live2d' or 'vrm'
             let vrmManager = null;
             let vrmAnimations = []; // VRM 动作列表
+            let animationsLoaded = false; // 标记VRM动作列表是否已加载
 
             const showStatus = (msg, duration = 0) => {
                 statusDiv.textContent = msg;
@@ -892,6 +891,15 @@
                             if (group) group.style.display = 'none';
                         }
                     });
+                    // 隐藏 Live2D 特有的控件
+                    const live2dOnlyControls = ['motion-select', 'expression-select', 'play-motion-btn', 'play-expression-btn', 'emotion-manager-btn'];
+                    live2dOnlyControls.forEach(id => {
+                        const elem = document.getElementById(id);
+                        if (elem) {
+                            const group = elem.closest('.control-group');
+                            if (group) group.style.display = 'none';
+                        }
+                    });
                     // 隐藏情感配置按钮组（VRM模式下不需要）
                     const emotionManagerGroup = document.getElementById('emotion-manager-group');
                     if (emotionManagerGroup) emotionManagerGroup.style.display = 'none';
@@ -1002,7 +1010,7 @@
             if (modelTypeSelect) {
                 modelTypeSelect.addEventListener('change', async (e) => {
                     const type = e.target.value;
-                    
+
                     // 检查语音模式状态
                     const voiceStatus = await checkVoiceModeStatus();
                     if (voiceStatus.isCurrent && voiceStatus.isVoiceMode) {
@@ -1011,7 +1019,7 @@
                         e.target.value = currentModelType;
                         return;
                     }
-                    
+
                     await switchModelDisplay(type);
                 });
             }
@@ -1065,7 +1073,7 @@
                 vrmModelSelect.addEventListener('change', async (e) => {
                     const modelPath = e.target.value;
                     if (!modelPath) return;
-                    
+
                     // 检查语音模式状态
                     const voiceStatus = await checkVoiceModeStatus();
                     if (voiceStatus.isCurrent && voiceStatus.isVoiceMode) {
@@ -1078,7 +1086,7 @@
                         }
                         return;
                     }
-                    
+
                     // 确保切换到VRM模式
                     if (currentModelType !== 'vrm') {
                         await switchModelDisplay('vrm');
@@ -1215,13 +1223,13 @@
                         
                         // 使用 URL 加载模型，而不是本地文件路径（浏览器不允许加载 file:// 路径）
                         await vrmManager.loadModel(modelUrl);
-                        
+
                         // VRM动作已改为自动循环播放，模型加载时会自动启动
-                        
+
+                        // 加载新模型时重置动作列表状态，允许重新加载动作
+                        animationsLoaded = false;
+
                         showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelPath} 加载成功`, { model: modelPath }));
-                        
-                        // 加载 VRM 动作列表（用于预览）
-                        await loadVRMAnimations(false);
                     } catch (error) {
                         console.error('加载 VRM 模型失败:', error);
                         showStatus(t('live2d.vrmModelLoadFailed', `加载 VRM 模型失败: ${error.message}。您仍可以保存模型设置。`));
@@ -1241,7 +1249,7 @@
                     const response = await fetch('/api/model/vrm/animations');
                     const data = await response.json();
                     vrmAnimations = (data.success && data.animations) ? data.animations : [];
-                    
+
                     if (vrmAnimationSelect && vrmAnimations.length > 0) {
                         vrmAnimationSelect.innerHTML = `<option value="">${t('live2d.vrmAnimation.selectAnimation', '选择动作')}</option>`;
                         vrmAnimations.forEach(anim => {
@@ -1320,7 +1328,6 @@
                                                         timeScale: speed
                                                     });
                                                     if (stopVrmAnimationBtn) stopVrmAnimationBtn.disabled = false;
-                                                    console.log('已自动播放保存的动作:', finalAnimUrl);
                                                 }
                                             }
                                         }
@@ -1335,24 +1342,38 @@
                     } else {
                         if (vrmAnimationSelect) {
                             vrmAnimationSelect.innerHTML = `<option value="">${t('live2d.vrmAnimation.noAnimations', '未找到动作文件')}</option>`;
-                            vrmAnimationSelect.disabled = true;
-                        }
-                        if (vrmAnimations.length === 0) {
-                            showStatus(t('live2d.vrmAnimation.noAnimations', '未找到动作文件'), 2000);
+                            // 即使没有动画文件，也不要禁用下拉菜单，让用户知道没有动作
+                            vrmAnimationSelect.disabled = false;
                         }
                     }
                 } catch (error) {
                     console.error('加载 VRM 动作列表失败:', error);
                     if (vrmAnimationSelect) {
                         vrmAnimationSelect.innerHTML = `<option value="">${t('live2d.vrmAnimation.animationListLoadFailed', '加载动作列表失败')}</option>`;
-                        vrmAnimationSelect.disabled = true;
+                        // 即使加载失败，也不要禁用下拉菜单，让用户知道加载失败了
+                        vrmAnimationSelect.disabled = false;
                     }
-                    showStatus(t('live2d.vrmAnimation.animationListLoadFailed', '加载动作列表失败'), 2000);
+                    // 不显示错误状态消息，避免覆盖模型加载成功的消息
+                    // showStatus(t('live2d.vrmAnimation.animationListLoadFailed', '加载动作列表失败'), 2000);
                 }
             }
 
-            // VRM 动作选择事件
+            // VRM 动作选择事件 - 首次点击时加载动作列表
+
             if (vrmAnimationSelect) {
+                vrmAnimationSelect.addEventListener('focus', async () => {
+                    // 首次获得焦点时加载动作列表
+                    if (!animationsLoaded && currentModelType === 'vrm') {
+                        animationsLoaded = true; // 防止重复加载
+                        try {
+                            await loadVRMAnimations(false);
+                        } catch (error) {
+                            console.error('加载VRM动作列表失败:', error);
+                            animationsLoaded = false; // 加载失败时重置标记，允许重试
+                        }
+                    }
+                });
+
                 vrmAnimationSelect.addEventListener('change', (e) => {
                     const animationPath = e.target.value;
                     if (animationPath && playVrmAnimationBtn) {

@@ -81,20 +81,38 @@ def get_vrm_models():
     try:
         config_mgr = get_config_manager()
         config_mgr.ensure_vrm_directory()
-        vrm_dir = config_mgr.vrm_dir
-        
+
         models = []
+
+        # 1. 搜索项目目录下的VRM文件 (static/vrm/)
+        project_root = config_mgr._get_project_root()
+        static_vrm_dir = project_root / "static" / "vrm"
+        if static_vrm_dir.exists():
+            for vrm_file in static_vrm_dir.glob('*.vrm'):
+                models.append({
+                    "name": vrm_file.stem,
+                    "filename": vrm_file.name,
+                    "path": str(vrm_file),
+                    "url": f"/static/vrm/{vrm_file.name}",  # 项目目录下的VRM文件
+                    "type": "vrm",
+                    "size": vrm_file.stat().st_size if vrm_file.exists() else 0,
+                    "location": "project"  # 标记来源
+                })
+
+        # 2. 搜索用户目录下的VRM文件 (user_vrm/)
+        vrm_dir = config_mgr.vrm_dir
         if vrm_dir.exists():
             for vrm_file in vrm_dir.glob('*.vrm'):
                 models.append({
                     "name": vrm_file.stem,
                     "filename": vrm_file.name,
                     "path": str(vrm_file),
-                    "url": f"{VRM_USER_PATH}/{vrm_file.name}",  # 使用静态文件路径
+                    "url": f"{VRM_USER_PATH}/{vrm_file.name}",  # 用户目录下的VRM文件
                     "type": "vrm",
-                    "size": vrm_file.stat().st_size if vrm_file.exists() else 0
+                    "size": vrm_file.stat().st_size if vrm_file.exists() else 0,
+                    "location": "user"  # 标记来源
                 })
-        
+
         return JSONResponse(content={
             "success": True,
             "models": models
@@ -111,16 +129,21 @@ def get_vrm_animations():
         config_mgr = get_config_manager()
         config_mgr.ensure_vrm_directory()
         
-        # 检查animations目录（用户说放在models\vrm\animations，但我们也支持static/vrm/animation）
+        # 检查animations目录
         animations_dirs = []
-        
-        # 1. 优先检查项目目录下的models/vrm/animations
+
+        # 1. 优先检查项目目录下的static/vrm/animation（实际文件位置）
         project_root = config_mgr._get_project_root()
+        static_animation_dir = project_root / "static" / "vrm" / "animation"
+        if static_animation_dir.exists():
+            animations_dirs.append(static_animation_dir)
+
+        # 2. 检查项目目录下的models/vrm/animations
         models_animations_dir = project_root / "models" / "vrm" / "animations"
         if models_animations_dir.exists():
             animations_dirs.append(models_animations_dir)
-        
-        # 2. 检查static/vrm/animation
+
+        # 3. 检查用户目录下的vrm/animation（兼容旧版）
         if config_mgr.vrm_animation_dir.exists():
             animations_dirs.append(config_mgr.vrm_animation_dir)
         
@@ -128,12 +151,15 @@ def get_vrm_animations():
         for anim_dir in animations_dirs:
             if anim_dir.exists():
                 # 根据目录确定URL前缀
-                if anim_dir == config_mgr.vrm_animation_dir:
+                if anim_dir == static_animation_dir:
                     # static/vrm/animation 目录 -> /static/vrm/animation/
-                    url_prefix = VRM_STATIC_ANIMATION_PATH
+                    url_prefix = "/static/vrm/animation"
                 elif anim_dir == models_animations_dir:
                     # models/vrm/animations 目录 -> /models/vrm/animations/
                     url_prefix = VRM_MODELS_ANIMATION_PATH
+                elif anim_dir == config_mgr.vrm_animation_dir:
+                    # 用户目录下的vrm/animation -> /user_vrm/animation/
+                    url_prefix = "/user_vrm/animation"
                 else:
                     # 其他目录默认使用 /user_vrm/animation/
                     url_prefix = "/user_vrm/animation"

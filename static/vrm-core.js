@@ -439,7 +439,7 @@ class VRMCore {
         if (!THREE) {
             throw new Error('Three.js库未加载，请确保已引入three.js');
         }
-        
+
         this.manager.container = document.getElementById(containerId);
         this.manager.canvas = document.getElementById(canvasId);
 
@@ -447,9 +447,13 @@ class VRMCore {
         if (this.manager.canvas && !this.manager.canvas.id) {
             this.manager.canvas.id = canvasId;
         }
-        
+
         if (!this.manager.container) {
             throw new Error(`找不到容器元素: ${containerId}`);
+        }
+
+        if (!this.manager.canvas) {
+            throw new Error(`找不到canvas元素: ${canvasId}`);
         }
 
         // 确保容器可见且有大小（参考 vrm.js）

@@ -149,9 +149,15 @@ async function initVRMModel() {
     }
 }
 
-// 自动初始化（如果存在 vrmModel 变量且 vrmManager 已初始化）
-// 如果 pageConfigReady 存在，等待它完成；否则立即执行
-if (window.pageConfigReady && typeof window.pageConfigReady.then === 'function') {
+// 检查是否在model_manager页面，如果是则不自动加载模型
+const isModelManagerPage = window.location.pathname.includes('model_manager') ||
+                          document.querySelector('#vrmModelSelect') !== null;
+
+if (!isModelManagerPage) {
+    // 只在非model_manager页面自动初始化VRM模型
+    // 自动初始化（如果存在 vrmModel 变量且 vrmManager 已初始化）
+    // 如果 pageConfigReady 存在，等待它完成；否则立即执行
+    if (window.pageConfigReady && typeof window.pageConfigReady.then === 'function') {
     window.pageConfigReady.then(() => {
         // 检查是否有VRM模型路径和vrmManager
         if (window.vrmManager) {
@@ -188,6 +194,9 @@ if (window.pageConfigReady && typeof window.pageConfigReady.then === 'function')
     } else {
         console.log('[VRM Init] vrmManager不存在，VRM模块可能未加载');
     }
+    }
+} else {
+    console.log('[VRM Init] 检测到model_manager页面，跳过自动VRM模型加载');
 }
 
 // 添加调试函数
