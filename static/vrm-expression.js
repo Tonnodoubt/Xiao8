@@ -124,12 +124,6 @@ class VRMExpression {
 
         return filtered.sort();
     }
-    _printAvailableExpressions(manager) {
-        let names = [];
-        if (manager.expressions) names = Object.keys(manager.expressions);
-        else if (manager._expressionMap) names = Object.keys(manager._expressionMap);
-        console.log(`[VRM Expression] 模型支持的表情:`, names);
-    }
 
     _updateBlink(delta) {
         if (!this.autoBlink) return;
@@ -191,13 +185,22 @@ class VRMExpression {
         modelExpressionNames.forEach(name => {
             let targetWeight = 0.0;
             const lowerName = name.toLowerCase();
+            const targetNameLower = targetName.toLowerCase();
 
             // --- A. 判断是否为选中项 (最高优先级) ---
-            // 只要名字对得上（忽略大小写），就认为是选中了
-            // 例如：用户选 "angry"，当前遍历到 "Angry"，匹配成功！
-            if (name === targetName || lowerName === targetName.toLowerCase()) {
+            // 直接名字匹配
+            let isMatch = (name === targetName || lowerName === targetNameLower);
+            // 2. 【修复】如果没有直接匹配，检查映射表 (moodMap)
+            // 解决 pickRandomMood 选出 'happy' 但模型只有 'Joy' 的情况
+            if (!isMatch && this.moodMap[targetName]) {
+                const candidates = this.moodMap[targetName];
+                // 检查候选词里是否有当前这个 name
+                isMatch = candidates.some(candidate => candidate.toLowerCase() === lowerName);
+            }
+
+            if (isMatch) {
                 targetWeight = 1.0;
-            } 
+            }
             // --- B. 处理自动眨眼 (次优先级) ---
             // 条件：
             // 1. 当前表情是眨眼类 (blink)

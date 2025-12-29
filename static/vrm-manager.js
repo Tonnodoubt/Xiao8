@@ -130,9 +130,6 @@ class VRMManager {
     stopVRMAAnimation() {
         if (this.animation) this.animation.stopVRMAAnimation();
     }
-    stopAnimation() { 
-        if(this.animation) this.animation.stopVRMAAnimation(); 
-    }
     onWindowResize() { 
         if (this.camera && this.renderer) {
             this.camera.aspect = window.innerWidth / window.innerHeight;

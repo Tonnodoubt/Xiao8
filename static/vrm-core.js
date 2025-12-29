@@ -702,13 +702,6 @@ class VRMCore {
                 }
             }
 
-            // 【调试】强制某些模型正面朝向（如果自动检测失败）
-            // 检查文件名是否包含特定标识
-            if (modelUrl.includes('yuivrm')) {
-                needsRotation = true;
-                console.log('[VRM] 检测到 yuivrm 模型，强制正面朝向');
-            }
-
             // 重置旋转并应用必要的旋转
             vrm.scene.rotation.set(0, needsRotation ? Math.PI : 0, 0);
             

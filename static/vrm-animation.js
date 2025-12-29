@@ -11,10 +11,11 @@ class VRMAnimation {
         this.currentAction = null;
         this.vrmaIsPlaying = false;
         this._loaderPromise = null;
-        
+        this._springBoneTimer = null;
+
         // 播放速度
         this.playbackSpeed = 1.0; 
-
+        
         // 调试辅助
         this.skeletonHelper = null;
         this.debug = false; // 默认关闭，可调用 toggleDebug() 开启
@@ -139,21 +140,28 @@ class VRMAnimation {
 
     stopVRMAAnimation() {
         console.log('[VRM Animation] 停止动画播放');
+        
+        // 清理之前的定时器，防止冲突
+        if (this._springBoneTimer) {
+            clearTimeout(this._springBoneTimer);
+            this._springBoneTimer = null;
+        }
+
         if (this.currentAction) {
             this.currentAction.fadeOut(0.5);
-            setTimeout(() => {
+            // 这里的定时器也要保存引用
+            this._springBoneTimer = setTimeout(() => {
                 if (this.vrmaMixer) this.vrmaMixer.stopAllAction();
                 this.currentAction = null;
                 this.vrmaIsPlaying = false;
 
-                // 【关键修复】延迟重新启用 SpringBone，避免立即冲突
+                // 再次延迟启用物理
                 setTimeout(() => {
                     if (this.manager.toggleSpringBone) {
                         this.manager.toggleSpringBone(true);
                         console.log('[VRM Animation] SpringBone 已重新启用');
                     }
                 }, 100);
-
             }, 500);
         } else {
             if (this.vrmaMixer) this.vrmaMixer.stopAllAction();

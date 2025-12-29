@@ -58,12 +58,12 @@ async function initVRMModel() {
     let targetModelPath = window.vrmModel || (typeof vrmModel !== 'undefined' ? vrmModel : '');
     console.log('[VRM Init] 检测到的VRM模型路径:', targetModelPath);
 
-    // 临时调试：强制使用默认VRM模型来测试加载功能
+    // 【修改】如果未指定路径，使用默认模型保底
     if (!targetModelPath) {
-        console.log('[VRM Init] 未找到VRM模型路径，使用默认模型进行测试');
-        targetModelPath = '/static/vrm/avatarc.vrm'; // 默认模型
+        console.log('[VRM Init] 未指定VRM模型路径，将加载默认模型...');
+        // 这里使用一个你确定存在的模型路径（根据你之前的日志，sister1.0.vrm 是存在的）
+        targetModelPath = '/static/vrm/sister1.0.vrm'; 
     }
-
     if (!window.vrmManager) {
         console.warn('[VRM Init] VRM管理器未初始化，跳过加载');
         return;
