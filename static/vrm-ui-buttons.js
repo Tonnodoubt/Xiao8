@@ -43,7 +43,13 @@ VRMManager.prototype.setupFloatingButtons = function () {
     // 3. 创建按钮
     buttonConfigs.forEach(config => {
         const btnWrapper = document.createElement('div');
-        Object.assign(btnWrapper.style, { position: 'relative', display: 'flex', alignItems: 'center', pointerEvents: 'auto' });
+        Object.assign(btnWrapper.style, {
+            position: 'relative',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',  // ✅ 添加gap，与Live2D保持一致
+            pointerEvents: 'auto'
+        });
         
         // 这里的事件监听是为了防止点击穿透到模型
         ['pointerdown','mousedown','touchstart'].forEach(evt => 
@@ -51,23 +57,112 @@ VRMManager.prototype.setupFloatingButtons = function () {
         );
 
         const btn = document.createElement('div');
-        btn.id = `live2d-btn-${config.id}`;
-        btn.className = 'live2d-floating-btn';
-        
+        btn.id = `vrm-btn-${config.id}`;
+        btn.className = 'vrm-floating-btn';
+
         Object.assign(btn.style, {
-            width: '48px', height: '48px', borderRadius: '50%',
-            background: 'rgba(255,255,255,0.65)', border: '1px solid rgba(255,255,255,0.2)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            cursor: 'pointer', pointerEvents: 'auto', boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            background: 'rgba(255, 255, 255, 0.65)',  // Fluent Design Acrylic
+            backdropFilter: 'saturate(180%) blur(20px)',  // Fluent 标准模糊
+            border: '1px solid rgba(255, 255, 255, 0.18)',  // 微妙高光边框
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: '24px',
+            cursor: 'pointer',
+            userSelect: 'none',
+            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(0, 0, 0, 0.08)',  // Fluent 多层阴影
+            transition: 'all 0.1s ease',  // Fluent 快速响应
+            pointerEvents: 'auto'
         });
 
-        // 图标处理
+        let imgOff = null;
+        let imgOn = null;
+
+        // 图标处理 - 与Live2D完全一致
         if (config.iconOff && config.iconOn) {
-            const imgOff = document.createElement('img'); imgOff.src = config.iconOff;
-            Object.assign(imgOff.style, {width:'100%', height:'100%', position:'absolute', transition:'opacity 0.3s'});
-            const imgOn = document.createElement('img'); imgOn.src = config.iconOn;
-            Object.assign(imgOn.style, {width:'100%', height:'100%', position:'absolute', opacity:'0', transition:'opacity 0.3s'});
-            btn.appendChild(imgOff); btn.appendChild(imgOn);
+            // 创建图片容器，用于叠加两张图片
+            const imgContainer = document.createElement('div');
+            Object.assign(imgContainer.style, {
+                position: 'relative',
+                width: '48px',
+                height: '48px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+            });
+
+            // 创建off状态图片（默认显示）
+            imgOff = document.createElement('img');
+            imgOff.src = config.iconOff;
+            imgOff.alt = config.emoji;
+            Object.assign(imgOff.style, {
+                position: 'absolute',
+                width: '48px',
+                height: '48px',
+                objectFit: 'contain',
+                pointerEvents: 'none',
+                opacity: '1',
+                transition: 'opacity 0.3s ease'
+            });
+
+            // 创建on状态图片（默认隐藏）
+            imgOn = document.createElement('img');
+            imgOn.src = config.iconOn;
+            imgOn.alt = config.emoji;
+            Object.assign(imgOn.style, {
+                position: 'absolute',
+                width: '48px',
+                height: '48px',
+                objectFit: 'contain',
+                pointerEvents: 'none',
+                opacity: '0',
+                transition: 'opacity 0.3s ease'
+            });
+
+            imgContainer.appendChild(imgOff);
+            imgContainer.appendChild(imgOn);
+            btn.appendChild(imgContainer);
+
+            // 鼠标悬停效果 - Fluent Design
+            btn.addEventListener('mouseenter', () => {
+                btn.style.transform = 'scale(1.05)';  // 更微妙的缩放
+                btn.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.08), 0 8px 16px rgba(0, 0, 0, 0.08)';
+                btn.style.background = 'rgba(255, 255, 255, 0.8)';  // 悬停时更亮
+                // 淡出off图标，淡入on图标
+                if (imgOff && imgOn) {
+                    imgOff.style.opacity = '0';
+                    imgOn.style.opacity = '1';
+                }
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.transform = 'scale(1)';
+                btn.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(0, 0, 0, 0.08)';
+                // 恢复原始背景色（根据按钮状态）
+                const isActive = btn.dataset.active === 'true';
+
+                if (isActive) {
+                    // 激活状态：稍亮的背景
+                    btn.style.background = 'rgba(255, 255, 255, 0.75)';
+                } else {
+                    btn.style.background = 'rgba(255, 255, 255, 0.65)';  // Fluent Acrylic
+                }
+
+                // 根据按钮激活状态决定显示哪个图标
+                if (imgOff && imgOn) {
+                    if (isActive) {
+                        // 激活状态：保持on图标
+                        imgOff.style.opacity = '0';
+                        imgOn.style.opacity = '1';
+                    } else {
+                        // 未激活状态：显示off图标
+                        imgOff.style.opacity = '1';
+                        imgOn.style.opacity = '0';
+                    }
+                }
+            });
 
             // ✅ 使用新架构：通过 UIController 统一管理面板
             btn.addEventListener('click', (e) => {
@@ -143,8 +238,8 @@ VRMManager.prototype.setupFloatingButtons = function () {
                 userSelect: 'none',
                 boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(0, 0, 0, 0.08)',
                 transition: 'all 0.1s ease',
-                pointerEvents: 'auto',
-                marginLeft: '-10px'
+                pointerEvents: 'auto'
+                // ✅ 移除marginLeft，使用btnWrapper的gap
             });
 
             // 阻止事件传播
