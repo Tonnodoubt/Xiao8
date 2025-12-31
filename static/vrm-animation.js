@@ -62,13 +62,10 @@ class VRMAnimation {
         if (!vrm) return;
 
         try {
-            console.log(`[VRM Animation] 加载: ${vrmaPath}`);
-            
             // 物理防抖：暂时关闭 SpringBone
             if (this.manager.toggleSpringBone) {
                 this.manager.toggleSpringBone(false);
-                console.log('[VRM Animation] SpringBone 已临时禁用');
-            } 
+            }
 
             // 清理旧 Mixer
             if (this.manager.animationMixer) {
@@ -123,11 +120,9 @@ class VRMAnimation {
             } else {
                 newAction.reset().fadeIn(fadeDuration).play();
             }
-            
+
             this.currentAction = newAction;
             this.vrmaIsPlaying = true;
-            
-            console.log(`[VRM Animation] 播放中... (速度: ${this.playbackSpeed})`);
 
             // 如果开启了调试，更新骨骼辅助线
             if (this.debug) this._updateSkeletonHelper();
@@ -139,8 +134,6 @@ class VRMAnimation {
     }
 
     stopVRMAAnimation() {
-        console.log('[VRM Animation] 停止动画播放');
-        
         // 清理之前的定时器，防止冲突
         if (this._springBoneTimer) {
             clearTimeout(this._springBoneTimer);
@@ -159,7 +152,6 @@ class VRMAnimation {
                 setTimeout(() => {
                     if (this.manager.toggleSpringBone) {
                         this.manager.toggleSpringBone(true);
-                        console.log('[VRM Animation] SpringBone 已重新启用');
                     }
                 }, 100);
             }, 500);
@@ -170,7 +162,6 @@ class VRMAnimation {
             // 立即重新启用 SpringBone
             if (this.manager.toggleSpringBone) {
                 this.manager.toggleSpringBone(true);
-                console.log('[VRM Animation] SpringBone 已重新启用');
             }
         }
     }
@@ -271,14 +262,8 @@ class VRMAnimation {
                 const newTrack = track.clone();
                 newTrack.name = `${node.name}.${property}`;
 
-                // 【调试】记录映射的骨骼信息
-                if (this.debug && (type.includes('Arm') || type.includes('Hand'))) {
-                    console.log(`[VRM Animation] 映射手臂骨骼: ${nodeName} -> ${type} (${property})`);
-                }
-
                 tracks.push(newTrack);
             } else if (this.debug && (nodeName.toLowerCase().includes('arm') || nodeName.toLowerCase().includes('hand'))) {
-                // 【调试】记录未映射的手臂相关骨骼
                 console.warn(`[VRM Animation] 未映射的手臂骨骼: ${nodeName} (${property})`);
             }
         });
@@ -294,7 +279,6 @@ class VRMAnimation {
      */
     toggleDebug() {
         this.debug = !this.debug;
-        console.log(`[VRM Debug] 骨骼显示: ${this.debug ? 'ON' : 'OFF'}`);
         if (this.debug) {
             this._updateSkeletonHelper();
         } else {
@@ -318,19 +302,16 @@ class VRMAnimation {
 
     //口型同步代码
     startLipSync(analyser) {
-        console.log('[VRM LipSync] 启动口型同步, analyser:', analyser);
         this.analyser = analyser;
         this.lipSyncActive = true;
         this.updateMouthExpressionMapping();
         if (this.analyser) {
             this.frequencyData = new Uint8Array(this.analyser.frequencyBinCount);
-            console.log(`[VRM LipSync] 初始化完成, 频率数据长度: ${this.frequencyData.length}, 嘴巴表情映射:`, this.mouthExpressions);
         } else {
             console.warn('[VRM LipSync] analyser为空，无法启动口型同步');
         }
     }
     stopLipSync() {
-        console.log('[VRM LipSync] 停止口型同步');
         this.lipSyncActive = false;
         this.resetMouthExpressions();
         this.analyser = null;
@@ -383,11 +364,6 @@ class VRMAnimation {
         // 获取嘴巴张开表情名称
         const mouthOpenName = this.mouthExpressions.aa || 'aa';
 
-        // 调试输出 (只在变化明显时输出，避免刷屏)
-        if (Math.abs(targetWeight - this.currentMouthWeight) > 0.1) {
-            console.log(`[VRM LipSync] 音量: ${volume.toFixed(1)}, 目标权重: ${targetWeight.toFixed(3)}, 当前权重: ${this.currentMouthWeight.toFixed(3)}, 表情: ${mouthOpenName}`);
-        }
-
         try {
             this.manager.currentModel.vrm.expressionManager.setValue(mouthOpenName, finalWeight);
         } catch (e) {
@@ -406,4 +382,3 @@ class VRMAnimation {
 }
 
 window.VRMAnimation = VRMAnimation;
-console.log('[VRM Animation] 终极修复版已加载 (含自动数据清洗)');

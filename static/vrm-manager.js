@@ -3,8 +3,6 @@
  */
 class VRMManager {
     constructor() {
-        console.log('[VRM Manager] 初始化...');
-        
         this.scene = null;
         this.camera = null;
         this.renderer = null;
@@ -91,7 +89,6 @@ class VRMManager {
 
     toggleSpringBone(enable) {
         this.enablePhysics = enable;
-        console.log(`[VRM Manager] 物理系统已${enable ? '开启' : '关闭'}`);
     }
 
     async loadModel(modelUrl, options = {}) {
@@ -103,9 +100,8 @@ class VRMManager {
         if (!this._animationFrameId) this.startAnimateLoop();
 
         const DEFAULT_LOOP_ANIMATION = '/static/vrm/animation/wait03.vrma';
-        
+
         if (options.autoPlay !== false && this.animation) {
-            console.log('[VRM Manager] 模型加载完成，自动播放默认循环动作...');
             this.playVRMAAnimation(DEFAULT_LOOP_ANIMATION, { loop: true }).catch(err => {
                 console.warn('[VRM Manager] 自动播放默认动作失败:', err);
             });
@@ -150,4 +146,3 @@ class VRMManager {
 }
 
 window.VRMManager = VRMManager;
-console.log('[VRM Manager] 顺序修复版已加载');

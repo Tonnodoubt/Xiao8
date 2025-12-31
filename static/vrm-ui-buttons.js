@@ -300,7 +300,6 @@ VRMManager.prototype.setupFloatingButtons = function () {
         buttonsContainer.appendChild(btnWrapper);
     });
 
-    console.log('[VRM UI] 浮动按钮创建完成');
     window.dispatchEvent(new CustomEvent('live2d-floating-buttons-ready'));
 
     // --- 4. 锁图标处理 

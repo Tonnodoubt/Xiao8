@@ -182,12 +182,6 @@ class VRMCore {
      * 检测 VRM 模型版本
      */
     detectVRMVersion(vrm) {
-        console.log('检测版本依据:', {
-            vrmVersion: vrm.meta?.vrmVersion, 
-            metaVersion: vrm.meta?.metaVersion,
-            boneCount: Object.keys(vrm.humanoid?.humanBones || {}).length
-        });
-
         try {
             if (vrm.meta) {
                 if (vrm.meta.vrmVersion || vrm.meta.metaVersion) {
@@ -656,13 +650,6 @@ class VRMCore {
                 throw new Error(`加载的模型不是有效的 VRM 格式。文件: ${modelUrl}`);
             }
 
-            console.log(`[VRM] 成功加载 VRM 模型: ${modelUrl}`);
-            console.log(`[VRM] VRM 版本信息:`, vrm.meta ? {
-                title: vrm.meta.title || vrm.meta.name,
-                version: vrm.meta.version,
-                author: vrm.meta.author || vrm.meta.authors
-            } : '无元数据');
-            
             // 检测 VRM 模型版本（0.0 或 1.0）
             this.vrmVersion = this.detectVRMVersion(vrm);
 
@@ -695,7 +682,6 @@ class VRMCore {
                     // 如果forward向量指向Z轴正方向（远离相机），说明是背面，需要旋转
                     if (forwardVec.z > 0.3) {
                         needsRotation = true;
-                        console.log('[VRM] 检测到模型背对相机，将自动旋转180度');
                     }
                 } else {
                     console.warn('[VRM] 无法检测模型朝向：缺少头部或胸部骨骼');
@@ -785,12 +771,6 @@ class VRMCore {
                 scene: vrm.scene,
                 url: modelUrl
             };
-
-            console.log('[VRM Core] 模型加载完成:', {
-                hasModel: !!this.manager.currentModel,
-                hasScene: !!this.manager.currentModel.scene,
-                hasVRM: !!this.manager.currentModel.vrm
-            });
 
             // 更新口型表情映射（如果animation模块存在）
             if (this.manager.animation && typeof this.manager.animation.updateMouthExpressionMapping === 'function') {

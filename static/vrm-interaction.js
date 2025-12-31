@@ -651,5 +651,4 @@ class VRMInteraction {
 
 // 导出到全局
 window.VRMInteraction = VRMInteraction;
-console.log('[VRM Interaction] VRMInteraction 已注册到全局对象');
 

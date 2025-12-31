@@ -88,8 +88,6 @@ async function initVRMModel() {
 
         // 执行加载
         await window.vrmManager.loadModel(modelUrl);
-        console.log(`[VRM] 模型加载成功: ${targetModelPath}`);
-        
 
     } catch (error) {
         console.error('[VRM Init] 错误详情:', error.stack);
@@ -187,8 +185,7 @@ window.checkAndLoadVRM = async function() {
 
         // 8. 加载VRM模型
         await window.vrmManager.loadModel(modelUrl);
-        console.log(`[VRM] 模型加载成功: ${newModelPath}`);
-        
+
     } catch (error) {
         console.error('[主页VRM检查] VRM检查和加载失败:', error);
         console.error('[主页VRM检查] 错误详情:', error.stack);

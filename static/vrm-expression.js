@@ -26,7 +26,6 @@ class VRMExpression {
         this.neutralReturnTimer = null; // 回到 neutral 的定时器 
         
         // 【关键】情绪映射表：把一种情绪映射到多种可能的 VRM 表情名上
-        // 键是我们的内部情绪名，值是可能出现在模型里的表情名列表
         this.moodMap = {
             'neutral': ['neutral'],
             // 开心类：兼容 VRM1.0(happy), VRM0.0(joy, fun), 其他(smile, warau)
@@ -60,7 +59,6 @@ class VRMExpression {
         if (this.moodMap && this.moodMap[moodName]) {
             this.currentMood = moodName;
             this.moodTimer = 0; // 重置自动切换计时器，避免马上被切走
-            console.log(`[VRM Expression] 情绪切换为: ${moodName}`);
 
             // 【新增】清除之前的回到 neutral 定时器
             if (this.neutralReturnTimer) {
@@ -71,7 +69,6 @@ class VRMExpression {
             // 【新增】如果不是 neutral 且开启了自动回到 neutral，设置定时器
             if (this.autoReturnToNeutral && moodName !== 'neutral') {
                 this.neutralReturnTimer = setTimeout(() => {
-                    console.log(`[VRM Expression] ${this.neutralReturnDelay}ms 后自动回到 neutral`);
                     this.currentMood = 'neutral';
                     this.neutralReturnTimer = null;
                 }, this.neutralReturnDelay);
@@ -199,7 +196,6 @@ class VRMExpression {
         const randomMood = moods[Math.floor(Math.random() * moods.length)];
         if (randomMood !== this.currentMood) {
             this.currentMood = randomMood;
-            console.log(`[VRM Expression] 切换心情: ${this.currentMood}`);
         }
     }
 
@@ -278,13 +274,11 @@ class VRMExpression {
     }
 
     setBaseExpression(name) {
-        console.log(`[VRM Expression] 手动设置表情: ${name}`);
         // 彻底关闭自动切换，防止干扰
         this.autoChangeMood = false;
         this.currentMood = name || 'neutral';
-          
+
     }
 }
 
 window.VRMExpression = VRMExpression;
-console.log('[VRM Expression] 智能映射版已加载');
