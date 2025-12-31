@@ -3249,6 +3249,285 @@ function init_app() {
         console.log('[App] 请她回来完成，未自动开始会话，等待用户主动发起对话');
     });
 
+    // ========== VRM休息模式控制逻辑 ==========
+
+    // VRM睡觉按钮（请她离开）
+    window.addEventListener('vrm-goodbye-click', () => {
+        // 第一步：设置标志位
+        if (window.vrmManager) {
+            window.vrmManager._goodbyeClicked = true;
+        }
+
+        // 第二步：关闭所有弹窗
+        const allPopups = document.querySelectorAll('[id^="live2d-popup-"]');
+        allPopups.forEach(popup => {
+            popup.style.setProperty('display', 'none', 'important');
+            popup.style.setProperty('visibility', 'hidden', 'important');
+            popup.style.setProperty('opacity', '0', 'important');
+            popup.style.setProperty('pointer-events', 'none', 'important');
+        });
+
+        // 第三步：隐藏VRM canvas
+        const vrmCanvas = document.getElementById('vrm-canvas');
+        if (vrmCanvas) {
+            vrmCanvas.style.setProperty('visibility', 'hidden', 'important');
+            vrmCanvas.style.setProperty('pointer-events', 'none', 'important');
+        }
+
+        // 第四步：获取goodbye按钮位置（在隐藏前）
+        const goodbyeButton = document.getElementById('vrm-btn-goodbye');
+        let savedGoodbyeRect = null;
+        if (goodbyeButton) {
+            try {
+                savedGoodbyeRect = goodbyeButton.getBoundingClientRect();
+            } catch (e) {
+                savedGoodbyeRect = null;
+            }
+        }
+
+        // 第五步：隐藏浮动按钮和锁图标
+        const floatingButtons = document.getElementById('vrm-floating-buttons');
+        if (floatingButtons) {
+            floatingButtons.style.setProperty('display', 'none', 'important');
+            floatingButtons.style.setProperty('visibility', 'hidden', 'important');
+            floatingButtons.style.setProperty('opacity', '0', 'important');
+        }
+
+        const lockIcon = document.getElementById('vrm-lock-icon');
+        if (lockIcon) {
+            lockIcon.style.setProperty('display', 'none', 'important');
+            lockIcon.style.setProperty('visibility', 'hidden', 'important');
+            lockIcon.style.setProperty('opacity', '0', 'important');
+        }
+
+        // 第六步：显示"请她回来"按钮
+        const returnButtonContainer = document.getElementById('vrm-return-button-container');
+        if (returnButtonContainer) {
+            if (savedGoodbyeRect) {
+                const containerWidth = returnButtonContainer.offsetWidth || 64;
+                const containerHeight = returnButtonContainer.offsetHeight || 64;
+                const left = Math.round(savedGoodbyeRect.left + (savedGoodbyeRect.width - containerWidth) / 2 + window.scrollX);
+                const top = Math.round(savedGoodbyeRect.top + (savedGoodbyeRect.height - containerHeight) / 2 + window.scrollY);
+                returnButtonContainer.style.left = `${Math.max(0, Math.min(left, window.innerWidth - containerWidth))}px`;
+                returnButtonContainer.style.top = `${Math.max(0, Math.min(top, window.innerHeight - containerHeight))}px`;
+                returnButtonContainer.style.transform = 'none';
+            } else {
+                const fallbackRight = 16;
+                const fallbackBottom = 116;
+                returnButtonContainer.style.right = `${fallbackRight}px`;
+                returnButtonContainer.style.bottom = `${fallbackBottom}px`;
+                returnButtonContainer.style.left = '';
+                returnButtonContainer.style.top = '';
+                returnButtonContainer.style.transform = 'none';
+            }
+            returnButtonContainer.style.display = 'flex';
+            returnButtonContainer.style.pointerEvents = 'auto';
+        }
+
+        // 第七步：隐藏侧边栏和按钮
+        const sidebar = document.getElementById('sidebar');
+        const sidebarbox = document.getElementById('sidebarbox');
+        if (sidebar) {
+            sidebar.style.setProperty('display', 'none', 'important');
+            sidebar.style.setProperty('visibility', 'hidden', 'important');
+            sidebar.style.setProperty('opacity', '0', 'important');
+        }
+        if (sidebarbox) {
+            sidebarbox.style.setProperty('display', 'none', 'important');
+            sidebarbox.style.setProperty('visibility', 'hidden', 'important');
+            sidebarbox.style.setProperty('opacity', '0', 'important');
+        }
+        const sideButtons = document.querySelectorAll('.side-btn');
+        sideButtons.forEach(btn => {
+            btn.style.setProperty('display', 'none', 'important');
+            btn.style.setProperty('visibility', 'hidden', 'important');
+            btn.style.setProperty('opacity', '0', 'important');
+        });
+
+        // 第八步：自动折叠对话区
+        const chatContainerEl = document.getElementById('chat-container');
+        const toggleChatBtn = document.getElementById('toggle-chat-btn');
+        if (chatContainerEl && !chatContainerEl.classList.contains('minimized')) {
+            if (toggleChatBtn) {
+                toggleChatBtn.click();
+            }
+        }
+
+        // 第九步：触发原有的离开逻辑
+        if (resetSessionButton) {
+            setTimeout(() => {
+                resetSessionButton.click();
+            }, 10);
+        }
+    });
+
+    // VRM请她回来按钮
+    window.addEventListener('vrm-return-click', () => {
+        // 第一步：清除离开标志
+        if (window.vrmManager) {
+            window.vrmManager._goodbyeClicked = false;
+        }
+
+        // 第二步：隐藏"请她回来"按钮
+        const returnButtonContainer = document.getElementById('vrm-return-button-container');
+        if (returnButtonContainer) {
+            returnButtonContainer.style.display = 'none';
+            returnButtonContainer.style.pointerEvents = 'none';
+        }
+
+        // 第三步：恢复VRM容器
+        const vrmContainer = document.getElementById('vrm-container');
+        if (vrmContainer) {
+            vrmContainer.classList.remove('minimized');
+            if (vrmContainer.classList.length === 0) {
+                vrmContainer.removeAttribute('class');
+            }
+            vrmContainer.style.removeProperty('display');
+            vrmContainer.style.removeProperty('visibility');
+            vrmContainer.style.removeProperty('opacity');
+        }
+
+        // 第四步：恢复VRM canvas
+        const vrmCanvas = document.getElementById('vrm-canvas');
+        if (vrmCanvas) {
+            vrmCanvas.style.removeProperty('visibility');
+            vrmCanvas.style.visibility = 'visible';
+            vrmCanvas.style.removeProperty('pointer-events');
+            vrmCanvas.style.pointerEvents = 'auto';
+        }
+
+        // 第五步：恢复浮动按钮
+        const floatingButtons = document.getElementById('vrm-floating-buttons');
+        if (floatingButtons) {
+            floatingButtons.style.removeProperty('display');
+            floatingButtons.style.removeProperty('visibility');
+            floatingButtons.style.removeProperty('opacity');
+            floatingButtons.style.display = 'flex';
+        }
+
+        // 第六步：恢复锁图标
+        const lockIcon = document.getElementById('vrm-lock-icon');
+        if (lockIcon) {
+            lockIcon.style.removeProperty('display');
+            lockIcon.style.removeProperty('visibility');
+            lockIcon.style.removeProperty('opacity');
+            lockIcon.style.display = 'block';
+        }
+
+        // 第七步：恢复侧边栏
+        const sidebar = document.getElementById('sidebar');
+        const sidebarbox = document.getElementById('sidebarbox');
+        if (sidebar) {
+            sidebar.style.removeProperty('display');
+            sidebar.style.removeProperty('visibility');
+            sidebar.style.removeProperty('opacity');
+        }
+        if (sidebarbox) {
+            sidebarbox.style.removeProperty('display');
+            sidebarbox.style.removeProperty('visibility');
+            sidebarbox.style.removeProperty('opacity');
+        }
+        const sideButtons = document.querySelectorAll('.side-btn');
+        sideButtons.forEach(btn => {
+            btn.style.removeProperty('display');
+            btn.style.removeProperty('visibility');
+            btn.style.removeProperty('opacity');
+        });
+
+        // 第八步：恢复弹窗交互能力
+        const allPopups = document.querySelectorAll('[id^="live2d-popup-"]');
+        allPopups.forEach(popup => {
+            popup.style.removeProperty('pointer-events');
+            popup.style.removeProperty('visibility');
+            popup.style.pointerEvents = 'auto';
+        });
+
+        // 第九步：恢复对话区
+        const chatContainerEl = document.getElementById('chat-container');
+        const toggleChatBtn = document.getElementById('toggle-chat-btn');
+        if (chatContainerEl && chatContainerEl.classList.contains('minimized')) {
+            if (toggleChatBtn) {
+                toggleChatBtn.click();
+            }
+        }
+
+        // 第十步：恢复按钮状态
+        isSwitchingMode = true;
+        micButton.classList.remove('recording');
+        micButton.classList.remove('active');
+        screenButton.classList.remove('active');
+        isRecording = false;
+        window.isRecording = false;
+
+        // 启用基本按钮
+        micButton.disabled = false;
+        textSendButton.disabled = false;
+        textInputBox.disabled = false;
+        screenshotButton.disabled = false;
+        resetSessionButton.disabled = false;
+        muteButton.disabled = true;
+        screenButton.disabled = true;
+        stopButton.disabled = true;
+
+        // 显示文本输入区
+        const textInputArea = document.getElementById('text-input-area');
+        if (textInputArea) {
+            textInputArea.classList.remove('hidden');
+        }
+
+        isTextSessionActive = false;
+
+        // 显示欢迎消息
+        showStatusToast(window.t ? window.t('app.welcomeBack', { name: lanlan_config.lanlan_name }) : `🫴 ${lanlan_config.lanlan_name}回来了！`, 3000);
+
+        // 播放VRM返回动画，然后衔接等待动画
+        if (window.vrmManager && window.vrmManager.animation) {
+            const appearingPath = '/static/vrm/animation/appearing-JPRXVVPX.vrma';
+            const waitPath = '/static/vrm/animation/wait03.vrma';
+
+            // 播放appearing动画（不循环）
+            window.vrmManager.animation.playVRMAAnimation(appearingPath, {
+                loop: false
+            }).then(() => {
+                // appearing动画加载成功后，获取动画时长
+                const mixer = window.vrmManager.animation.vrmaMixer;
+                const action = window.vrmManager.animation.currentAction;
+
+                if (mixer && action) {
+                    // 获取动画总时长
+                    const clip = action.getClip();
+                    const duration = clip.duration;
+
+                    // 在动画结束前0.5秒开始淡入等待动画，确保平滑衔接
+                    const transitionTime = Math.max(0, (duration - 0.5) * 1000);
+
+                    setTimeout(() => {
+                        // 提前开始播放等待动画，不reset以避免T-pose
+                        window.vrmManager.animation.playVRMAAnimation(waitPath, {
+                            loop: true,
+                            fadeDuration: 1.0,  // 使用1秒的淡入时间
+                            noReset: true  // 关键：不reset，从当前姿势平滑过渡
+                        }).catch(err => {
+                            console.warn('[VRM Return] 播放等待动画失败:', err);
+                        });
+                    }, transitionTime);
+                }
+            }).catch(err => {
+                console.warn('[VRM Return] 播放返回动画失败:', err);
+                // 如果appearing动画失败，直接播放等待动画
+                window.vrmManager.animation.playVRMAAnimation(waitPath, {
+                    loop: true
+                }).catch(err => {
+                    console.warn('[VRM Return] 播放等待动画失败:', err);
+                });
+            });
+        }
+
+        setTimeout(() => {
+            isSwitchingMode = false;
+        }, 500);
+    });
+
     // ========== Agent控制逻辑 ==========
 
     // ===== Agent弹窗状态机 =====

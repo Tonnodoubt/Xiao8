@@ -197,6 +197,11 @@ VRMManager.prototype.setupFloatingButtons = function () {
                         targetActive = window.UIController.toggleScreen(targetActive);
                     }
                 }
+                else if (config.id === 'goodbye') {
+                    // 触发VRM休息模式事件
+                    window.dispatchEvent(new CustomEvent('vrm-goodbye-click'));
+                    return; // goodbye按钮不需要更新激活状态
+                }
 
                 // 更新图标状态
                 btn.dataset.active = targetActive.toString();
@@ -301,6 +306,107 @@ VRMManager.prototype.setupFloatingButtons = function () {
     });
 
     window.dispatchEvent(new CustomEvent('live2d-floating-buttons-ready'));
+
+    // --- 3.5. 创建"请她回来"按钮（用于休息模式）---
+    const returnButtonContainer = document.createElement('div');
+    returnButtonContainer.id = 'vrm-return-button-container';
+    Object.assign(returnButtonContainer.style, {
+        position: 'fixed',
+        top: '0',
+        left: '0',
+        transform: 'none',
+        zIndex: '99999',
+        pointerEvents: 'auto',
+        display: 'none' // 初始隐藏
+    });
+
+    const returnBtn = document.createElement('div');
+    returnBtn.id = 'vrm-btn-return';
+    returnBtn.className = 'vrm-return-btn';
+
+    // 使用与goodbye相同的图标
+    const returnImgOff = document.createElement('img');
+    returnImgOff.src = '/static/icons/rest_off.png' + iconVersion;
+    returnImgOff.alt = '💤';
+    Object.assign(returnImgOff.style, {
+        width: '64px',
+        height: '64px',
+        objectFit: 'contain',
+        pointerEvents: 'none',
+        opacity: '1',
+        transition: 'opacity 0.3s ease'
+    });
+
+    const returnImgOn = document.createElement('img');
+    returnImgOn.src = '/static/icons/rest_on.png' + iconVersion;
+    returnImgOn.alt = '💤';
+    Object.assign(returnImgOn.style, {
+        position: 'absolute',
+        width: '64px',
+        height: '64px',
+        objectFit: 'contain',
+        pointerEvents: 'none',
+        opacity: '0',
+        transition: 'opacity 0.3s ease'
+    });
+
+    Object.assign(returnBtn.style, {
+        width: '64px',
+        height: '64px',
+        borderRadius: '50%',
+        background: 'rgba(255, 255, 255, 0.65)',
+        backdropFilter: 'saturate(180%) blur(20px)',
+        border: '1px solid rgba(255, 255, 255, 0.18)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        cursor: 'pointer',
+        userSelect: 'none',
+        boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04), 0 8px 16px rgba(0, 0, 0, 0.08), 0 16px 32px rgba(0, 0, 0, 0.04)',
+        transition: 'all 0.1s ease',
+        pointerEvents: 'auto',
+        position: 'relative'
+    });
+
+    // 悬停效果
+    returnBtn.addEventListener('mouseenter', () => {
+        returnBtn.style.transform = 'scale(1.05)';
+        returnBtn.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.08), 0 16px 32px rgba(0, 0, 0, 0.08)';
+        returnBtn.style.background = 'rgba(255, 255, 255, 0.8)';
+        returnImgOff.style.opacity = '0';
+        returnImgOn.style.opacity = '1';
+    });
+
+    returnBtn.addEventListener('mouseleave', () => {
+        returnBtn.style.transform = 'scale(1)';
+        returnBtn.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.04), 0 8px 16px rgba(0, 0, 0, 0.08), 0 16px 32px rgba(0, 0, 0, 0.04)';
+        returnBtn.style.background = 'rgba(255, 255, 255, 0.65)';
+        returnImgOff.style.opacity = '1';
+        returnImgOn.style.opacity = '0';
+    });
+
+    returnBtn.addEventListener('click', (e) => {
+        // 检查是否处于拖拽状态，如果是拖拽操作则阻止点击
+        if (returnButtonContainer.getAttribute('data-dragging') === 'true') {
+            e.preventDefault();
+            e.stopPropagation();
+            return;
+        }
+
+        e.stopPropagation();
+        e.preventDefault();
+        window.dispatchEvent(new CustomEvent('vrm-return-click'));
+    });
+
+    returnBtn.appendChild(returnImgOff);
+    returnBtn.appendChild(returnImgOn);
+    returnButtonContainer.appendChild(returnBtn);
+    document.body.appendChild(returnButtonContainer);
+
+    this._returnButtonContainer = returnButtonContainer;
+
+    // 为"请她回来"按钮添加拖动功能
+    this.setupVRMReturnButtonDrag(returnButtonContainer);
 
     // --- 4. 锁图标处理 
     
@@ -410,4 +516,134 @@ VRMManager.prototype._startUIUpdateLoop = function() {
         requestAnimationFrame(update);
     };
     requestAnimationFrame(update);
+};
+
+// 为VRM的"请她回来"按钮设置拖动功能
+VRMManager.prototype.setupVRMReturnButtonDrag = function (returnButtonContainer) {
+    let isDragging = false;
+    let dragStartX = 0;
+    let dragStartY = 0;
+    let containerStartX = 0;
+    let containerStartY = 0;
+    let isClick = false;
+
+    // 鼠标按下事件
+    returnButtonContainer.addEventListener('mousedown', (e) => {
+        if (e.target === returnButtonContainer || e.target.classList.contains('vrm-return-btn')) {
+            isDragging = true;
+            isClick = true;
+            dragStartX = e.clientX;
+            dragStartY = e.clientY;
+
+            const currentLeft = parseInt(returnButtonContainer.style.left) || 0;
+            const currentTop = parseInt(returnButtonContainer.style.top) || 0;
+            containerStartX = currentLeft;
+            containerStartY = currentTop;
+
+            returnButtonContainer.setAttribute('data-dragging', 'false');
+            returnButtonContainer.style.cursor = 'grabbing';
+            e.preventDefault();
+        }
+    });
+
+    // 鼠标移动事件
+    document.addEventListener('mousemove', (e) => {
+        if (isDragging) {
+            const deltaX = e.clientX - dragStartX;
+            const deltaY = e.clientY - dragStartY;
+
+            const dragThreshold = 5;
+            if (Math.abs(deltaX) > dragThreshold || Math.abs(deltaY) > dragThreshold) {
+                isClick = false;
+                returnButtonContainer.setAttribute('data-dragging', 'true');
+            }
+
+            const newX = containerStartX + deltaX;
+            const newY = containerStartY + deltaY;
+
+            // 边界检查
+            const containerWidth = returnButtonContainer.offsetWidth || 64;
+            const containerHeight = returnButtonContainer.offsetHeight || 64;
+
+            const boundedX = Math.max(0, Math.min(newX, window.innerWidth - containerWidth));
+            const boundedY = Math.max(0, Math.min(newY, window.innerHeight - containerHeight));
+
+            returnButtonContainer.style.left = `${boundedX}px`;
+            returnButtonContainer.style.top = `${boundedY}px`;
+        }
+    });
+
+    // 鼠标释放事件
+    document.addEventListener('mouseup', (e) => {
+        if (isDragging) {
+            setTimeout(() => {
+                returnButtonContainer.setAttribute('data-dragging', 'false');
+            }, 10);
+
+            isDragging = false;
+            isClick = false;
+            returnButtonContainer.style.cursor = 'grab';
+        }
+    });
+
+    // 设置初始鼠标样式
+    returnButtonContainer.style.cursor = 'grab';
+
+    // 触摸事件支持
+    returnButtonContainer.addEventListener('touchstart', (e) => {
+        if (e.target === returnButtonContainer || e.target.classList.contains('vrm-return-btn')) {
+            isDragging = true;
+            isClick = true;
+            const touch = e.touches[0];
+            dragStartX = touch.clientX;
+            dragStartY = touch.clientY;
+
+            const currentLeft = parseInt(returnButtonContainer.style.left) || 0;
+            const currentTop = parseInt(returnButtonContainer.style.top) || 0;
+            containerStartX = currentLeft;
+            containerStartY = currentTop;
+
+            returnButtonContainer.setAttribute('data-dragging', 'false');
+            e.preventDefault();
+        }
+    });
+
+    document.addEventListener('touchmove', (e) => {
+        if (isDragging) {
+            const touch = e.touches[0];
+            const deltaX = touch.clientX - dragStartX;
+            const deltaY = touch.clientY - dragStartY;
+
+            const dragThreshold = 5;
+            if (Math.abs(deltaX) > dragThreshold || Math.abs(deltaY) > dragThreshold) {
+                isClick = false;
+                returnButtonContainer.setAttribute('data-dragging', 'true');
+            }
+
+            const newX = containerStartX + deltaX;
+            const newY = containerStartY + deltaY;
+
+            // 边界检查
+            const containerWidth = returnButtonContainer.offsetWidth || 64;
+            const containerHeight = returnButtonContainer.offsetHeight || 64;
+
+            const boundedX = Math.max(0, Math.min(newX, window.innerWidth - containerWidth));
+            const boundedY = Math.max(0, Math.min(newY, window.innerHeight - containerHeight));
+
+            returnButtonContainer.style.left = `${boundedX}px`;
+            returnButtonContainer.style.top = `${boundedY}px`;
+            e.preventDefault();
+        }
+    });
+
+    document.addEventListener('touchend', (e) => {
+        if (isDragging) {
+            setTimeout(() => {
+                returnButtonContainer.setAttribute('data-dragging', 'false');
+            }, 10);
+
+            isDragging = false;
+            isClick = false;
+        }
+    });
 };

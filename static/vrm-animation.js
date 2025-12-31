@@ -112,13 +112,24 @@ class VRMAnimation {
             this.playbackSpeed = (options.timeScale !== undefined) ? options.timeScale : 1.0;
             newAction.timeScale = 1.0; // Mixer 内部保持 1，我们在 update 里控制
 
-            // 柔和过渡
-            const fadeDuration = 0.4;
+            // 柔和过渡（支持自定义过渡时间）
+            const fadeDuration = options.fadeDuration !== undefined ? options.fadeDuration : 0.4;
             if (this.currentAction && this.currentAction !== newAction) {
                 this.currentAction.fadeOut(fadeDuration);
-                newAction.reset().fadeIn(fadeDuration).play();
+                // 检查是否需要从当前姿势开始（用于平滑衔接）
+                if (options.noReset) {
+                    // 不reset，从当前姿势开始淡入
+                    newAction.fadeIn(fadeDuration).play();
+                } else {
+                    // 正常reset后播放
+                    newAction.reset().fadeIn(fadeDuration).play();
+                }
             } else {
-                newAction.reset().fadeIn(fadeDuration).play();
+                if (options.noReset) {
+                    newAction.fadeIn(fadeDuration).play();
+                } else {
+                    newAction.reset().fadeIn(fadeDuration).play();
+                }
             }
 
             this.currentAction = newAction;
