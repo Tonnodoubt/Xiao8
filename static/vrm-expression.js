@@ -6,19 +6,24 @@
 class VRMExpression {
     constructor(manager) {
         this.manager = manager;
-        
+
         // --- 眨眼配置 ---
         this.autoBlink = true;
         this.blinkTimer = 0;
         this.nextBlinkTime = 3.0;
         this.blinkState = 0; // 0:睁眼, 1:闭眼, 2:睁眼
-        this.blinkWeight = 0.0; 
+        this.blinkWeight = 0.0;
 
         // --- 情绪配置 ---
-        this.autoChangeMood = false; 
+        this.autoChangeMood = false;
         this.moodTimer = 0;
-        this.nextMoodTime = 5.0; 
-        this.currentMood = 'neutral'; 
+        this.nextMoodTime = 5.0;
+        this.currentMood = 'neutral';
+
+        // --- 自动回到 neutral 配置 ---
+        this.autoReturnToNeutral = true; // 是否自动回到 neutral
+        this.neutralReturnDelay = 5000; // 多少毫秒后回到 neutral (默认5秒)
+        this.neutralReturnTimer = null; // 回到 neutral 的定时器 
         
         // 【关键】情绪映射表：把一种情绪映射到多种可能的 VRM 表情名上
         // 键是我们的内部情绪名，值是可能出现在模型里的表情名列表
@@ -56,6 +61,21 @@ class VRMExpression {
             this.currentMood = moodName;
             this.moodTimer = 0; // 重置自动切换计时器，避免马上被切走
             console.log(`[VRM Expression] 情绪切换为: ${moodName}`);
+
+            // 【新增】清除之前的回到 neutral 定时器
+            if (this.neutralReturnTimer) {
+                clearTimeout(this.neutralReturnTimer);
+                this.neutralReturnTimer = null;
+            }
+
+            // 【新增】如果不是 neutral 且开启了自动回到 neutral，设置定时器
+            if (this.autoReturnToNeutral && moodName !== 'neutral') {
+                this.neutralReturnTimer = setTimeout(() => {
+                    console.log(`[VRM Expression] ${this.neutralReturnDelay}ms 后自动回到 neutral`);
+                    this.currentMood = 'neutral';
+                    this.neutralReturnTimer = null;
+                }, this.neutralReturnDelay);
+            }
         } else {
             console.warn(`[VRM Expression] 未知情绪: ${moodName}，忽略切换`);
         }
@@ -185,14 +205,14 @@ class VRMExpression {
 
     _updateWeights(delta, expressionManager) {
         // 提高响应速度
-        const lerpSpeed = 15.0 * delta; 
+        const lerpSpeed = 15.0 * delta;
 
         // 1. 获取所有表情名
         const modelExpressionNames = this._getExpressionNames(expressionManager);
 
         // 2. 获取当前目标表情 (例如 "angry" 或 "blinkLeft")
         const targetName = this.currentMood;
-        
+
         // 判断当前用户是不是正在手动测试眨眼
         const isUserTestingBlink = targetName.toLowerCase().includes('blink');
 
@@ -201,6 +221,16 @@ class VRMExpression {
             let targetWeight = 0.0;
             const lowerName = name.toLowerCase();
             const targetNameLower = targetName.toLowerCase();
+
+            // 【修复】跳过口型表情，避免与口型同步模块冲突
+            // 检查是否为口型相关表情（aa, ih, ou, ee, oh）
+            const lipSyncExpressions = ['aa', 'ih', 'ou', 'ee', 'oh'];
+            const isLipSyncExpression = lipSyncExpressions.some(lip => lowerName.includes(lip));
+
+            if (isLipSyncExpression) {
+                // 跳过口型表情的权重设置，让 VRMAnimation 的 _updateLipSync 独立控制
+                return;
+            }
 
             // --- A. 判断是否为选中项 (最高优先级) ---
             // 直接名字匹配

@@ -19,10 +19,8 @@ function initializeVRMManager() {
         // 检查核心类是否存在
         if (typeof window.VRMManager !== 'undefined') {
             window.vrmManager = new VRMManager();
-            console.log('[VRM Init] VRMManager 实例已通过核心类创建');
         }
     } catch (error) {
-        console.error('[VRM Init] 初始化失败:', error);
     }
 }
 
@@ -94,7 +92,6 @@ async function initVRMModel() {
         
 
     } catch (error) {
-        console.error('[VRM Init] 自动加载流程异常:', error);
         console.error('[VRM Init] 错误详情:', error.stack);
     }
 }
@@ -165,7 +162,6 @@ window.checkAndLoadVRM = async function() {
 
         // 5. 检查VRM管理器
         if (!window.vrmManager) {
-            console.error('[VRM] VRM管理器不存在');
             return;
         }
 
@@ -177,7 +173,6 @@ window.checkAndLoadVRM = async function() {
             const filename = modelUrl.split(/[\\/]/).pop();
             if (filename) {
                 modelUrl = `/static/vrm/${filename}`;
-                console.log('[主页VRM检查] 转换为Web路径:', modelUrl);
             }
         } else if (!modelUrl.startsWith('http') && !modelUrl.startsWith('/')) {
             const VRM_USER_PATH = '/user_vrm';
@@ -198,21 +193,6 @@ window.checkAndLoadVRM = async function() {
         console.error('[主页VRM检查] VRM检查和加载失败:', error);
         console.error('[主页VRM检查] 错误详情:', error.stack);
     }
-};
-
-
-// 调试函数，方便排查交互失效问题
-window.checkVRMStatus = function() {
-    console.log('[VRM] === 状态检查 ===');
-    console.log('管理器:', !!window.vrmManager);
-    if (window.vrmManager) {
-        console.log('当前模型:', !!window.vrmManager.currentModel);
-        console.log('锁定状态:', window.vrmManager.isLocked);
-        if (window.vrmManager.interaction) {
-            console.log('交互模块:', window.vrmManager.interaction.mouseTrackingEnabled ? '已启用' : '已禁用');
-        }
-    }
-    console.log('[VRM] === 检查完成 ===');
 };
 
 // VRM 系统初始化完成

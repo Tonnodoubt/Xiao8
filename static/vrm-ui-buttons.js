@@ -287,13 +287,13 @@ VRMManager.prototype.setupFloatingButtons = function () {
             triggerWrapper.appendChild(popup);
             btnWrapper.appendChild(triggerWrapper);
 
-            console.log(`[VRM UI] 已创建 ${config.id} 麦克风触发器和弹出面板`);
+            
         }
         // ✅ 如果配置了 popupToggle，创建弹出面板
         else if (config.popupToggle && window.UIComponentFactory) {
             const popup = window.UIComponentFactory.createPopup(config.id, this);
             btnWrapper.appendChild(popup);
-            console.log(`[VRM UI] 已创建 ${config.id} 弹出面板`);
+            
         }
 
         // 将包装器添加到容器
@@ -331,7 +331,6 @@ VRMManager.prototype.setupFloatingButtons = function () {
         if(e) { e.preventDefault(); e.stopPropagation(); }
         
         this.interaction.isLocked = !this.interaction.isLocked;
-        console.log('[VRM UI] 锁状态:', this.interaction.isLocked);
         
         // 换图
         lockIcon.style.backgroundImage = this.interaction.isLocked ? 

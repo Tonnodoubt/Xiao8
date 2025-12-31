@@ -152,7 +152,7 @@ class VRMInteraction {
                 }
 
                 const oldDistance = this.manager.camera.position.distanceTo(modelCenter);
-                const minDist = 0.5;
+                const minDist = 2.0;  // 【修复】限制最小距离，防止放大后移动时只能看到腿
                 const maxDist = 20.0; 
 
                 let newDistance = oldDistance * zoomFactor;
