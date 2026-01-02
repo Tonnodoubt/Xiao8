@@ -5008,7 +5008,7 @@ function init_app() {
                 const devices = await navigator.mediaDevices.enumerateDevices();
                 cachedMicDevices = devices.filter(device => device.kind === 'audioinput');
                 // 如果弹出框当前是显示的，刷新它
-                const micPopup = document.getElementById('live2d-popup-mic');
+                const micPopup = document.getElementById('live2d-popup-mic') || document.getElementById('vrm-popup-mic');
                 if (micPopup && micPopup.style.display === 'flex') {
                     await window.renderFloatingMicList();
                 }
@@ -5018,9 +5018,9 @@ function init_app() {
         });
     }
 
-    // 为浮动弹出框渲染麦克风列表（修复版本：确保有权限后再渲染）
+    // 为浮动弹出框渲染麦克风列表（修复版本：确保有权限后再渲染，兼容Live2D和VRM）
     window.renderFloatingMicList = async () => {
-        const micPopup = document.getElementById('live2d-popup-mic');
+        const micPopup = document.getElementById('live2d-popup-mic') || document.getElementById('vrm-popup-mic');
         if (!micPopup) {
             return false;
         }
@@ -5145,9 +5145,9 @@ function init_app() {
         }
     };
 
-    // 轻量级更新：仅更新麦克风列表的选中状态（不重新渲染整个列表）
+    // 轻量级更新：仅更新麦克风列表的选中状态（不重新渲染整个列表，兼容Live2D和VRM）
     function updateMicListSelection() {
-        const micPopup = document.getElementById('live2d-popup-mic');
+        const micPopup = document.getElementById('live2d-popup-mic') || document.getElementById('vrm-popup-mic');
         if (!micPopup) return;
 
         // 更新所有选项的选中状态

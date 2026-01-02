@@ -60,123 +60,15 @@ class VRMCore {
     }
 
     /**
-     * 确保浮动按钮系统已初始化（如果不存在则创建）
+     * 确保浮动按钮系统已初始化（VRM不需要此方法，由setupFloatingButtons处理）
+     * 保留空函数以防其他地方调用
      */
     ensureFloatingButtons() {
-        // 检查是否在主页面（有chat-container）
-        if (!document.getElementById('chat-container')) {
-            return;
-        }
-
-        // 检查浮动按钮容器是否已存在
-        let buttonsContainer = document.getElementById('live2d-floating-buttons');
-        
-        if (!buttonsContainer) {
-            // 如果不存在，创建浮动按钮容器（参考 live2d-ui-buttons.js）
-            buttonsContainer = document.createElement('div');
-            buttonsContainer.id = 'live2d-floating-buttons';
-            Object.assign(buttonsContainer.style, {
-                position: 'fixed',
-                zIndex: '99999',
-                pointerEvents: 'none',
-                display: 'none', // 初始隐藏，鼠标靠近时才显示
-                flexDirection: 'column',
-                gap: '12px'
-            });
-
-            // 阻止浮动按钮容器上的指针事件传播
-            const stopContainerEvent = (e) => {
-                e.stopPropagation();
-            };
-            buttonsContainer.addEventListener('pointerdown', stopContainerEvent, true);
-            buttonsContainer.addEventListener('pointermove', stopContainerEvent, true);
-            buttonsContainer.addEventListener('pointerup', stopContainerEvent, true);
-            buttonsContainer.addEventListener('mousedown', stopContainerEvent, true);
-            buttonsContainer.addEventListener('mousemove', stopContainerEvent, true);
-            buttonsContainer.addEventListener('mouseup', stopContainerEvent, true);
-            buttonsContainer.addEventListener('touchstart', stopContainerEvent, true);
-            buttonsContainer.addEventListener('touchmove', stopContainerEvent, true);
-            buttonsContainer.addEventListener('touchend', stopContainerEvent, true);
-
-            document.body.appendChild(buttonsContainer);
-        }
-
-        // 如果 Live2D 管理器存在且有 setupFloatingButtons 方法，调用它来初始化按钮
-        if (window.live2dManager && typeof window.live2dManager.setupFloatingButtons === 'function') {
-            // 检查 pixi_app 是否已初始化，如果没有则先初始化
-            if (!window.live2dManager.pixi_app) {
-                // 尝试初始化 PixiJS 应用（如果还没有初始化）
-                try {
-                    if (typeof window.live2dManager.initPixiApp === 'function') {
-                        window.live2dManager.initPixiApp();
-                    } else if (typeof window.live2dManager.getPixiApp === 'function') {
-                        window.live2dManager.getPixiApp();
-                    }
-                } catch (initError) {
-                }
-            }
-
-            // 如果 pixi_app 仍然不存在，创建一个虚拟的 ticker
-            if (!window.live2dManager.pixi_app) {
-                // 创建一个虚拟的 pixi_app 对象，只包含 ticker
-                window.live2dManager.pixi_app = {
-                    ticker: {
-                        add: (callback) => {
-                            // 使用 requestAnimationFrame 来模拟 ticker
-                            const animate = () => {
-                                callback();
-                                requestAnimationFrame(animate);
-                            };
-                            requestAnimationFrame(animate);
-                        },
-                        remove: () => {} // 空函数，不需要移除
-                    }
-                };
-            }
-
-            // 创建一个虚拟模型对象，用于位置更新（对于 VRM，位置更新将由 VRM 管理器处理）
-            const virtualModel = {
-                parent: true, // 让 tick 函数认为模型存在
-                getBounds: () => {
-                    // 返回 VRM 模型的屏幕边界（如果可用）
-                    if (this.manager && this.manager.currentModel && this.manager.currentModel.vrm) {
-                        // 尝试从 VRM 模型获取边界
-                        const vrm = this.manager.currentModel.vrm;
-                        const box = new THREE.Box3().setFromObject(vrm.scene);
-                        const size = box.getSize(new THREE.Vector3());
-                        const center = box.getCenter(new THREE.Vector3());
-                        
-                        // 将 3D 坐标转换为屏幕坐标（简化版）
-                        if (this.manager.canvas) {
-                            const rect = this.manager.canvas.getBoundingClientRect();
-                            const width = rect.width;
-                            const height = rect.height;
-                            
-                            // 简化计算：假设模型在画布中央
-                            return {
-                                left: rect.left + width * 0.3,
-                                right: rect.left + width * 0.7,
-                                top: rect.top + height * 0.2,
-                                bottom: rect.top + height * 0.8
-                            };
-                        }
-                    }
-                    // 默认返回屏幕中央区域
-                    return {
-                        left: window.innerWidth * 0.3,
-                        right: window.innerWidth * 0.7,
-                        top: window.innerHeight * 0.2,
-                        bottom: window.innerHeight * 0.8
-                    };
-                }
-            };
-
-            try {
-                window.live2dManager.setupFloatingButtons(virtualModel);
-            } catch (e) {
-            }
-        }
+        // VRM使用 setupFloatingButtons() 创建自己的按钮
+        // 此方法保留为空，防止创建Live2D按钮
+        return;
     }
+
 
     /**
      * 检测 VRM 模型版本
@@ -339,7 +231,7 @@ class VRMCore {
         // 确保默认状态为解锁（可以移动和缩放）
         this.setLocked(false);
 
-        // 持续更新图标位置（使用 requestAnimationFrame）
+        // 持续更新图标位置（使用 requestAnimationFrame + Three.js投影）
         const updateLockIconPosition = () => {
             try {
                 if (!this.manager.currentModel || !this.manager.currentModel.vrm) {
@@ -348,27 +240,56 @@ class VRMCore {
                 }
 
                 const vrm = this.manager.currentModel.vrm;
-                if (!this.manager.canvas) return;
+                const camera = this.manager.camera;
+                const renderer = this.manager.renderer;
 
-                const rect = this.manager.canvas.getBoundingClientRect();
-                const screenWidth = window.innerWidth;
-                const screenHeight = window.innerHeight;
+                if (!camera || !renderer) return;
 
-                // 计算模型在屏幕上的边界（简化版）
-                const modelLeft = rect.left + rect.width * 0.3;
-                const modelRight = rect.left + rect.width * 0.7;
-                const modelTop = rect.top + rect.height * 0.2;
-                const modelBottom = rect.top + rect.height * 0.8;
+                const canvasRect = renderer.domElement.getBoundingClientRect();
 
-                // 计算锁图标目标位置（脚部左侧）
-                // 水平：在模型左侧
-                const targetX = modelLeft + (modelRight - modelLeft) * 0.8;  // 20%位置（靠左）
-                // 垂直：在模型中上部
-                const targetY = modelTop + (modelBottom - modelTop) * 0.5;  // 50%位置（中间偏上）
+                // 获取胸部骨骼作为锁图标定位点（如果不存在则使用场景根）
+                let targetObj = vrm.scene;
 
-                // 边界限制
-                lockIcon.style.left = `${Math.max(0, Math.min(targetX, screenWidth - 40))}px`;
-                lockIcon.style.top = `${Math.max(0, Math.min(targetY, screenHeight - 40))}px`;
+                if (vrm.humanoid) {
+                    // 优先使用胸部骨骼
+                    if (typeof vrm.humanoid.getNormalizedBoneNode === 'function') {
+                        const chest = vrm.humanoid.getNormalizedBoneNode('chest') ||
+                                     vrm.humanoid.getNormalizedBoneNode('spine');
+                        if (chest) targetObj = chest;
+                    }
+                    else if (typeof vrm.humanoid.getBoneNode === 'function') {
+                        const chest = vrm.humanoid.getBoneNode('chest') ||
+                                     vrm.humanoid.getBoneNode('spine');
+                        if (chest) targetObj = chest;
+                    }
+                }
+
+                // 强制更新世界矩阵，确保获取到最新位置
+                targetObj.updateWorldMatrix(true, false);
+
+                // 计算屏幕坐标（使用Three.js投影）
+                const targetWorldPos = new THREE.Vector3();
+                targetObj.getWorldPosition(targetWorldPos);
+
+                const worldVector = targetWorldPos.clone();
+                worldVector.project(camera);
+
+                const canvasX = (worldVector.x * 0.5 + 0.5) * canvasRect.width;
+                const canvasY = (-worldVector.y * 0.5 + 0.5) * canvasRect.height;
+
+                const screenX = canvasRect.left + canvasX;
+                const screenY = canvasRect.top + canvasY;
+
+                // 应用偏移（锁图标在模型右侧稍下方）
+                const iconX = screenX + 40;
+                const iconY = screenY + 20;
+
+                // 屏幕边缘限制
+                const clampedX = Math.max(0, Math.min(iconX, window.innerWidth - 40));
+                const clampedY = Math.max(0, Math.min(iconY, window.innerHeight - 40));
+
+                lockIcon.style.left = `${clampedX}px`;
+                lockIcon.style.top = `${clampedY}px`;
             } catch (_) {
                 // 忽略单帧异常
             }
@@ -415,7 +336,7 @@ class VRMCore {
         }
 
         // 控制浮动按钮的显示/隐藏
-        const buttonsContainer = document.getElementById('live2d-floating-buttons');
+        const buttonsContainer = document.getElementById('vrm-floating-buttons');
         if (buttonsContainer) {
             if (locked) {
                 // 锁定时隐藏浮动按钮

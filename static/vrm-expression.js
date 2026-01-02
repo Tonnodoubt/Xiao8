@@ -219,7 +219,6 @@ class VRMExpression {
             const targetNameLower = targetName.toLowerCase();
 
             // 【修复】跳过口型表情，避免与口型同步模块冲突
-            // 检查是否为口型相关表情（aa, ih, ou, ee, oh）
             const lipSyncExpressions = ['aa', 'ih', 'ou', 'ee', 'oh'];
             const isLipSyncExpression = lipSyncExpressions.some(lip => lowerName.includes(lip));
 
@@ -254,6 +253,18 @@ class VRMExpression {
             // --- C. 其他情况归零 ---
             else {
                 targetWeight = 0.0;
+            }
+           
+            // 如果当前权重很小(接近0) 且 目标权重也是0，说明这个表情处于静止状态，直接跳过
+            // 这能节省大量 CPU 计算资源
+            const currentWeight = this.currentWeights[name] || 0.0;
+            if (targetWeight === 0 && currentWeight < 0.001) {
+                if (currentWeight !== 0) {
+                    // 确保最后一次归零
+                    this.currentWeights[name] = 0.0;
+                    expressionManager.setValue(name, 0.0);
+                }
+                return; // 跳过本次循环
             }
 
             // --- D. 执行插值和应用 ---

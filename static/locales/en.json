@@ -640,6 +640,10 @@
     "switchCatgirl": "Switch Catgirl",
     "deleteCatgirl": "Delete Catgirl",
     "advancedSettings": "Advanced Settings",
+    "modelSettings": "Model Settings",
+    "modelNotSet": "Not Set",
+    "lightingPreset": "Lighting Preset",
+    "lightingNotSet": "Default",
     "live2dNotSet": "Not Set",
     "voiceNotSet": "No Voice Specified",
     "registerNewVoice": "Register New Voice",
@@ -862,6 +866,24 @@
       "statusQueued": "Queued",
       "statusCompleted": "Completed",
       "statusFailed": "Failed"
+    }
+  },
+  "vrm": {
+    "lighting": {
+      "title": "VRM Lighting Settings",
+      "ambientLight": "Ambient Light",
+      "mainLight": "Main Light",
+      "fillLight": "Fill Light",
+      "rimLight": "Rim Light",
+      "resetLighting": "Reset Default",
+      "saveLighting": "Save Lighting",
+      "selectPreset": "Select Preset",
+      "customPreset": "Custom",
+      "enterPresetName": "Enter lighting preset name",
+      "presetSaved": "Preset \"{{name}}\" saved successfully",
+      "saveFailed": "Save failed",
+      "lightingReset": "Lighting reset to default",
+      "lightingApplied": "Applied preset: {{name}}"
     }
   }
 }

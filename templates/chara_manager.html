@@ -1029,6 +1029,73 @@
             modelRow.appendChild(modelLink);
             foldContent.appendChild(modelRow);
 
+            // 打光预设 row (仅VRM模型显示)
+            const lightingRow = document.createElement('div');
+            lightingRow.className = 'field-row';
+            lightingRow.style.display = (modelType === 'vrm') ? 'flex' : 'none';
+            const lightingLabel = document.createElement('label');
+            lightingLabel.textContent = window.t ? window.t('character.lightingPreset', '打光预设') : '打光预设';
+            lightingRow.appendChild(lightingLabel);
+            const lightingSelect = document.createElement('select');
+            lightingSelect.name = 'lightingPreset';
+            lightingSelect.className = 'form-control';
+            lightingSelect.style.flex = '1';
+            const lightingDefaultOption = document.createElement('option');
+            lightingDefaultOption.value = '';
+            lightingDefaultOption.textContent = window.t ? window.t('character.lightingNotSet', '默认') : '默认';
+            lightingSelect.appendChild(lightingDefaultOption);
+
+            // 加载打光预设列表
+            fetch('/api/characters/lighting/presets')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.success && data.presets) {
+                        Object.keys(data.presets).forEach(presetName => {
+                            const option = document.createElement('option');
+                            option.value = presetName;
+                            option.textContent = presetName;
+                            if (cat['lightingPreset'] === presetName) {
+                                option.selected = true;
+                            }
+                            lightingSelect.appendChild(option);
+                        });
+                    }
+                })
+                .catch(err => console.error('加载打光预设失败:', err));
+
+            // 打光预设change事件 - 自动保存
+            lightingSelect.addEventListener('change', async function() {
+                const selectedPreset = this.value;
+                const catgirlName = form.querySelector('[name="档案名"]').value;
+                if (!catgirlName) return;
+
+                try {
+                    const response = await fetch(`/api/characters/catgirl/${encodeURIComponent(catgirlName)}/lighting`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            lightingPreset: selectedPreset || null
+                        })
+                    });
+
+                    if (response.ok) {
+                        console.log(`已为角色 ${catgirlName} 设置打光预设: ${selectedPreset || '默认'}`);
+                        // 通知主页刷新
+                        if (window.opener && !window.opener.closed) {
+                            window.opener.postMessage({
+                                action: 'lighting_changed',
+                                timestamp: Date.now()
+                            }, window.location.origin);
+                        }
+                    }
+                } catch (error) {
+                    console.error('保存打光预设失败:', error);
+                }
+            });
+
+            lightingRow.appendChild(lightingSelect);
+            foldContent.appendChild(lightingRow);
+
             // voice_id row
             const voiceRow = document.createElement('div');
             voiceRow.className = 'field-row';

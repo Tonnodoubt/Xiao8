@@ -119,11 +119,6 @@ class VRMInteraction {
                 e.stopPropagation();
             }
         };
-
-        // 4. 鼠标离开 (这里原来有报错代码，现在清空了)
-        this.mouseLeaveHandler = () => {
-            // 保持拖拽状态，防止快速移动时断触
-        };
         
         // 5. 鼠标进入
         this.mouseEnterHandler = () => {
@@ -179,7 +174,6 @@ class VRMInteraction {
         canvas.addEventListener('mousedown', this.mouseDownHandler);
         document.addEventListener('mousemove', this.dragHandler); // 绑定到 document 以支持拖出画布
         document.addEventListener('mouseup', this.mouseUpHandler);
-        canvas.addEventListener('mouseleave', this.mouseLeaveHandler);
         canvas.addEventListener('mouseenter', this.mouseEnterHandler);
         canvas.addEventListener('wheel', this.wheelHandler, { passive: false, capture: true });
         canvas.addEventListener('auxclick', this.auxClickHandler);
@@ -234,12 +228,11 @@ class VRMInteraction {
      * 每帧更新（由 VRMManager 驱动）
      */
     update(delta) {
-        // 1. 浮动按钮跟随 
+        // 1. 浮动按钮跟随
         this.updateFloatingButtonsPosition();
 
         // 2. 更新身体朝向
         this._updateModelFacing(delta);
-        
     }
 
     /**
@@ -301,10 +294,7 @@ class VRMInteraction {
             document.removeEventListener('mouseup', this.mouseUpHandler);
             this.mouseUpHandler = null;
         }
-        if (this.mouseLeaveHandler) {
-            canvas.removeEventListener('mouseleave', this.mouseLeaveHandler);
-            this.mouseLeaveHandler = null;
-        }
+        
         if (this.auxClickHandler) {
             canvas.removeEventListener('auxclick', this.auxClickHandler);
             this.auxClickHandler = null;
@@ -389,14 +379,13 @@ class VRMInteraction {
      * 更新浮动按钮位置，使其跟随VRM模型
      */
     updateFloatingButtonsPosition() {
-        // 1. 获取容器
-        const buttonsContainer = document.getElementById('vrm-floating-buttons') || 
-                               document.getElementById('live2d-floating-buttons');
-        
+        // 1. 获取容器 - 只查找VRM的按钮
+        const buttonsContainer = document.getElementById('vrm-floating-buttons');
+
         // 【修改】只要容器存在就计算位置，不再检查 display === 'none'
         // 这样确保菜单在显示出的那一瞬间，位置已经是正确的跟随位置了
         if (!buttonsContainer) return;
-        
+
         if (!this.manager.currentModel || !this.manager.currentModel.vrm) return;
 
         try {
@@ -481,11 +470,10 @@ class VRMInteraction {
         if (!this.manager.renderer || !this.manager.currentModel) return;
 
         const canvas = this.manager.renderer.domElement;
-        
-        // 【修改 1】优先查找 VRM 专用 ID，找不到再找 Live2D ID
-        let buttonsContainer = document.getElementById('vrm-floating-buttons') || 
-                               document.getElementById('live2d-floating-buttons');
-                               
+
+        // 【修改】只查找 VRM 专用 ID
+        let buttonsContainer = document.getElementById('vrm-floating-buttons');
+
         if (!buttonsContainer) return;
         
         // 清除之前的定时器
@@ -505,8 +493,8 @@ class VRMInteraction {
             // 更新按钮位置
             this.updateFloatingButtonsPosition();
 
-            // 浮动按钮始终显示，不需要控制
-            // buttonsContainer.style.display = 'flex';
+            // 显示浮动按钮
+            buttonsContainer.style.display = 'flex';
 
             // 【只控制锁图标】鼠标靠近时显示锁图标
             const lockIcon = document.getElementById('vrm-lock-icon');
@@ -564,7 +552,7 @@ class VRMInteraction {
                     window.live2dManager.isFocusing = false;
                 }
 
-                // 浮动按钮始终显示，不需要隐藏
+                // VRM浮动按钮始终显示，不自动隐藏（与Live2D行为一致）
                 // buttonsContainer.style.display = 'none';
 
                 // 【只控制锁图标】鼠标离开时隐藏锁图标

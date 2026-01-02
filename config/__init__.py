@@ -111,6 +111,14 @@ DEFAULT_LANLAN_TEMPLATE = {
     }
 }
 
+# 默认VRM打光配置（用于新角色初始化）
+DEFAULT_VRM_LIGHTING = {
+    "ambient": 0.08,  # 环境光强度 (范围: 0-0.3)
+    "main": 0.06,     # 主光源强度 (范围: 0-2.5)
+    "fill": 0.12,     # 补光强度 (范围: 0-0.5)
+    "rim": 0.8        # 轮廓光强度 (范围: 0-1.5)
+}
+
 DEFAULT_CHARACTERS_CONFIG = {
     "主人": deepcopy(DEFAULT_MASTER_TEMPLATE),
     "猫娘": deepcopy(DEFAULT_LANLAN_TEMPLATE),
@@ -300,6 +308,7 @@ __all__ = [
     'CONFIG_FILES',
     'DEFAULT_MASTER_TEMPLATE',
     'DEFAULT_LANLAN_TEMPLATE',
+    'DEFAULT_VRM_LIGHTING',
     'DEFAULT_CHARACTERS_CONFIG',
     'DEFAULT_CORE_CONFIG',
     'DEFAULT_USER_PREFERENCES',

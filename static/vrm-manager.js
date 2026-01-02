@@ -73,14 +73,22 @@ class VRMManager {
                 
             }
 
-            // 4. 动画更新
+            // 4. 交互系统更新（浮动按钮跟随等）
+            if (this.interaction) {
+                this.interaction.update(delta);
+            }
+
+            // 5. 动画更新
             if (this.animation) {
                 this.animation.update(delta);
             }
-            
-            // 5. 控制器更新
-            if (this.controls) this.controls.update();
-            
+
+            // 6. 更新控制器
+            if (this.controls) {
+                this.controls.update();
+            }
+
+            // 7. 渲染场景
             this.renderer.render(this.scene, this.camera);
         };
 

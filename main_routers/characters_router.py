@@ -356,6 +356,83 @@ async def update_catgirl_l2d(name: str, request: Request):
         })
 
 
+@router.put('/catgirl/{name}/lighting')
+async def update_catgirl_lighting(name: str, request: Request):
+    """更新指定猫娘的VRM打光配置"""
+    try:
+        data = await request.json()
+        lighting = data.get('lighting')
+
+        if not lighting:
+            return JSONResponse(content={
+                'success': False,
+                'error': '未提供打光配置'
+            }, status_code=400)
+
+        # 加载当前角色配置
+        _config_manager = get_config_manager()
+        characters = _config_manager.load_characters()
+
+        # 确保猫娘配置存在
+        if '猫娘' not in characters or name not in characters['猫娘']:
+            return JSONResponse(content={
+                'success': False,
+                'error': '角色不存在'
+            }, status_code=404)
+
+        # 检查是否为VRM模型（可选验证）
+        model_type = characters['猫娘'][name].get('model_type', 'live2d')
+        if model_type != 'vrm':
+            logger.warning(f"角色 {name} 不是VRM模型，但仍保存打光配置")
+
+        # 验证打光参数
+        lighting_ranges = {
+            'ambient': (0, 0.3),
+            'main': (0, 2.5),
+            'fill': (0, 0.5),
+            'rim': (0, 1.5)
+        }
+
+        for key, (min_val, max_val) in lighting_ranges.items():
+            if key not in lighting:
+                return JSONResponse(content={
+                    'success': False,
+                    'error': f'缺少打光参数: {key}'
+                }, status_code=400)
+
+            val = lighting[key]
+            if not isinstance(val, (int, float)) or not (min_val <= val <= max_val):
+                return JSONResponse(content={
+                    'success': False,
+                    'error': f'打光参数 {key} 超出范围 ({min_val}-{max_val})'
+                }, status_code=400)
+
+        # 保存打光配置
+        characters['猫娘'][name]['lighting'] = {
+            'ambient': float(lighting['ambient']),
+            'main': float(lighting['main']),
+            'fill': float(lighting['fill']),
+            'rim': float(lighting['rim'])
+        }
+        logger.info(f"已保存角色 {name} 的打光配置: {characters['猫娘'][name]['lighting']}")
+
+        # 保存配置
+        _config_manager.save_characters(characters)
+
+        return JSONResponse(content={
+            'success': True,
+            'message': f'已保存角色 {name} 的打光配置'
+        })
+
+    except Exception as e:
+        logger.error(f"保存打光配置失败: {e}")
+        return JSONResponse(content={
+            'success': False,
+            'error': str(e)
+        }, status_code=500)
+
+
+
 @router.put('/catgirl/voice_id/{name}')
 async def update_catgirl_voice_id(name: str, request: Request):
     data = await request.json()

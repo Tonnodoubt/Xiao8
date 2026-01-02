@@ -21,6 +21,7 @@ logger = logging.getLogger("Main")
 
 # VRM 模型路径常量（与 main_server.py 中的挂载点保持一致）
 VRM_USER_PATH = "/user_vrm"  # 用户文档目录下的 VRM 模型路径
+VRM_STATIC_PATH = "/static/vrm"# 项目静态目录基准路径
 VRM_STATIC_ANIMATION_PATH = "/static/vrm/animation"  # 项目目录下的 VRM 动画路径（与前端代码保持一致）
 VRM_MODELS_ANIMATION_PATH = "/models/vrm/animations"  # 项目目录下的 VRM 动画路径
 
@@ -193,4 +194,16 @@ def get_vrm_animations():
     except Exception as e:
         logger.error(f"获取VRM动画列表失败: {e}")
         return JSONResponse(status_code=500, content={"success": False, "error": str(e)})
-
+# 新增配置获取接口 
+@router.get('/config')
+async def get_vrm_config():
+    """获取前后端统一的路径配置"""
+    return JSONResponse(content={
+        "success": True,
+        "paths": {
+            "user_vrm": VRM_USER_PATH,
+            "static_vrm": VRM_STATIC_PATH,
+            "static_animation": VRM_STATIC_ANIMATION_PATH,
+            "models_animation": VRM_MODELS_ANIMATION_PATH
+        }
+    })

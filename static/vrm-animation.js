@@ -346,7 +346,17 @@ class VRMAnimation {
     }
     _updateLipSync(delta) {
         if (!this.manager.currentModel?.vrm?.expressionManager) return;
+        
+        // 确保 analyser 存在，否则无法获取数据
+        if (!this.analyser) return;
 
+        // 检查数组是否存在，或者长度是否匹配
+        // 如果 AudioContext 发生变化（如切换设备），frequencyBinCount 可能会变
+        // 如果数组没初始化，或者长度不对，就立即重建一个正确的数组
+        if (!this.frequencyData || this.frequencyData.length !== this.analyser.frequencyBinCount) {
+            console.log('[VRM Animation] 自动修正口型同步数组长度');
+            this.frequencyData = new Uint8Array(this.analyser.frequencyBinCount);
+        }
         // 获取频率数据进行音频分析
         this.analyser.getByteFrequencyData(this.frequencyData);
 

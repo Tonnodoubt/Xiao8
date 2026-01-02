@@ -1,5 +1,5 @@
 /**
- * VRM UI Buttons - VRM 专用浮动按钮
+ * VRM UI Buttons - 浮动按钮系统（与Live2D保持一致的交互逻辑）
  */
 
 // 设置浮动按钮系统

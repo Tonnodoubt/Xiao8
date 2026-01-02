@@ -674,6 +674,8 @@
     "advancedSettings": "进阶设定",
     "modelSettings": "模型设定",
     "modelNotSet": "未设置",
+    "lightingPreset": "打光预设",
+    "lightingNotSet": "默认",
     "live2dNotSet": "未设置",
     "voiceNotSet": "未指定音色",
     "manageModel": "点击管理模型",
@@ -897,6 +899,24 @@
       "statusQueued": "队列中",
       "statusCompleted": "已完成",
       "statusFailed": "失败"
+    }
+  },
+  "vrm": {
+    "lighting": {
+      "title": "VRM打光设置",
+      "ambientLight": "环境光强度",
+      "mainLight": "主光源强度",
+      "fillLight": "补光强度",
+      "rimLight": "轮廓光强度",
+      "resetLighting": "重置默认",
+      "saveLighting": "保存打光",
+      "selectPreset": "选择预设",
+      "customPreset": "自定义",
+      "enterPresetName": "请输入打光预设名称",
+      "presetSaved": "预设 \"{{name}}\" 保存成功",
+      "saveFailed": "保存失败",
+      "lightingReset": "打光设置已重置为默认值",
+      "lightingApplied": "已应用预设: {{name}}"
     }
   }
 }

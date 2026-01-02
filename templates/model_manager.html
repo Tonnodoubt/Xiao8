@@ -446,9 +446,20 @@
                 </div>
             </div>
 
+            <!-- 打光预设选择器 -->
+            <div class="lighting-control" style="margin-top: 15px;">
+                <label for="lighting-preset-select">选择预设:</label>
+                <select id="lighting-preset-select" class="form-control" style="width: 100%;">
+                    <option value="">-- 自定义 --</option>
+                </select>
+            </div>
+
             <div style="display: flex; gap: 10px; margin-top: 10px;">
                 <button id="reset-lighting-btn" class="btn btn-secondary" style="flex: 1;">
                     <span>🔄 重置默认</span>
+                </button>
+                <button id="save-lighting-btn" class="btn btn-success" style="flex: 1;" disabled>
+                    <span>💾 保存打光</span>
                 </button>
             </div>
         </div>
@@ -518,6 +529,8 @@
                 '/static/vrm-expression.js',
                 '/static/vrm-animation.js',
                 '/static/vrm-interaction.js',
+                '/static/vrm-ui-popup.js',
+                '/static/vrm-ui-buttons.js',
                 '/static/vrm-manager.js',
                 '/static/vrm-init.js'
             ];
@@ -1312,7 +1325,12 @@
                     if (savePositionBtn) {
                         savePositionBtn.disabled = false;
                     }
-                    
+
+                    // 启用保存打光按钮（仅VRM模型）
+                    if (saveLightingBtn) {
+                        saveLightingBtn.disabled = false;
+                    }
+
                     // 标记为有未保存更改
                     window.hasUnsavedChanges = true;
                     console.log('已标记为未保存更改（VRM模型切换），请点击 保存设置 持久化到角色配置。');
@@ -1343,6 +1361,10 @@
                         animationsLoaded = false;
                         // 主动加载动作列表，解开下拉菜单的锁定状态
                         await loadVRMAnimations();
+
+                        // 自动加载角色的打光配置
+                        await loadCharacterLighting();
+
                         showStatus(t('live2d.vrmModelLoaded', `VRM 模型 ${modelPath} 加载成功`, { model: modelPath }));
                     } catch (error) {
                         console.error('加载 VRM 模型失败:', error);
@@ -1611,12 +1633,244 @@
                             vrmManager.rimLight.intensity = 0.8;
                         }
                     }
-                    showStatus(t('live2d.lightingReset', '打光设置已重置为默认值', {}), 2000);
+                    showStatus(t('vrm.lighting.lightingReset', '打光设置已重置为默认值', {}), 2000);
                 });
+            }
+
+            // 保存打光按钮 - 保存为预设
+            const saveLightingBtn = document.getElementById('save-lighting-btn');
+            if (saveLightingBtn) {
+                saveLightingBtn.addEventListener('click', async () => {
+                    if (!currentModelInfo || currentModelType !== 'vrm') {
+                        showStatus('请先选择VRM模型', 2000);
+                        return;
+                    }
+
+                    // 弹出对话框让用户输入预设名称
+                    const presetName = prompt('请输入打光预设名称:', '');
+                    if (!presetName || presetName.trim() === '') {
+                        return;
+                    }
+
+                    const lighting = {
+                        ambient: parseFloat(ambientLightSlider.value),
+                        main: parseFloat(mainLightSlider.value),
+                        fill: parseFloat(fillLightSlider.value),
+                        rim: parseFloat(rimLightSlider.value)
+                    };
+
+                    const success = await saveLightingPreset(presetName.trim(), lighting);
+                    if (success) {
+                        showStatus(`预设 "${presetName}" 保存成功`, 2000);
+                        saveLightingBtn.innerHTML = '<span>✓ 已保存</span>';
+                        setTimeout(() => {
+                            saveLightingBtn.innerHTML = '<span>💾 保存打光</span>';
+                        }, 2000);
+                        // 重新加载预设列表
+                        await loadLightingPresets();
+                    } else {
+                        showStatus('保存失败', 2000);
+                    }
+                });
+            }
+
+            // 保存打光预设的辅助函数
+            async function saveLightingPreset(name, lighting) {
+                try {
+                    const response = await fetch('/api/characters/lighting/presets', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name, lighting })
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        console.error('保存打光预设失败:', error);
+                        return false;
+                    }
+
+                    const result = await response.json();
+                    console.log('打光预设保存成功:', result);
+                    return result.success;
+                } catch (error) {
+                    console.error('保存打光预设失败:', error);
+                    return false;
+                }
+            }
+
+            // 保存打光配置到角色的辅助函数
+            async function saveLightingToCharacter(presetName) {
+                try {
+                    const lanlanName = await getLanlanName();
+                    if (!lanlanName) {
+                        console.error('无法获取角色名称');
+                        return false;
+                    }
+
+                    const response = await fetch(`/api/characters/catgirl/${encodeURIComponent(lanlanName)}/lighting`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ lightingPreset: presetName })
+                    });
+
+                    if (!response.ok) {
+                        const error = await response.json();
+                        console.error('保存角色打光配置失败:', error);
+                        return false;
+                    }
+
+                    const result = await response.json();
+                    console.log('角色打光配置保存成功:', result);
+                    return result.success;
+                } catch (error) {
+                    console.error('保存角色打光配置失败:', error);
+                    return false;
+                }
+            }
+
+            // 加载打光预设列表
+            const lightingPresetSelect = document.getElementById('lighting-preset-select');
+            async function loadLightingPresets() {
+                try {
+                    const response = await fetch('/api/characters/lighting/presets');
+                    if (!response.ok) {
+                        console.error('获取打光预设失败');
+                        return;
+                    }
+
+                    const data = await response.json();
+                    if (data.success && data.presets) {
+                        if (lightingPresetSelect) {
+                            lightingPresetSelect.innerHTML = '<option value="">-- 自定义 --</option>';
+                            Object.keys(data.presets).forEach(name => {
+                                const option = document.createElement('option');
+                                option.value = name;
+                                option.textContent = name;
+                                lightingPresetSelect.appendChild(option);
+                            });
+                            console.log('打光预设加载成功');
+                        }
+                    }
+                } catch (error) {
+                    console.error('加载打光预设失败:', error);
+                }
+            }
+
+            // 预设选择器change事件
+            if (lightingPresetSelect) {
+                lightingPresetSelect.addEventListener('change', async (e) => {
+                    const presetName = e.target.value;
+                    if (!presetName) return;
+
+                    try {
+                        const response = await fetch('/api/characters/lighting/presets');
+                        if (!response.ok) return;
+
+                        const data = await response.json();
+                        if (data.success && data.presets && data.presets[presetName]) {
+                            const lighting = data.presets[presetName];
+                            applyLightingValues(lighting);
+                            console.log(`已应用预设: ${presetName}`, lighting);
+                        }
+                    } catch (error) {
+                        console.error('应用打光预设失败:', error);
+                    }
+                });
+            }
+
+            // 应用打光值到UI和场景
+            function applyLightingValues(lighting) {
+                if (ambientLightSlider && ambientLightValue) {
+                    ambientLightSlider.value = lighting.ambient;
+                    ambientLightValue.textContent = lighting.ambient.toFixed(2);
+                    if (vrmManager?.ambientLight) {
+                        vrmManager.ambientLight.intensity = lighting.ambient;
+                    }
+                }
+                if (mainLightSlider && mainLightValue) {
+                    mainLightSlider.value = lighting.main;
+                    mainLightValue.textContent = lighting.main.toFixed(2);
+                    if (vrmManager?.mainLight) {
+                        vrmManager.mainLight.intensity = lighting.main;
+                    }
+                }
+                if (fillLightSlider && fillLightValue) {
+                    fillLightSlider.value = lighting.fill;
+                    fillLightValue.textContent = lighting.fill.toFixed(2);
+                    if (vrmManager?.fillLight) {
+                        vrmManager.fillLight.intensity = lighting.fill;
+                    }
+                }
+                if (rimLightSlider && rimLightValue) {
+                    rimLightSlider.value = lighting.rim;
+                    rimLightValue.textContent = lighting.rim.toFixed(2);
+                    if (vrmManager?.rimLight) {
+                        vrmManager.rimLight.intensity = lighting.rim;
+                    }
+                }
+            }
+
+            // 加载角色的打光配置并应用
+            async function loadCharacterLighting() {
+                try {
+                    const lanlanName = await getLanlanName();
+                    if (!lanlanName) {
+                        console.log('无角色名称，使用默认打光');
+                        return;
+                    }
+
+                    const response = await fetch('/api/characters/');
+                    if (!response.ok) {
+                        console.error('获取角色数据失败');
+                        return;
+                    }
+
+                    const data = await response.json();
+                    const charData = data['猫娘']?.[lanlanName];
+                    const lightingPresetName = charData?.lightingPreset;
+                    const lighting = charData?.lighting;
+
+                    // 优先使用预设名称
+                    if (lightingPresetName) {
+                        console.log('加载角色打光预设:', lightingPresetName);
+                        // 从预设库中加载
+                        const presetsResponse = await fetch('/api/characters/lighting/presets');
+                        if (presetsResponse.ok) {
+                            const presetsData = await presetsResponse.json();
+                            if (presetsData.success && presetsData.presets && presetsData.presets[lightingPresetName]) {
+                                applyLightingValues(presetsData.presets[lightingPresetName]);
+                                // 更新选择器
+                                if (lightingPresetSelect) {
+                                    lightingPresetSelect.value = lightingPresetName;
+                                }
+                                console.log(`已应用预设: ${lightingPresetName}`);
+                                return;
+                            }
+                        }
+                    }
+
+                    // 兼容旧版本：直接保存的lighting对象
+                    if (lighting) {
+                        console.log('加载角色直接打光配置:', lighting);
+                        applyLightingValues(lighting);
+                        // 选择器设为自定义
+                        if (lightingPresetSelect) {
+                            lightingPresetSelect.value = '';
+                        }
+                        console.log('打光配置已应用');
+                    } else {
+                        console.log('角色无打光配置，使用默认值');
+                    }
+                } catch (error) {
+                    console.error('加载打光配置失败:', error);
+                }
             }
 
             // 初始化时加载 VRM 模型列表
             await loadVRMModels();
+
+            // 初始化时加载打光预设列表
+            await loadLightingPresets();
 
             // 检查语音模式状态的辅助函数
             async function checkVoiceModeStatus() {
