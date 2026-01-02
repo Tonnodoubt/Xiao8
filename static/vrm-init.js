@@ -71,7 +71,31 @@ async function initVRMModel() {
     }
     // 在此处同步后端路径配置 
     await fetchVRMConfig();
-
+    
+    // 主动去服务器拉取最新的角色详情（包含光照）
+    try {
+        const currentName = window.lanlan_config?.lanlan_name;
+        if (currentName) {
+            console.log(`[VRM Init] 正在同步角色 ${currentName} 的详细数据...`);
+            // 请求完整的角色列表
+            const res = await fetch('/api/characters');
+            if (res.ok) {
+                const data = await res.json();
+                // 提取当前角色的数据
+                const charData = data['猫娘']?.[currentName];
+                if (charData) {
+                    // 把 lighting 补全到全局配置里
+                    window.lanlan_config.lighting = charData.lighting;
+                    // 顺便把 VRM 路径也更新一下，防止主页存的是旧路径
+                    if (charData.vrm) window.lanlan_config.vrm = charData.vrm;
+                    
+                    console.log('[VRM Init] 数据同步成功，当前光照:', charData.lighting);
+                }
+            }
+        }
+    } catch (e) {
+        console.warn('[VRM Init] 同步角色数据失败，将使用默认设置:', e);
+    }
     // 2. 获取并确定模型路径
     let targetModelPath = window.vrmModel || (typeof vrmModel !== 'undefined' ? vrmModel : '');
 
@@ -130,6 +154,15 @@ async function initVRMModel() {
 
         // 执行加载
         await window.vrmManager.loadModel(modelUrl);
+        // 页面加载时立即应用打光配置
+        if (window.lanlan_config && window.lanlan_config.lighting && window.vrmManager) {
+            const lighting = window.lanlan_config.lighting;
+            console.log('[VRM Init] 初始加载应用打光:', lighting);
+            if (window.vrmManager.ambientLight) window.vrmManager.ambientLight.intensity = lighting.ambient;
+            if (window.vrmManager.mainLight) window.vrmManager.mainLight.intensity = lighting.main;
+            if (window.vrmManager.fillLight) window.vrmManager.fillLight.intensity = lighting.fill;
+            if (window.vrmManager.rimLight) window.vrmManager.rimLight.intensity = lighting.rim;
+        }
 
     } catch (error) {
         console.error('[VRM Init] 错误详情:', error.stack);
@@ -240,31 +273,36 @@ window.checkAndLoadVRM = async function() {
         // 8. 加载VRM模型
         await window.vrmManager.loadModel(modelUrl);
 
-        // 9. 应用角色的打光配置
+        // ============================================================
+        // 🔥【核心修复点】：直接使用刚刚拉取的 catgirlConfig 中的 lighting
+        // ============================================================
         const lighting = catgirlConfig.lighting;
-
+        
         if (lighting && window.vrmManager) {
-            console.log('[VRM打光] 应用角色打光配置:', lighting);
-            if (window.vrmManager.ambientLight) {
-                window.vrmManager.ambientLight.intensity = lighting.ambient;
-            }
-            if (window.vrmManager.mainLight) {
-                window.vrmManager.mainLight.intensity = lighting.main;
-            }
-            if (window.vrmManager.fillLight) {
-                window.vrmManager.fillLight.intensity = lighting.fill;
-            }
-            if (window.vrmManager.rimLight) {
-                window.vrmManager.rimLight.intensity = lighting.rim;
-            }
-        } else if (!lighting) {
-            console.log('[VRM打光] 角色无打光配置，使用默认值');
+            console.log('[VRM Check] 同步最新光照:', lighting);
+            if (window.vrmManager.ambientLight) window.vrmManager.ambientLight.intensity = lighting.ambient;
+            if (window.vrmManager.mainLight) window.vrmManager.mainLight.intensity = lighting.main;
+            if (window.vrmManager.fillLight) window.vrmManager.fillLight.intensity = lighting.fill;
+            if (window.vrmManager.rimLight) window.vrmManager.rimLight.intensity = lighting.rim;
+            
+            // 顺便更新一下全局变量，以防万一
+            if (window.lanlan_config) window.lanlan_config.lighting = lighting;
         }
 
     } catch (error) {
-        console.error('[主页VRM检查] VRM检查和加载失败:', error);
-        console.error('[主页VRM检查] 错误详情:', error.stack);
+        console.error('[VRM Check] 检查失败:', error);
     }
 };
 
+// 监听器必须放在函数外面！
+document.addEventListener('visibilitychange', () => {
+    // 当页面从后台（或子页面）切回来变可见时
+    if (document.visibilityState === 'visible') {
+        // 如果是在主页，且 VRM 检查函数存在
+        if (!window.location.pathname.includes('model_manager') && window.checkAndLoadVRM) {
+            console.log('[VRM] 页面重新可见，触发数据同步...');
+            window.checkAndLoadVRM();
+        }
+    }
+});
 // VRM 系统初始化完成

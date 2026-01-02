@@ -446,20 +446,10 @@
                 </div>
             </div>
 
-            <!-- 打光预设选择器 -->
-            <div class="lighting-control" style="margin-top: 15px;">
-                <label for="lighting-preset-select">选择预设:</label>
-                <select id="lighting-preset-select" class="form-control" style="width: 100%;">
-                    <option value="">-- 自定义 --</option>
-                </select>
-            </div>
 
             <div style="display: flex; gap: 10px; margin-top: 10px;">
                 <button id="reset-lighting-btn" class="btn btn-secondary" style="flex: 1;">
                     <span>🔄 重置默认</span>
-                </button>
-                <button id="save-lighting-btn" class="btn btn-success" style="flex: 1;" disabled>
-                    <span>💾 保存打光</span>
                 </button>
             </div>
         </div>
@@ -529,10 +519,10 @@
                 '/static/vrm-expression.js',
                 '/static/vrm-animation.js',
                 '/static/vrm-interaction.js',
+                '/static/vrm-manager.js',
                 '/static/vrm-ui-popup.js',
                 '/static/vrm-ui-buttons.js',
-                '/static/vrm-manager.js',
-                '/static/vrm-init.js'
+                 '/static/vrm-init.js'
             ];
 
             for (const moduleSrc of vrmModules) {
@@ -967,81 +957,87 @@
                 }
             })();
 
-            // 保存模型设置到角色的函数
+            //
+            // 保存模型设置到角色的函数（全面升级版）
             async function saveModelToCharacter(modelName, itemId = null, vrmAnimation = null) {
                 try {
-                    // 获取角色名称
+                    // 1. 获取角色名
                     const lanlanName = await getLanlanName();
-
                     if (!lanlanName) {
                         showStatus(t('live2d.cannotSaveNoCharacter', '无法保存：未指定角色名称'));
                         return false;
                     }
 
-                    // 构建保存数据
-                    const saveData = {};
+                    showStatus(t('live2d.savingSettings', '正在保存设置...'));
+
+                    // 2. 🔥 先从服务器拉取当前角色的完整档案（防止覆盖掉其他不需要修改的属性）
+                    const charRes = await fetch('/api/characters');
+                    if (!charRes.ok) throw new Error('无法连接到服务器获取角色数据');
                     
-                    // 根据当前模型类型保存不同的数据
+                    const allData = await charRes.json();
+                    // 拿到该角色的旧数据，如果没有就初始化为空对象
+                    const charData = allData['猫娘']?.[lanlanName] || {};
+
+                    // 3. 更新模型相关字段
                     if (currentModelType === 'vrm') {
-                        // VRM 模式：保存 vrm 路径和 model_type
-                        saveData.vrm = modelName; 
-                        saveData.model_type = 'vrm';
-                        saveData.live2d = ""; 
-                        if (vrmAnimation) {
-                            saveData.vrm_animation = vrmAnimation;
+                        charData.model_type = 'vrm';
+                        charData.vrm = modelName;
+                        // 清空 Live2D 字段，避免混淆
+                        charData.live2d = ""; 
+                        if (vrmAnimation) charData.vrm_animation = vrmAnimation;
+
+                        // 🔥 获取并写入光照数据
+                        const ambient = document.getElementById('ambient-light-slider');
+                        const main = document.getElementById('main-light-slider');
+                        const fill = document.getElementById('fill-light-slider');
+                        const rim = document.getElementById('rim-light-slider');
+
+                        if (ambient && main && fill && rim) {
+                            charData.lighting = {
+                                ambient: parseFloat(ambient.value),
+                                main: parseFloat(main.value),
+                                fill: parseFloat(fill.value),
+                                rim: parseFloat(rim.value)
+                            };
+                            // 移除旧的预设字段
+                            delete charData.lightingPreset;
                         }
                     } else {
-                        // Live2D 模式：保存 live2d 模型名称
-                        saveData.live2d = modelName;
-                        saveData.model_type = 'live2d';
-                        saveData.vrm = null;
-                        saveData.vrm_animation = "";
-                        if (itemId && itemId !== 'undefined') {
-                            saveData.item_id = itemId;
-                        }
+                        // Live2D 逻辑
+                        charData.model_type = 'live2d';
+                        charData.live2d = modelName;
+                        charData.vrm = null;
+                        if (itemId) charData.item_id = itemId;
                     }
 
-                    console.log('准备发送保存数据:', JSON.stringify(saveData, null, 2));
-                    console.log('当前模型类型:', currentModelType);
-                    
-                    const response = await fetch(`/api/characters/catgirl/l2d/${encodeURIComponent(lanlanName)}`, {
+                    console.log('准备保存的完整数据:', charData);
+
+                    // 4. 🔥 使用【通用更新接口】发送数据（这个接口支持保存任意字段）
+                    // 注意：这里改用了 /api/characters/catgirl/{name}
+                    const response = await fetch(`/api/characters/catgirl/${encodeURIComponent(lanlanName)}`, {
                         method: 'PUT',
                         headers: {
                             'Content-Type': 'application/json',
                         },
-                        body: JSON.stringify(saveData)
+                        body: JSON.stringify(charData)
                     });
 
                     if (!response.ok) {
-                        const errorText = await response.text();
-                        console.error('保存模型设置失败 - HTTP错误:', response.status, errorText);
-                        let errorMessage = `HTTP ${response.status}`;
-                        try {
-                            const errorData = JSON.parse(errorText);
-                            errorMessage = errorData.error || errorMessage;
-                        } catch (e) {
-                            errorMessage = errorText || errorMessage;
-                        }
-                        showStatus(t('live2d.saveFailed', `保存失败: ${errorMessage}`, { error: errorMessage }), 3000);
-                        return false;
+                        throw new Error(`服务器返回错误: ${response.status}`);
                     }
 
                     const result = await response.json();
-
                     if (result.success) {
                         const modelDisplayName = currentModelType === 'vrm' ? `VRM: ${modelName}` : modelName;
-                        showStatus(t('live2d.modelSettingsSaved', `已保存模型设置: ${lanlanName} -> ${modelDisplayName}`, { name: lanlanName, model: modelDisplayName }), 2000);
+                        showStatus(t('live2d.modelSettingsSaved', `已保存模型和光照设置`, { name: lanlanName }), 2000);
                         return true;
                     } else {
-                        const errorMsg = result.error || '未知错误';
-                        console.error('保存模型设置失败 - API错误:', errorMsg);
-                        showStatus(t('live2d.saveFailed', `保存失败: ${errorMsg}`, { error: errorMsg }), 3000);
-                        return false;
+                        throw new Error(result.error || '保存失败');
                     }
+
                 } catch (error) {
-                    console.error('保存模型设置失败 - 异常:', error);
-                    const errorMessage = error.message || '网络错误或服务器未响应';
-                    showStatus(t('live2d.saveModelSettingsFailed', `保存模型设置失败: ${errorMessage}`, { error: errorMessage }), 3000);
+                    console.error('保存模型设置失败:', error);
+                    showStatus(t('live2d.saveFailed', `保存失败: ${error.message}`), 3000);
                     return false;
                 }
             }
@@ -1324,11 +1320,6 @@
                     // 选择模型后立即启用保存按钮（即使模型还未加载或加载失败）
                     if (savePositionBtn) {
                         savePositionBtn.disabled = false;
-                    }
-
-                    // 启用保存打光按钮（仅VRM模型）
-                    if (saveLightingBtn) {
-                        saveLightingBtn.disabled = false;
                     }
 
                     // 标记为有未保存更改
@@ -1637,146 +1628,8 @@
                 });
             }
 
-            // 保存打光按钮 - 保存为预设
-            const saveLightingBtn = document.getElementById('save-lighting-btn');
-            if (saveLightingBtn) {
-                saveLightingBtn.addEventListener('click', async () => {
-                    if (!currentModelInfo || currentModelType !== 'vrm') {
-                        showStatus('请先选择VRM模型', 2000);
-                        return;
-                    }
 
-                    // 弹出对话框让用户输入预设名称
-                    const presetName = prompt('请输入打光预设名称:', '');
-                    if (!presetName || presetName.trim() === '') {
-                        return;
-                    }
-
-                    const lighting = {
-                        ambient: parseFloat(ambientLightSlider.value),
-                        main: parseFloat(mainLightSlider.value),
-                        fill: parseFloat(fillLightSlider.value),
-                        rim: parseFloat(rimLightSlider.value)
-                    };
-
-                    const success = await saveLightingPreset(presetName.trim(), lighting);
-                    if (success) {
-                        showStatus(`预设 "${presetName}" 保存成功`, 2000);
-                        saveLightingBtn.innerHTML = '<span>✓ 已保存</span>';
-                        setTimeout(() => {
-                            saveLightingBtn.innerHTML = '<span>💾 保存打光</span>';
-                        }, 2000);
-                        // 重新加载预设列表
-                        await loadLightingPresets();
-                    } else {
-                        showStatus('保存失败', 2000);
-                    }
-                });
-            }
-
-            // 保存打光预设的辅助函数
-            async function saveLightingPreset(name, lighting) {
-                try {
-                    const response = await fetch('/api/characters/lighting/presets', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ name, lighting })
-                    });
-
-                    if (!response.ok) {
-                        const error = await response.json();
-                        console.error('保存打光预设失败:', error);
-                        return false;
-                    }
-
-                    const result = await response.json();
-                    console.log('打光预设保存成功:', result);
-                    return result.success;
-                } catch (error) {
-                    console.error('保存打光预设失败:', error);
-                    return false;
-                }
-            }
-
-            // 保存打光配置到角色的辅助函数
-            async function saveLightingToCharacter(presetName) {
-                try {
-                    const lanlanName = await getLanlanName();
-                    if (!lanlanName) {
-                        console.error('无法获取角色名称');
-                        return false;
-                    }
-
-                    const response = await fetch(`/api/characters/catgirl/${encodeURIComponent(lanlanName)}/lighting`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ lightingPreset: presetName })
-                    });
-
-                    if (!response.ok) {
-                        const error = await response.json();
-                        console.error('保存角色打光配置失败:', error);
-                        return false;
-                    }
-
-                    const result = await response.json();
-                    console.log('角色打光配置保存成功:', result);
-                    return result.success;
-                } catch (error) {
-                    console.error('保存角色打光配置失败:', error);
-                    return false;
-                }
-            }
-
-            // 加载打光预设列表
-            const lightingPresetSelect = document.getElementById('lighting-preset-select');
-            async function loadLightingPresets() {
-                try {
-                    const response = await fetch('/api/characters/lighting/presets');
-                    if (!response.ok) {
-                        console.error('获取打光预设失败');
-                        return;
-                    }
-
-                    const data = await response.json();
-                    if (data.success && data.presets) {
-                        if (lightingPresetSelect) {
-                            lightingPresetSelect.innerHTML = '<option value="">-- 自定义 --</option>';
-                            Object.keys(data.presets).forEach(name => {
-                                const option = document.createElement('option');
-                                option.value = name;
-                                option.textContent = name;
-                                lightingPresetSelect.appendChild(option);
-                            });
-                            console.log('打光预设加载成功');
-                        }
-                    }
-                } catch (error) {
-                    console.error('加载打光预设失败:', error);
-                }
-            }
-
-            // 预设选择器change事件
-            if (lightingPresetSelect) {
-                lightingPresetSelect.addEventListener('change', async (e) => {
-                    const presetName = e.target.value;
-                    if (!presetName) return;
-
-                    try {
-                        const response = await fetch('/api/characters/lighting/presets');
-                        if (!response.ok) return;
-
-                        const data = await response.json();
-                        if (data.success && data.presets && data.presets[presetName]) {
-                            const lighting = data.presets[presetName];
-                            applyLightingValues(lighting);
-                            console.log(`已应用预设: ${presetName}`, lighting);
-                        }
-                    } catch (error) {
-                        console.error('应用打光预设失败:', error);
-                    }
-                });
-            }
+           
 
             // 应用打光值到UI和场景
             function applyLightingValues(lighting) {
@@ -1811,55 +1664,25 @@
             }
 
             // 加载角色的打光配置并应用
+            // 【保留但简化】只加载角色的“直接打光配置”，去掉了预设逻辑
             async function loadCharacterLighting() {
                 try {
                     const lanlanName = await getLanlanName();
-                    if (!lanlanName) {
-                        console.log('无角色名称，使用默认打光');
-                        return;
-                    }
+                    if (!lanlanName) return;
 
                     const response = await fetch('/api/characters/');
-                    if (!response.ok) {
-                        console.error('获取角色数据失败');
-                        return;
-                    }
+                    if (!response.ok) return;
 
                     const data = await response.json();
                     const charData = data['猫娘']?.[lanlanName];
-                    const lightingPresetName = charData?.lightingPreset;
                     const lighting = charData?.lighting;
 
-                    // 优先使用预设名称
-                    if (lightingPresetName) {
-                        console.log('加载角色打光预设:', lightingPresetName);
-                        // 从预设库中加载
-                        const presetsResponse = await fetch('/api/characters/lighting/presets');
-                        if (presetsResponse.ok) {
-                            const presetsData = await presetsResponse.json();
-                            if (presetsData.success && presetsData.presets && presetsData.presets[lightingPresetName]) {
-                                applyLightingValues(presetsData.presets[lightingPresetName]);
-                                // 更新选择器
-                                if (lightingPresetSelect) {
-                                    lightingPresetSelect.value = lightingPresetName;
-                                }
-                                console.log(`已应用预设: ${lightingPresetName}`);
-                                return;
-                            }
-                        }
-                    }
-
-                    // 兼容旧版本：直接保存的lighting对象
+                    // 只处理直接保存的 lighting 对象
                     if (lighting) {
-                        console.log('加载角色直接打光配置:', lighting);
+                        console.log('加载角色打光配置:', lighting);
                         applyLightingValues(lighting);
-                        // 选择器设为自定义
-                        if (lightingPresetSelect) {
-                            lightingPresetSelect.value = '';
-                        }
-                        console.log('打光配置已应用');
                     } else {
-                        console.log('角色无打光配置，使用默认值');
+                        console.log('角色无自定义打光，使用默认值');
                     }
                 } catch (error) {
                     console.error('加载打光配置失败:', error);
@@ -1868,9 +1691,6 @@
 
             // 初始化时加载 VRM 模型列表
             await loadVRMModels();
-
-            // 初始化时加载打光预设列表
-            await loadLightingPresets();
 
             // 检查语音模式状态的辅助函数
             async function checkVoiceModeStatus() {
@@ -2897,16 +2717,6 @@
                 sendMessageToMainPage('show_main_ui');
             }
 
-            // 如果有未保存的更改，本应阻止页面关闭并显示确认对话框
-            // 但在Electron中可能导致无法关闭窗口，且无法使用自定义模态窗替代系统默认弹窗
-            // 因此直接允许关闭，不再拦截
-            /* 
-            if (window.hasUnsavedChanges) {
-                e.preventDefault();
-                e.returnValue = ''; // Chrome需要这个
-                return ''; // 某些浏览器需要返回值
-            }
-            */
         });
 
         // 确保在页面关闭时也恢复主界面

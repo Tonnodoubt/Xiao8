@@ -4,6 +4,10 @@
 
 // 设置浮动按钮系统
 VRMManager.prototype.setupFloatingButtons = function () {
+    // 如果是模型管理页面，直接禁止创建浮动按钮
+    if (window.location.pathname.includes('model_manager')) {
+        return; 
+    }
     const container = document.getElementById('vrm-container');
 
     // 强力清除旧势力的残党
@@ -42,129 +46,74 @@ VRMManager.prototype.setupFloatingButtons = function () {
 
     // 3. 创建按钮
     buttonConfigs.forEach(config => {
+        // ... (创建 btnWrapper 和 btn 的代码保持不变) ...
         const btnWrapper = document.createElement('div');
-        Object.assign(btnWrapper.style, {
-            position: 'relative',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',  // ✅ 添加gap，与Live2D保持一致
-            pointerEvents: 'auto'
-        });
-        
-        // 这里的事件监听是为了防止点击穿透到模型
-        ['pointerdown','mousedown','touchstart'].forEach(evt => 
-            btnWrapper.addEventListener(evt, e => e.stopPropagation(), false)
-        );
+        Object.assign(btnWrapper.style, { position: 'relative', display: 'flex', alignItems: 'center', gap: '8px', pointerEvents: 'auto' });
+        ['pointerdown','mousedown','touchstart'].forEach(evt => btnWrapper.addEventListener(evt, e => e.stopPropagation(), false));
 
         const btn = document.createElement('div');
         btn.id = `vrm-btn-${config.id}`;
         btn.className = 'vrm-floating-btn';
-
+        // ... (btn 样式保持不变) ...
         Object.assign(btn.style, {
-            width: '48px',
-            height: '48px',
-            borderRadius: '50%',
-            background: 'rgba(255, 255, 255, 0.65)',  // Fluent Design Acrylic
-            backdropFilter: 'saturate(180%) blur(20px)',  // Fluent 标准模糊
-            border: '1px solid rgba(255, 255, 255, 0.18)',  // 微妙高光边框
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '24px',
-            cursor: 'pointer',
-            userSelect: 'none',
-            boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(0, 0, 0, 0.08)',  // Fluent 多层阴影
-            transition: 'all 0.1s ease',  // Fluent 快速响应
-            pointerEvents: 'auto'
+            width: '48px', height: '48px', borderRadius: '50%', background: 'rgba(255, 255, 255, 0.65)',
+            backdropFilter: 'saturate(180%) blur(20px)', border: '1px solid rgba(255, 255, 255, 0.18)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '24px',
+            cursor: 'pointer', userSelect: 'none', boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04)',
+            transition: 'all 0.1s ease', pointerEvents: 'auto'
         });
 
         let imgOff = null;
         let imgOn = null;
 
-        // 图标处理 - 与Live2D完全一致
         if (config.iconOff && config.iconOn) {
-            // 创建图片容器，用于叠加两张图片
+            // ... (图标创建代码保持不变) ...
             const imgContainer = document.createElement('div');
-            Object.assign(imgContainer.style, {
-                position: 'relative',
-                width: '48px',
-                height: '48px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-            });
-
-            // 创建off状态图片（默认显示）
+            Object.assign(imgContainer.style, { position: 'relative', width: '48px', height: '48px', display: 'flex', alignItems: 'center', justifyContent: 'center' });
+            
             imgOff = document.createElement('img');
-            imgOff.src = config.iconOff;
-            imgOff.alt = config.emoji;
-            Object.assign(imgOff.style, {
-                position: 'absolute',
-                width: '48px',
-                height: '48px',
-                objectFit: 'contain',
-                pointerEvents: 'none',
-                opacity: '1',
-                transition: 'opacity 0.3s ease'
-            });
-
-            // 创建on状态图片（默认隐藏）
+            imgOff.src = config.iconOff; imgOff.alt = config.emoji;
+            Object.assign(imgOff.style, { position: 'absolute', width: '48px', height: '48px', objectFit: 'contain', pointerEvents: 'none', opacity: '1', transition: 'opacity 0.3s ease' });
+            
             imgOn = document.createElement('img');
-            imgOn.src = config.iconOn;
-            imgOn.alt = config.emoji;
-            Object.assign(imgOn.style, {
-                position: 'absolute',
-                width: '48px',
-                height: '48px',
-                objectFit: 'contain',
-                pointerEvents: 'none',
-                opacity: '0',
-                transition: 'opacity 0.3s ease'
-            });
+            imgOn.src = config.iconOn; imgOn.alt = config.emoji;
+            Object.assign(imgOn.style, { position: 'absolute', width: '48px', height: '48px', objectFit: 'contain', pointerEvents: 'none', opacity: '0', transition: 'opacity 0.3s ease' });
 
             imgContainer.appendChild(imgOff);
             imgContainer.appendChild(imgOn);
             btn.appendChild(imgContainer);
 
-            // 鼠标悬停效果 - Fluent Design
+            // ==========================================
+            // 🔥【关键修改点 1】：注册按钮到管理器
+            // 这样 vrm-ui-popup.js 里的 closePopupById 才能找到按钮并把灯关掉
+            // ==========================================
+            this._floatingButtons = this._floatingButtons || {};
+            this._floatingButtons[config.id] = {
+                button: btn,
+                imgOff: imgOff,
+                imgOn: imgOn
+            };
+
+            // 悬停效果 (保持不变)
             btn.addEventListener('mouseenter', () => {
-                btn.style.transform = 'scale(1.05)';  // 更微妙的缩放
-                btn.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.08), 0 8px 16px rgba(0, 0, 0, 0.08)';
-                btn.style.background = 'rgba(255, 255, 255, 0.8)';  // 悬停时更亮
-                // 淡出off图标，淡入on图标
-                if (imgOff && imgOn) {
-                    imgOff.style.opacity = '0';
-                    imgOn.style.opacity = '1';
-                }
+                btn.style.transform = 'scale(1.05)';
+                btn.style.background = 'rgba(255, 255, 255, 0.8)';
+                if (imgOff && imgOn) { imgOff.style.opacity = '0'; imgOn.style.opacity = '1'; }
             });
             btn.addEventListener('mouseleave', () => {
                 btn.style.transform = 'scale(1)';
-                btn.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(0, 0, 0, 0.08)';
-                // 恢复原始背景色（根据按钮状态）
+                // 这里会读取 active 状态，如果 active 为 true，就保持高亮
                 const isActive = btn.dataset.active === 'true';
-
-                if (isActive) {
-                    // 激活状态：稍亮的背景
-                    btn.style.background = 'rgba(255, 255, 255, 0.75)';
-                } else {
-                    btn.style.background = 'rgba(255, 255, 255, 0.65)';  // Fluent Acrylic
-                }
-
-                // 根据按钮激活状态决定显示哪个图标
+                btn.style.background = isActive ? 'rgba(255, 255, 255, 0.75)' : 'rgba(255, 255, 255, 0.65)';
                 if (imgOff && imgOn) {
-                    if (isActive) {
-                        // 激活状态：保持on图标
-                        imgOff.style.opacity = '0';
-                        imgOn.style.opacity = '1';
-                    } else {
-                        // 未激活状态：显示off图标
-                        imgOff.style.opacity = '1';
-                        imgOn.style.opacity = '0';
-                    }
+                    imgOff.style.opacity = isActive ? '0' : '1';
+                    imgOn.style.opacity = isActive ? '1' : '0';
                 }
             });
 
-            // ✅ 使用新架构：通过 UIController 统一管理面板
+            // ==========================================
+            // 🔥【关键修改点 2】：智能点击逻辑
+            // ==========================================
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 e.preventDefault();
@@ -172,140 +121,78 @@ VRMManager.prototype.setupFloatingButtons = function () {
                 const currentActive = btn.dataset.active === 'true';
                 let targetActive = !currentActive; // 默认取反
 
-                // ✅ 使用 UIController 统一接口（底层逻辑互通）
-                if (config.id === 'settings') {
-                    if (window.UIController) {
-                        targetActive = window.UIController.toggleSettings();
-                    } else {
-                        console.error('[VRM UI] UIController 未加载');
+                if (config.id === 'settings' || config.id === 'agent') {
+                    const popup = document.getElementById(`vrm-popup-${config.id}`);
+                    if (popup) {
+                        // 在调用 showPopup 之前，先判断现在的状态
+                        // 如果现在是显示的，那 showPopup 会把它关闭，所以按钮应该变暗 (false)
+                        // 如果现在是隐藏的，那 showPopup 会把它打开，所以按钮应该变亮 (true)
+                        const isVisible = popup.style.display === 'flex' && popup.style.opacity !== '0';
+                        targetActive = !isVisible;
+                        
+                        this.showPopup(config.id, popup);
                     }
                 }
-                else if (config.id === 'agent') {
-                    if (window.UIController) {
-                        targetActive = window.UIController.toggleAgent();
-                    } else {
-                        console.error('[VRM UI] UIController 未加载');
-                    }
-                }
-                else if (config.id === 'mic') {
-                    if (window.UIController) {
-                        targetActive = window.UIController.toggleMic(targetActive);
-                    }
-                }
-                else if (config.id === 'screen') {
-                    if (window.UIController) {
-                        targetActive = window.UIController.toggleScreen(targetActive);
-                    }
+                else if (config.id === 'mic' || config.id === 'screen') {
+                   window.dispatchEvent(new CustomEvent(`live2d-${config.id}-toggle`, {detail:{active:targetActive}}));
                 }
                 else if (config.id === 'goodbye') {
-                    // 触发VRM休息模式事件
                     window.dispatchEvent(new CustomEvent('vrm-goodbye-click'));
-                    return; // goodbye按钮不需要更新激活状态
+                    return;
                 }
 
-                // 更新图标状态
+                // 应用状态
                 btn.dataset.active = targetActive.toString();
                 imgOff.style.opacity = targetActive ? '0' : '1';
                 imgOn.style.opacity = targetActive ? '1' : '0';
-
-                // 保持原有的事件发送（向后兼容）
-                if(config.toggle) {
-                    window.dispatchEvent(new CustomEvent(`live2d-${config.id}-toggle`, {detail:{active:targetActive}}));
-                } else {
-                    window.dispatchEvent(new CustomEvent(`live2d-${config.id}-click`));
-                }
+                // 立即更新背景颜色，不用等鼠标移开
+                btn.style.background = targetActive ? 'rgba(255, 255, 255, 0.75)' : 'rgba(255, 255, 255, 0.8)';
             });
         }
 
-        // 先添加按钮到包装器
         btnWrapper.appendChild(btn);
 
-        // ✅ 如果有弹出框且需要独立的触发器（仅麦克风）
-        if (config.hasPopup && config.separatePopupTrigger && window.UIComponentFactory) {
-            const popup = window.UIComponentFactory.createPopup(config.id, this);
-
-            // 创建三角按钮（用于触发弹出框）
+        // ... (后面关于小三角和 popupToggle 的代码保持我上一次提供的版本即可) ...
+        // ... (这里必须包含 createPopup 的调用) ...
+        if (config.hasPopup && config.separatePopupTrigger) {
+            const popup = this.createPopup(config.id);
+            // ... (三角按钮代码) ...
             const triggerBtn = document.createElement('div');
-            triggerBtn.innerText = '▶';
-            Object.assign(triggerBtn.style, {
-                width: '24px',
-                height: '24px',
-                borderRadius: '50%',
-                background: 'rgba(255, 255, 255, 0.65)',
-                backdropFilter: 'saturate(180%) blur(20px)',
+            // ... 样式 ...
+             triggerBtn.innerText = '▶'; // 补全三角样式
+             Object.assign(triggerBtn.style, {
+                width: '24px', height: '24px', borderRadius: '50%',
+                background: 'rgba(255, 255, 255, 0.65)', backdropFilter: 'saturate(180%) blur(20px)',
                 border: '1px solid rgba(255, 255, 255, 0.18)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '13px',
-                color: '#44b7fe',
-                cursor: 'pointer',
-                userSelect: 'none',
-                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(0, 0, 0, 0.08)',
-                transition: 'all 0.1s ease',
-                pointerEvents: 'auto'
-                // ✅ 移除marginLeft，使用btnWrapper的gap
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '13px', color: '#44b7fe', cursor: 'pointer', userSelect: 'none',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.04)', transition: 'all 0.1s ease', pointerEvents: 'auto'
             });
-
-            // 阻止事件传播
-            ['pointerdown','pointermove','pointerup','mousedown','mousemove','mouseup','touchstart','touchmove','touchend'].forEach(evt =>
-                triggerBtn.addEventListener(evt, e => e.stopPropagation(), true)
-            );
-
-            // 悬停效果
-            triggerBtn.addEventListener('mouseenter', () => {
-                triggerBtn.style.transform = 'scale(1.05)';
-                triggerBtn.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.08), 0 8px 16px rgba(0, 0, 0, 0.08)';
-                triggerBtn.style.background = 'rgba(255, 255, 255, 0.8)';
-            });
-            triggerBtn.addEventListener('mouseleave', () => {
-                triggerBtn.style.transform = 'scale(1)';
-                triggerBtn.style.boxShadow = '0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 8px rgba(0, 0, 0, 0.08)';
-                triggerBtn.style.background = 'rgba(255, 255, 255, 0.65)';
-            });
-
-            // 点击打开麦克风列表
+            // ... 事件 ...
             triggerBtn.addEventListener('click', async (e) => {
                 e.stopPropagation();
-
-                // 如果是麦克风弹出框，先加载麦克风列表
                 if (config.id === 'mic' && window.renderFloatingMicList) {
                     await window.renderFloatingMicList();
                 }
-
-                // 使用 UIController 显示弹出框
-                if (window.UIController) {
-                    window.UIController.showPopup(config.id, popup);
-                }
+                this.showPopup(config.id, popup);
             });
-
-            // 创建包装器用于三角按钮和弹出框
+            // ... 包装 ...
             const triggerWrapper = document.createElement('div');
-            triggerWrapper.style.position = 'relative';
-
-            // 阻止包装器事件传播
-            ['pointerdown','pointermove','pointerup','mousedown','mousemove','mouseup','touchstart','touchmove','touchend'].forEach(evt =>
+             triggerWrapper.style.position = 'relative';
+             ['pointerdown','pointermove','pointerup','mousedown','mousemove','mouseup','touchstart','touchmove','touchend'].forEach(evt =>
                 triggerWrapper.addEventListener(evt, e => e.stopPropagation(), true)
             );
-
             triggerWrapper.appendChild(triggerBtn);
             triggerWrapper.appendChild(popup);
             btnWrapper.appendChild(triggerWrapper);
-
-            
         }
-        // ✅ 如果配置了 popupToggle，创建弹出面板
-        else if (config.popupToggle && window.UIComponentFactory) {
-            const popup = window.UIComponentFactory.createPopup(config.id, this);
+        else if (config.popupToggle) {
+            const popup = this.createPopup(config.id);
             btnWrapper.appendChild(popup);
-            
         }
 
-        // 将包装器添加到容器
         buttonsContainer.appendChild(btnWrapper);
     });
-
-    window.dispatchEvent(new CustomEvent('live2d-floating-buttons-ready'));
 
     // --- 3.5. 创建"请她回来"按钮（用于休息模式）---
     const returnButtonContainer = document.createElement('div');
@@ -516,8 +403,7 @@ VRMManager.prototype._startUIUpdateLoop = function() {
                 const lY = (-(lockPos.y * 0.5) + 0.5) * height;
                 lockIcon.style.left = `${lX}px`;
                 lockIcon.style.top = `${lY}px`;
-                // 【保留注释】不强制显示锁，由鼠标跟踪控制
-                // lockIcon.style.display = 'block';
+                lockIcon.style.display = 'block';
             }
         }
         requestAnimationFrame(update);

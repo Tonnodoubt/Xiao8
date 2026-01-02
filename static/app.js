@@ -307,7 +307,7 @@ function init_app() {
         socket.onmessage = (event) => {
             if (event.data instanceof Blob) {
                 // 处理二进制音频数据
-                console.log("收到新的音频块")
+                //console.log("收到新的音频块")
                 handleAudioBlob(event.data);
                 return;
             }
@@ -2462,8 +2462,7 @@ function init_app() {
         while (nextChunkTime < audioPlayerContext.currentTime + scheduleAheadTime) {
             if (audioBufferQueue.length > 0) {
                 const { buffer: nextBuffer } = audioBufferQueue.shift();
-                console.log('ctx', audioPlayerContext.sampleRate,
-                    'buf', nextBuffer.sampleRate);
+                //console.log('ctx', audioPlayerContext.sampleRate,'buf', nextBuffer.sampleRate);
 
                 const source = audioPlayerContext.createBufferSource();
                 source.buffer = nextBuffer;

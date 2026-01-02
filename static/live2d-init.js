@@ -5,14 +5,65 @@
 // 创建全局 Live2D 管理器实例
 window.live2dManager = new Live2DManager();
 
-// 兼容性：保持原有的全局变量和函数
+// 兼容性：保持原有的全局变量，但增加 VRM/Live2D 双模态调度逻辑
 window.LanLan1 = window.LanLan1 || {};
-window.LanLan1.setEmotion = (emotion) => window.live2dManager.setEmotion(emotion);
-window.LanLan1.playExpression = (emotion) => window.live2dManager.playExpression(emotion);
-window.LanLan1.playMotion = (emotion) => window.live2dManager.playMotion(emotion);
-window.LanLan1.clearEmotionEffects = () => window.live2dManager.clearEmotionEffects();
-window.LanLan1.clearExpression = () => window.live2dManager.clearExpression();
-window.LanLan1.setMouth = (value) => window.live2dManager.setMouth(value);
+
+// 1. 表情控制 (setEmotion / playExpression)
+window.LanLan1.setEmotion = function(emotion) {
+    // 优先检查 VRM 模式
+    if (window.vrmManager && window.vrmManager.currentModel) {
+        if (window.vrmManager.expression) {
+            // 调用 VRM 的情绪切换
+            window.vrmManager.expression.setMood(emotion);
+        }
+        return; // VRM 处理完直接返回，不再打扰 Live2D
+    }
+    
+    // 如果不是 VRM，且 Live2D 模型已加载，才调用 Live2D
+    if (window.live2dManager && window.live2dManager.model) {
+        window.live2dManager.setEmotion(emotion);
+    }
+};
+
+// 兼容旧接口 playExpression，逻辑同 setEmotion
+window.LanLan1.playExpression = window.LanLan1.setEmotion;
+
+// 2. 动作控制 (playMotion)
+window.LanLan1.playMotion = function(group, no, priority) {
+    // VRM 模式下忽略 Live2D 的动作指令，防止报错
+    if (window.vrmManager && window.vrmManager.currentModel) {
+        console.log('[LanLan1] VRM 模式忽略 Live2D 动作指令:', group);
+        return;
+    }
+
+    // Live2D 模式
+    if (window.live2dManager && window.live2dManager.model) {
+        window.live2dManager.playMotion(group, no, priority);
+    }
+};
+
+// 3. 清除表情/特效
+window.LanLan1.clearEmotionEffects = function() {
+    if (window.vrmManager && window.vrmManager.currentModel) {
+        // VRM 暂时不需要清除特效逻辑，或在此重置表情
+        if (window.vrmManager.expression) window.vrmManager.expression.setMood('neutral');
+        return;
+    }
+    if (window.live2dManager) window.live2dManager.clearEmotionEffects();
+};
+
+window.LanLan1.clearExpression = function() {
+    if (window.vrmManager && window.vrmManager.currentModel) return;
+    if (window.live2dManager) window.live2dManager.clearExpression();
+};
+
+// 4. 嘴型控制
+window.LanLan1.setMouth = function(value) {
+    // VRM 的嘴型通常由 Audio 分析自动控制 (vrm-animation.js)，这里主要服务 Live2D
+    if (window.live2dManager && window.live2dManager.model) {
+        window.live2dManager.setMouth(value);
+    }
+};
 
 // 自动初始化函数（延迟执行，等待 cubism4Model 设置）
 async function initLive2DModel() {

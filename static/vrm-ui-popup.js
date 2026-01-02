@@ -602,6 +602,7 @@ VRMManager.prototype._createSettingsMenuItems = function (popup) {
         menuItem.addEventListener('click', (e) => {
             e.stopPropagation();
             if (item.action === 'navigate') {
+                this._openSettingsWindows = this._openSettingsWindows || {};
                 let finalUrl = item.url || item.urlBase;
                 if (item.id === 'vrm-manage' && item.urlBase) {
                     const lanlanName = (window.lanlan_config && window.lanlan_config.lanlan_name) || '';
@@ -732,6 +733,8 @@ VRMManager.prototype.closeAllSettingsWindows = function (exceptUrl = null) {
 
 // 显示弹出框（与Live2D完全一致，仅ID前缀不同）
 VRMManager.prototype.showPopup = function (buttonId, popup) {
+    // 🔥【新增】这行代码是关键！防止 _popupTimers 未定义导致的报错
+    this._popupTimers = this._popupTimers || {};
     const isVisible = popup.style.display === 'flex' && popup.style.opacity === '1';
 
     if (this._popupTimers[buttonId]) {
