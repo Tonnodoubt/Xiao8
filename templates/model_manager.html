@@ -1358,9 +1358,10 @@
                         
                         // 使用 URL 加载模型，而不是本地文件路径（浏览器不允许加载 file:// 路径）
                         // 传入 { autoPlay: false } 让模型保持 T-Pose 静止
-                        await vrmManager.loadModel(modelUrl, { autoPlay: false });
+                        //增加 addShadow: false
+                        await vrmManager.loadModel(modelUrl, { autoPlay: false, addShadow: false });
                         
-                        // 【修改】调用智能检测函数
+                        // 调用智能检测函数
                         fixVRMModel();
                         
                         // 在这里加载表情
@@ -2643,7 +2644,7 @@
                                 modelUrl = `/user_vrm/${filename}`;
                             }
                             // 传入 { autoPlay: false }
-                            await vrmManager.loadModel(modelUrl, { autoPlay: false });
+                            await vrmManager.loadModel(modelUrl, { autoPlay: false, addShadow: false });
                             
                             // 调用工具函数，自动修正朝向
                             fixVRMModel();
