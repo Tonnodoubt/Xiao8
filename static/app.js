@@ -2637,9 +2637,16 @@ function init_app() {
                     source.connect(audioPlayerContext.destination);
                 }
 
-                if (hasAnalyser && !lipSyncActive && window.LanLan1 && window.LanLan1.live2dModel) {
-                    startLipSync(window.LanLan1.live2dModel, globalAnalyser);
-                    lipSyncActive = true;
+                if (hasAnalyser && !lipSyncActive) {
+                    if (window.LanLan1 && window.LanLan1.live2dModel) {
+                        startLipSync(window.LanLan1.live2dModel, globalAnalyser);
+                        lipSyncActive = true;
+                    } else if (window.vrmManager && window.vrmManager.currentModel && window.vrmManager.animation) {
+                        // VRM模型的口型同步
+                        window.vrmManager.animation.startLipSync(globalAnalyser);
+                        lipSyncActive = true;
+                        console.log('[App] 已启动VRM口型同步');
+                    }
                 }
 
                 // 精确时间调度
@@ -2659,6 +2666,10 @@ function init_app() {
                     if (scheduledSources.length === 0 && audioBufferQueue.length === 0) {
                         if (window.LanLan1 && window.LanLan1.live2dModel) {
                             stopLipSync(window.LanLan1.live2dModel);
+                        } else if (window.vrmManager && window.vrmManager.currentModel && window.vrmManager.animation) {
+                            // VRM模型停止口型同步
+                            window.vrmManager.animation.stopLipSync();
+                            console.log('[App] 已停止VRM口型同步');
                         }
                         lipSyncActive = false;
                         isPlaying = false; // 新增：所有音频播放完毕，重置isPlaying

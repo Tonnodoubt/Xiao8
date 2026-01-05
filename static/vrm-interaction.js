@@ -110,11 +110,15 @@ class VRMInteraction {
         };
 
         // 3. 鼠标释放
-        this.mouseUpHandler = (e) => {
+        this.mouseUpHandler = async (e) => {
             if (this.isDragging) {
                 this.isDragging = false;
                 this.dragMode = null;
                 canvas.style.cursor = 'grab';
+
+                // 拖动结束后保存位置
+                await this._savePositionAfterInteraction();
+
                 e.preventDefault();
                 e.stopPropagation();
             }
@@ -163,6 +167,9 @@ class VRMInteraction {
                 if (this.manager.controls && this.manager.controls.update) {
                     this.manager.controls.update();
                 }
+
+                // 缩放结束后防抖保存位置
+                this._debouncedSavePosition();
             }
         };
 
@@ -655,7 +662,115 @@ class VRMInteraction {
             this._hideButtonsTimer = null;
         }
     }
-    
+
+    /**
+     * 保存模型位置和状态到后端（交互结束后调用）
+     */
+    async _savePositionAfterInteraction() {
+        if (!this.manager.currentModel || !this.manager.currentModel.url) {
+            console.debug('[VRM] 无法保存位置：模型或路径未设置');
+            return;
+        }
+
+        const scene = this.manager.currentModel.scene;
+        if (!scene) {
+            console.debug('[VRM] 无法保存位置：场景未设置');
+            return;
+        }
+
+        const position = {
+            x: scene.position.x,
+            y: scene.position.y,
+            z: scene.position.z
+        };
+
+        const scale = {
+            x: scene.scale.x,
+            y: scene.scale.y,
+            z: scene.scale.z
+        };
+
+        const rotation = {
+            x: scene.rotation.x,
+            y: scene.rotation.y,
+            z: scene.rotation.z
+        };
+
+        // 验证数据有效性
+        if (!Number.isFinite(position.x) || !Number.isFinite(position.y) || !Number.isFinite(position.z) ||
+            !Number.isFinite(scale.x) || !Number.isFinite(scale.y) || !Number.isFinite(scale.z)) {
+            console.warn('[VRM] 位置或缩放数据无效，跳过保存');
+            return;
+        }
+
+        // 获取当前窗口所在显示器的信息（用于多屏幕位置恢复）
+        let displayInfo = null;
+        if (window.electronScreen && window.electronScreen.getCurrentDisplay) {
+            try {
+                const currentDisplay = await window.electronScreen.getCurrentDisplay();
+                if (currentDisplay) {
+                    let screenX = currentDisplay.screenX;
+                    let screenY = currentDisplay.screenY;
+
+                    // 如果 screenX/screenY 不存在，尝试从 bounds 获取
+                    if (!Number.isFinite(screenX) || !Number.isFinite(screenY)) {
+                        if (currentDisplay.bounds &&
+                            Number.isFinite(currentDisplay.bounds.x) &&
+                            Number.isFinite(currentDisplay.bounds.y)) {
+                            screenX = currentDisplay.bounds.x;
+                            screenY = currentDisplay.bounds.y;
+                        }
+                    }
+
+                    if (Number.isFinite(screenX) && Number.isFinite(screenY)) {
+                        displayInfo = {
+                            screenX: screenX,
+                            screenY: screenY
+                        };
+                    }
+                }
+            } catch (error) {
+                console.warn('[VRM] 获取显示器信息失败:', error);
+            }
+        }
+
+        // 异步保存，不阻塞交互
+        if (this.manager.core && typeof this.manager.core.saveUserPreferences === 'function') {
+            this.manager.core.saveUserPreferences(
+                this.manager.currentModel.url,
+                position,
+                scale,
+                rotation,
+                displayInfo
+            ).then(success => {
+                if (success) {
+                    console.debug('[VRM] 模型位置和缩放已自动保存');
+                } else {
+                    console.warn('[VRM] 自动保存位置失败');
+                }
+            }).catch(error => {
+                console.error('[VRM] 自动保存位置时出错:', error);
+            });
+        }
+    }
+
+    /**
+     * 防抖动保存位置的辅助函数（用于滚轮缩放等连续操作）
+     */
+    _debouncedSavePosition() {
+        // 清除之前的定时器
+        if (this._savePositionDebounceTimer) {
+            clearTimeout(this._savePositionDebounceTimer);
+        }
+
+        // 设置新的定时器，500ms后保存
+        this._savePositionDebounceTimer = setTimeout(() => {
+            this._savePositionAfterInteraction().catch(error => {
+                console.error('[VRM] 防抖动保存位置时出错:', error);
+            });
+        }, 500);
+    }
+
     /**
      * 清理交互资源
      */
@@ -667,6 +782,12 @@ class VRMInteraction {
         if (this._hideButtonsTimer) {
             clearTimeout(this._hideButtonsTimer);
             this._hideButtonsTimer = null;
+        }
+
+        // 清理位置保存防抖定时器
+        if (this._savePositionDebounceTimer) {
+            clearTimeout(this._savePositionDebounceTimer);
+            this._savePositionDebounceTimer = null;
         }
 
         // 重置状态

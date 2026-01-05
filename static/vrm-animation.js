@@ -399,18 +399,42 @@ class VRMAnimation {
     updateMouthExpressionMapping() {
         const vrm = this.manager.currentModel?.vrm;
         if (!vrm?.expressionManager) return;
-        const expressionNames = Object.keys(vrm.expressionManager.expressions);
+
+        // 获取所有表情名称（兼容Map和Object）
+        let expressionNames = [];
+        const exprs = vrm.expressionManager.expressions;
+        if (exprs instanceof Map) {
+            expressionNames = Array.from(exprs.keys());
+        } else if (Array.isArray(exprs)) {
+            expressionNames = exprs.map(e => e.expressionName || e.name || e.presetName).filter(n => n);
+        } else if (typeof exprs === 'object') {
+            expressionNames = Object.keys(exprs);
+        }
+
+        // 映射口型表情
         ['aa', 'ih', 'ou', 'ee', 'oh'].forEach(vowel => {
             const match = expressionNames.find(name => name.toLowerCase() === vowel || name.toLowerCase().includes(vowel));
             if (match) this.mouthExpressions[vowel] = match;
         });
+
+        console.log('[VRM LipSync] 口型表情映射:', this.mouthExpressions);
     }
     resetMouthExpressions() {
         const vrm = this.manager.currentModel?.vrm;
         if (!vrm?.expressionManager) return;
+
+        // 重置所有已映射的口型表情
         Object.values(this.mouthExpressions).forEach(name => {
-            if (name) vrm.expressionManager.setValue(name, 0);
+            if (name) {
+                try {
+                    vrm.expressionManager.setValue(name, 0);
+                } catch (e) {
+                    console.warn(`[VRM LipSync] 重置表情失败: ${name}`, e);
+                }
+            }
         });
+
+        console.log('[VRM LipSync] 已重置所有口型表情');
     }
     _updateLipSync(delta) {
         if (!this.manager.currentModel?.vrm?.expressionManager) return;
@@ -447,8 +471,8 @@ class VRMAnimation {
         // 平滑插值
         this.currentMouthWeight += (targetWeight - this.currentMouthWeight) * (12.0 * delta);
 
-        // 确保嘴巴有最小开合度，避免完全闭合
-        const finalWeight = Math.max(this.currentMouthWeight, targetWeight > 0.05 ? 0.02 : 0);
+        // 使用平滑后的权重，允许完全闭合
+        const finalWeight = Math.max(0, this.currentMouthWeight);
 
         // 获取嘴巴张开表情名称
         const mouthOpenName = this.mouthExpressions.aa || 'aa';

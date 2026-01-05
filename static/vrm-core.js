@@ -613,47 +613,110 @@ class VRMCore {
             const box = new THREE.Box3().setFromObject(vrm.scene);
             const size = box.getSize(new THREE.Vector3());
             const center = box.getCenter(new THREE.Vector3());
-            
-            // 调整模型位置（居中）
-            vrm.scene.position.set(-center.x, -center.y, -center.z);
-            
-            // 确保模型正面朝向相机（参考 vrm.js 的朝向检测逻辑）
-            let needsRotation = false;
-            if (vrm.humanoid && vrm.humanoid.humanBones) {
-                // 获取头部骨骼位置（通常头部在模型前方）
-                const headBone = vrm.humanoid.humanBones.head?.node;
-                const chestBone = vrm.humanoid.humanBones.chest?.node ||
-                                 vrm.humanoid.humanBones.spine?.node;
 
-                if (headBone && chestBone) {
-                    // 计算从胸部到头部的向量（应该指向前方）
-                    const headWorldPos = new THREE.Vector3();
-                    const chestWorldPos = new THREE.Vector3();
-                    headBone.getWorldPosition(headWorldPos);
-                    chestBone.getWorldPosition(chestWorldPos);
+            // 【新增】获取保存的用户偏好设置
+            let preferences = null;
+            try {
+                const preferencesResponse = await fetch('/api/config/preferences');
+                const allPreferences = await preferencesResponse.json();
 
-                    const forwardVec = new THREE.Vector3().subVectors(headWorldPos, chestWorldPos);
-                    forwardVec.normalize();
+                // 在偏好设置中查找当前模型的配置
+                if (allPreferences && allPreferences.models) {
+                    preferences = allPreferences.models.find(pref => pref.model_path === modelUrl);
+                }
+            } catch (error) {
+                console.warn('[VRM] 获取用户偏好设置失败:', error);
+            }
 
-                    // 如果forward向量指向Z轴正方向（远离相机），说明是背面，需要旋转
-                    if (forwardVec.z > 0.3) {
-                        needsRotation = true;
-                    }
+            // 【修改】根据是否有保存的偏好设置来决定位置和缩放
+            if (preferences && preferences.position && preferences.scale) {
+                // 恢复保存的位置
+                const pos = preferences.position;
+                if (Number.isFinite(pos.x) && Number.isFinite(pos.y) && Number.isFinite(pos.z)) {
+                    vrm.scene.position.set(pos.x, pos.y, pos.z);
+                    console.log('[VRM] 已恢复保存的模型位置:', pos);
                 } else {
-                    console.warn('[VRM] 无法检测模型朝向：缺少头部或胸部骨骼');
+                    // 如果保存的位置无效，使用默认居中位置
+                    vrm.scene.position.set(-center.x, -center.y, -center.z);
+                }
+
+                // 恢复保存的缩放
+                const scl = preferences.scale;
+                if (Number.isFinite(scl.x) && Number.isFinite(scl.y) && Number.isFinite(scl.z) &&
+                    scl.x > 0 && scl.y > 0 && scl.z > 0) {
+                    vrm.scene.scale.set(scl.x, scl.y, scl.z);
+                    console.log('[VRM] 已恢复保存的模型缩放:', scl);
+                }
+
+                // 恢复保存的旋转（如果有）
+                if (preferences.rotation) {
+                    const rot = preferences.rotation;
+                    if (Number.isFinite(rot.x) && Number.isFinite(rot.y) && Number.isFinite(rot.z)) {
+                        vrm.scene.rotation.set(rot.x, rot.y, rot.z);
+                        console.log('[VRM] 已恢复保存的模型旋转:', rot);
+                    }
+                }
+            } else {
+                // 没有保存的偏好设置，使用默认位置
+                vrm.scene.position.set(-center.x, -center.y, -center.z);
+            }
+
+            // 【保留】如果没有保存的旋转，确保模型正面朝向相机
+            if (!preferences || !preferences.rotation) {
+                let needsRotation = false;
+                if (vrm.humanoid && vrm.humanoid.humanBones) {
+                    // 获取头部骨骼位置（通常头部在模型前方）
+                    const headBone = vrm.humanoid.humanBones.head?.node;
+                    const chestBone = vrm.humanoid.humanBones.chest?.node ||
+                                     vrm.humanoid.humanBones.spine?.node;
+
+                    if (headBone && chestBone) {
+                        // 计算从胸部到头部的向量（应该指向前方）
+                        const headWorldPos = new THREE.Vector3();
+                        const chestWorldPos = new THREE.Vector3();
+                        headBone.getWorldPosition(headWorldPos);
+                        chestBone.getWorldPosition(chestWorldPos);
+
+                        const forwardVec = new THREE.Vector3().subVectors(headWorldPos, chestWorldPos);
+                        forwardVec.normalize();
+
+                        // 如果forward向量指向Z轴正方向（远离相机），说明是背面，需要旋转
+                        if (forwardVec.z > 0.3) {
+                            needsRotation = true;
+                        }
+                    } else {
+                        console.warn('[VRM] 无法检测模型朝向：缺少头部或胸部骨骼');
+                    }
+                }
+
+                // 重置旋转并应用必要的旋转
+                vrm.scene.rotation.set(0, needsRotation ? Math.PI : 0, 0);
+            }
+
+            // 【修改】只在没有保存的偏好设置时才计算和应用默认缩放
+            if (!preferences || !preferences.scale) {
+                // 设置模型初始缩放
+                if (options.scale) {
+                    vrm.scene.scale.set(options.scale.x || 1, options.scale.y || 1, options.scale.z || 1);
+                } else {
+                    vrm.scene.scale.set(1, 1, 1);
                 }
             }
 
-            // 重置旋转并应用必要的旋转
-            vrm.scene.rotation.set(0, needsRotation ? Math.PI : 0, 0);
-            
-            if (needsRotation) {
-            }
-            
+            // 根据模型大小和屏幕大小计算合适的相机距离
+            const modelHeight = size.y;
+            const screenHeight = window.innerHeight;
+            const screenWidth = window.innerWidth;
+
+            // 目标：让模型在屏幕上的高度约为屏幕高度的0.4-0.5倍（类似Live2D）
+            const targetScreenHeight = screenHeight * 0.45;
+            const fov = this.manager.camera.fov * (Math.PI / 180);
+            const distance = (modelHeight / 2) / Math.tan(fov / 2) / targetScreenHeight * screenHeight;
+
             // 计算合适的初始缩放（参考Live2D的默认大小计算，参考 vrm.js）
             const isMobile = window.innerWidth <= 768;
             let targetScale;
-            
+
             if (isMobile) {
                 // 移动端：较小
                 targetScale = Math.min(
@@ -668,23 +731,6 @@ class VRMCore {
                     (window.innerHeight * 0.75) / 7000,
                     (window.innerWidth * 0.6) / 7000
                 );
-            }
-            
-            // 根据模型大小和屏幕大小计算合适的相机距离
-            const modelHeight = size.y;
-            const screenHeight = window.innerHeight;
-            const screenWidth = window.innerWidth;
-            
-            // 目标：让模型在屏幕上的高度约为屏幕高度的0.4-0.5倍（类似Live2D）
-            const targetScreenHeight = screenHeight * 0.45;
-            const fov = this.manager.camera.fov * (Math.PI / 180);
-            const distance = (modelHeight / 2) / Math.tan(fov / 2) / targetScreenHeight * screenHeight;
-            
-            // 设置模型初始缩放
-            if (options.scale) {
-                vrm.scene.scale.set(options.scale.x || 1, options.scale.y || 1, options.scale.z || 1);
-            } else {
-                vrm.scene.scale.set(1, 1, 1);
             }
             
             // 调整相机位置，使模型在屏幕中央合适的位置
@@ -784,6 +830,74 @@ class VRMCore {
                     }
                 }
             });
+        }
+    }
+
+    /**
+     * 保存用户偏好设置（位置、缩放等）
+     * @param {string} modelPath - 模型路径
+     * @param {object} position - 位置 {x, y, z}
+     * @param {object} scale - 缩放 {x, y, z}
+     * @param {object} rotation - 旋转 {x, y, z}（可选）
+     * @param {object} display - 显示器信息（可选）
+     * @returns {Promise<boolean>} 是否保存成功
+     */
+    async saveUserPreferences(modelPath, position, scale, rotation, display) {
+        try {
+            // 验证位置值
+            if (!position || typeof position !== 'object' ||
+                !Number.isFinite(position.x) || !Number.isFinite(position.y) || !Number.isFinite(position.z)) {
+                console.error('[VRM] 位置值无效:', position);
+                return false;
+            }
+
+            // 验证缩放值（VRM使用统一缩放，但保存为对象格式以兼容Live2D的数据结构）
+            if (!scale || typeof scale !== 'object' ||
+                !Number.isFinite(scale.x) || !Number.isFinite(scale.y) || !Number.isFinite(scale.z)) {
+                console.error('[VRM] 缩放值无效:', scale);
+                return false;
+            }
+
+            // 验证缩放值必须为正数
+            if (scale.x <= 0 || scale.y <= 0 || scale.z <= 0) {
+                console.error('[VRM] 缩放值必须为正数:', scale);
+                return false;
+            }
+
+            const preferences = {
+                model_path: modelPath,
+                position: position,
+                scale: scale
+            };
+
+            // 如果有旋转信息，添加到偏好中
+            if (rotation && typeof rotation === 'object' &&
+                Number.isFinite(rotation.x) && Number.isFinite(rotation.y) && Number.isFinite(rotation.z)) {
+                preferences.rotation = rotation;
+            }
+
+            // 如果有显示器信息，添加到偏好中（用于多屏幕位置恢复）
+            if (display && typeof display === 'object' &&
+                Number.isFinite(display.screenX) && Number.isFinite(display.screenY)) {
+                preferences.display = {
+                    screenX: display.screenX,
+                    screenY: display.screenY
+                };
+            }
+
+            const response = await fetch('/api/config/preferences', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(preferences)
+            });
+
+            const result = await response.json();
+            return result.success;
+        } catch (error) {
+            console.error('[VRM] 保存用户偏好失败:', error);
+            return false;
         }
     }
 }

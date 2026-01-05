@@ -303,12 +303,19 @@ window.checkAndLoadVRM = async function() {
             await window.vrmManager.initThreeJS('vrm-canvas', 'vrm-container');
         }
 
-        // 8. 加载VRM模型
-        await window.vrmManager.loadModel(modelUrl);
+        // 8. 检查是否需要重新加载模型
+        const currentModelUrl = window.vrmManager.currentModel?.url;
+        const needReload = !currentModelUrl || currentModelUrl !== modelUrl;
 
-        // ============================================================
-        // 🔥【核心修复点】：直接使用刚刚拉取的 catgirlConfig 中的 lighting
-        // ============================================================
+        if (needReload) {
+            console.log('[VRM Check] 模型路径变化，重新加载:', modelUrl);
+            await window.vrmManager.loadModel(modelUrl);
+        } else {
+            console.log('[VRM Check] 模型路径未变化，跳过重新加载');
+        }
+
+        
+        // 直接使用刚刚拉取的 catgirlConfig 中的 lighting
         const lighting = catgirlConfig.lighting;
         
         if (lighting && window.vrmManager) {

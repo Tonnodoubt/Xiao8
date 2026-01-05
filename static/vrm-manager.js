@@ -154,8 +154,8 @@ class VRMManager {
         if (options.addShadow !== false && result && result.vrm && result.vrm.scene) {
             // 1. 可调节参数 (在这里微调)
             const SHADOW_OPACITY_CENTER = 0.6; // 阴影中心黑度 (0~1)
-            const SHADOW_SCALE_MULT = 0.6;     // 大小倍率：数字越大阴影越大 (建议 1.2 ~ 1.8)
-            const SHADOW_Y_OFFSET = 0.8;      // 高度偏移：防止阴影和地面重叠闪烁 (Z-fighting)
+            const SHADOW_SCALE_MULT = 0.5;     // 大小倍率：数字越大阴影越大 (建议 1.2 ~ 1.8)
+            const SHADOW_Y_OFFSET = 0.85;      // 高度偏移：防止阴影和地面重叠闪烁 (Z-fighting)
             const FIX_CENTER_XZ = true;        // true: 强制阴影在两脚中间(0,0); false: 跟随模型几何中心
             
 
