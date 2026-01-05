@@ -18,6 +18,19 @@ let isEmotionChanging = false; // 防止快速连续点击的标志
 // 全局：判断是否为移动端宽度
 const isMobileWidth = () => window.innerWidth <= 768;
 
+// 口型同步参数列表常量
+// 这些参数用于控制模型的嘴部动作，在处理表情和常驻表情时需要跳过，以避免覆盖实时的口型同步
+window.LIPSYNC_PARAMS = [
+    'ParamMouthOpenY',
+    'ParamMouthForm',
+    'ParamMouthOpen',
+    'ParamA',
+    'ParamI',
+    'ParamU',
+    'ParamE',
+    'ParamO'
+];
+
 // Live2D 管理器类
 class Live2DManager {
     constructor() {

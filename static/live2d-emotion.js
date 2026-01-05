@@ -1,17 +1,8 @@
 /**
  * Live2D Emotion - 情感/表情/动作相关功能
+ * 依赖: live2d-core.js (提供 Live2DManager 类和 window.LIPSYNC_PARAMS)
  */
 
-const LIPSYNC_PARAMS = [
-    'ParamMouthOpenY',
-    'ParamMouthForm',
-    'ParamMouthOpen',
-    'ParamA',
-    'ParamI',
-    'ParamU',
-    'ParamE',
-    'ParamO'
-];
 // 记录模型的初始参数（用于expression重置，跳过位置参数）
 Live2DManager.prototype.recordInitialParameters = function() {
     if (!this.currentModel || !this.currentModel.internalModel || !this.currentModel.internalModel.coreModel) {
@@ -219,7 +210,7 @@ Live2DManager.prototype.playExpression = async function(emotion, specifiedExpres
         if (expressionData.Parameters) {
             for (const param of expressionData.Parameters) {
                 // 跳过口型参数，避免覆盖lipsync
-                if (LIPSYNC_PARAMS.includes(param.Id)) {
+                if (window.LIPSYNC_PARAMS.includes(param.Id)) {
                     console.log(`跳过口型参数: ${param.Id}，避免覆盖lipsync`);
                     continue;
                 }
@@ -714,7 +705,7 @@ Live2DManager.prototype.applyPersistentExpressionsNative = async function() {
                     const core = this.currentModel.internalModel && this.currentModel.internalModel.coreModel;
                     if (core) {
                         for (const p of params) {
-                            if (LIPSYNC_PARAMS.includes(p.Id)) continue;
+                            if (window.LIPSYNC_PARAMS.includes(p.Id)) continue;
                             try { core.setParameterValueById(p.Id, p.Value); } catch (_) {}
                         }
                     }
@@ -728,7 +719,7 @@ Live2DManager.prototype.applyPersistentExpressionsNative = async function() {
                     const core = this.currentModel.internalModel && this.currentModel.internalModel.coreModel;
                     if (core) {
                         for (const p of params) {
-                            if (LIPSYNC_PARAMS.includes(p.Id)) continue;
+                            if (window.LIPSYNC_PARAMS.includes(p.Id)) continue;
                             try { core.setParameterValueById(p.Id, p.Value); } catch (_) {}
                         }
                     }
