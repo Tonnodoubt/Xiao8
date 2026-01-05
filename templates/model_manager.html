@@ -1049,6 +1049,67 @@
                 if (modelTypeSelect) modelTypeSelect.value = type;
 
                 if (type === 'live2d') {
+                    // 【新增】清理VRM资源
+                    if (window.vrmManager) {
+                        try {
+                            console.log('[模型管理] 开始清理VRM资源...');
+
+                            // 停止VRM动画循环
+                            if (window.vrmManager._animationFrameId) {
+                                cancelAnimationFrame(window.vrmManager._animationFrameId);
+                                window.vrmManager._animationFrameId = null;
+                            }
+
+                            // 清理VRM管理器
+                            if (typeof window.vrmManager.dispose === 'function') {
+                                window.vrmManager.dispose();
+                                console.log('[模型管理] 已调用VRM管理器dispose方法');
+                            }
+
+                            // 清理Three.js渲染器（但不移除canvas，因为后续可能还要用）
+                            if (window.vrmManager.renderer) {
+                                window.vrmManager.renderer.dispose();
+                                window.vrmManager.renderer = null;
+                                console.log('[模型管理] 已清理Three.js渲染器');
+                            }
+
+                            // 清理场景
+                            if (window.vrmManager.scene) {
+                                window.vrmManager.scene.clear();
+                                window.vrmManager.scene = null;
+                                console.log('[模型管理] 已清理Three.js场景');
+                            }
+
+                            // 重置当前模型引用
+                            window.vrmManager.currentModel = null;
+                            window.vrmManager._isInitialized = false;
+                            window._isVRMInitializing = false;
+
+                            // 清理VRM的UI元素
+                            const vrmFloatingButtons = document.getElementById('vrm-floating-buttons');
+                            if (vrmFloatingButtons) {
+                                vrmFloatingButtons.remove();
+                                console.log('[模型管理] 已清理VRM浮动按钮');
+                            }
+
+                            const vrmLockIcon = document.getElementById('vrm-lock-icon');
+                            if (vrmLockIcon) {
+                                vrmLockIcon.remove();
+                                console.log('[模型管理] 已清理VRM锁图标');
+                            }
+
+                            const vrmReturnBtn = document.getElementById('vrm-return-button-container');
+                            if (vrmReturnBtn) {
+                                vrmReturnBtn.remove();
+                                console.log('[模型管理] 已清理VRM返回按钮');
+                            }
+
+                            console.log('[模型管理] VRM资源清理完成');
+                        } catch (cleanupError) {
+                            console.warn('[模型管理] VRM清理时出现警告:', cleanupError);
+                        }
+                    }
+
                     if (live2dModelGroup) live2dModelGroup.style.display = 'flex';
                     if (vrmModelGroup) vrmModelGroup.style.display = 'none';
                     if (live2dContainer) live2dContainer.style.display = 'block';
@@ -1059,9 +1120,9 @@
                     }
                     // 显示 Live2D 特有的控件
                     document.querySelectorAll('.control-group').forEach(group => {
-                        if (group.id !== 'live2d-model-group' && 
-                            group.id !== 'vrm-model-group' && 
-                            group.id !== 'vrm-expression-group' && 
+                        if (group.id !== 'live2d-model-group' &&
+                            group.id !== 'vrm-model-group' &&
+                            group.id !== 'vrm-expression-group' &&
                             group.id !== 'vrm-animation-group') {
                             group.style.display = 'flex';
                         }
@@ -1075,7 +1136,7 @@
                     // 确保保存设置按钮组可见
                     const saveSettingsGroup = document.getElementById('save-settings-group');
                     if (saveSettingsGroup) saveSettingsGroup.style.display = 'flex';
-                    
+
                     // 更新上传按钮提示文本（Live2D模式）
                     if (uploadBtn) {
                         uploadBtn.setAttribute('data-i18n', 'live2d.selectFolder');
@@ -1084,18 +1145,72 @@
                     // 隐藏VRM文件选择器，显示Live2D文件夹选择器
                     if (vrmFileUpload) vrmFileUpload.style.display = 'none';
                     if (modelUpload) modelUpload.style.display = 'none'; // 保持隐藏，通过按钮触发
-                    
+
                     // 隐藏 VRM 动作预览组
                     if (vrmAnimationGroup) vrmAnimationGroup.style.display = 'none';
                     // 隐藏 VRM 打光设置组
                     const vrmLightingGroup = document.getElementById('vrm-lighting-group');
                     if (vrmLightingGroup) vrmLightingGroup.style.display = 'none';
 
-                    if (!window.live2dManager.pixi_app) {
+                    // 【关键修复】强制重新初始化PIXI
+                    // PIXI销毁后可能会移除canvas元素，需要重新创建
+                    const live2dCanvas = document.getElementById('live2d-canvas');
+                    if (!live2dCanvas) {
+                        // canvas被销毁了，需要重新创建
+                        const newCanvas = document.createElement('canvas');
+                        newCanvas.id = 'live2d-canvas';
+                        const container = document.getElementById('live2d-container');
+                        if (container) {
+                            container.appendChild(newCanvas);
+                            console.log('[模型管理] 重新创建了live2d-canvas元素');
+                        }
+                    }
+
+                    // 无论如何都重新初始化PIXI，确保干净的状态
+                    if (window.live2dManager) {
+                        // 强制重置状态
+                        window.live2dManager.pixi_app = null;
+                        window.live2dManager.isInitialized = false;
+
                         await window.live2dManager.initPIXI('live2d-canvas', 'live2d-container');
                         showStatus(t('live2d.pixiInitialized', 'PIXI 初始化完成'));
+                        console.log('[模型管理] PIXI已重新初始化');
                     }
                 } else { // VRM
+                    // 【新增】清理Live2D资源
+                    if (window.live2dManager) {
+                        try {
+                            console.log('[模型管理] 开始清理Live2D资源...');
+
+                            // 清理Live2D模型
+                            if (window.live2dManager.currentModel) {
+                                window.live2dManager.currentModel = null;
+                                console.log('[模型管理] 已清空Live2D当前模型');
+                            }
+
+                            // 销毁PIXI应用
+                            if (window.live2dManager.pixi_app) {
+                                try {
+                                    window.live2dManager.pixi_app.destroy(true, {
+                                        children: true,
+                                        texture: true,
+                                        baseTexture: true
+                                    });
+                                    window.live2dManager.pixi_app = null;
+                                    // 【关键修复】重置初始化标志
+                                    window.live2dManager.isInitialized = false;
+                                    console.log('[模型管理] 已销毁PIXI应用并重置初始化标志');
+                                } catch (pixiError) {
+                                    console.warn('[模型管理] PIXI销毁时出现警告:', pixiError);
+                                }
+                            }
+
+                            console.log('[模型管理] Live2D资源清理完成');
+                        } catch (cleanupError) {
+                            console.warn('[模型管理] Live2D清理时出现警告:', cleanupError);
+                        }
+                    }
+
                     if (live2dModelGroup) live2dModelGroup.style.display = 'none';
                     if (vrmModelGroup) vrmModelGroup.style.display = 'flex';
                     if(vrmExpressionGroup) vrmExpressionGroup.style.display = 'flex';
@@ -1104,7 +1219,7 @@
                         vrmContainer.classList.remove('hidden');
                         vrmContainer.style.display = 'block';
                     }
-                    
+
                     // 清理 Live2D 的 UI 元素（锁图标、浮动按钮等）
                     const live2dLockIcon = document.getElementById('live2d-lock-icon');
                     if (live2dLockIcon) {
@@ -2610,7 +2725,10 @@
 
                     // 检查模型类型
                     const modelType = catgirlConfig.model_type || (catgirlConfig.vrm ? 'vrm' : 'live2d');
-                    
+
+                    // 【关键修复】先切换模型类型，清理旧模型资源
+                    await switchModelDisplay(modelType);
+
                     if (modelType === 'vrm' && catgirlConfig.vrm) {
                         // VRM 模型
                         const vrmModelPath = catgirlConfig.vrm;

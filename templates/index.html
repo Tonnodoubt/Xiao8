@@ -1804,11 +1804,45 @@
                 }
 
                 if (modelType === 'vrm') {
+                    // 【关键修复】先清理Live2D资源，确保完全切换
+                    if (window.live2dManager) {
+                        try {
+                            console.log('[主页] 切换到VRM，开始清理Live2D资源...');
+                            
+                            // 清理Live2D模型
+                            if (window.live2dManager.currentModel) {
+                                if (typeof window.live2dManager.currentModel.destroy === 'function') {
+                                    window.live2dManager.currentModel.destroy();
+                                }
+                                window.live2dManager.currentModel = null;
+                            }
+                            
+                            // 停止PIXI渲染循环
+                            if (window.live2dManager.pixi_app) {
+                                window.live2dManager.pixi_app.ticker.stop();
+                                // 清理舞台
+                                if (window.live2dManager.pixi_app.stage) {
+                                    window.live2dManager.pixi_app.stage.removeChildren();
+                                }
+                            }
+                            
+                            console.log('[主页] Live2D资源清理完成');
+                        } catch (cleanupError) {
+                            console.warn('[主页] Live2D清理时出现警告:', cleanupError);
+                        }
+                    }
+                    
                     // 隐藏 Live2D，显示 VRM
                     const live2dContainer = document.getElementById('live2d-container');
                     const vrmContainer = document.getElementById('vrm-container');
-                    if (live2dContainer) live2dContainer.style.display = 'none';
-                    if (vrmContainer) vrmContainer.style.display = 'block';
+                    if (live2dContainer) {
+                        live2dContainer.style.display = 'none';
+                        live2dContainer.classList.add('hidden');
+                    }
+                    if (vrmContainer) {
+                        vrmContainer.style.display = 'block';
+                        vrmContainer.classList.remove('hidden');
+                    }
 
                     // 清理 Live2D 的 UI 元素（锁图标、浮动按钮等）
                     const live2dLockIcon = document.getElementById('live2d-lock-icon');
@@ -1936,11 +1970,38 @@
                     if (modelType === 'vrm') {
                         // VRM模型：重新加载VRM模型
                         if (window.vrmManager) {
+                            // 【关键修复】先清理Live2D资源
+                            if (window.live2dManager) {
+                                try {
+                                    console.log('[主页] 重新加载VRM，清理Live2D资源...');
+                                    if (window.live2dManager.currentModel) {
+                                        if (typeof window.live2dManager.currentModel.destroy === 'function') {
+                                            window.live2dManager.currentModel.destroy();
+                                        }
+                                        window.live2dManager.currentModel = null;
+                                    }
+                                    if (window.live2dManager.pixi_app) {
+                                        window.live2dManager.pixi_app.ticker.stop();
+                                        if (window.live2dManager.pixi_app.stage) {
+                                            window.live2dManager.pixi_app.stage.removeChildren();
+                                        }
+                                    }
+                                } catch (cleanupError) {
+                                    console.warn('[主页] Live2D清理时出现警告:', cleanupError);
+                                }
+                            }
+                            
                             // 隐藏Live2D容器，显示VRM容器
                             const live2dContainer = document.getElementById('live2d-container');
                             const vrmContainer = document.getElementById('vrm-container');
-                            if (live2dContainer) live2dContainer.style.display = 'none';
-                            if (vrmContainer) vrmContainer.style.display = 'block';
+                            if (live2dContainer) {
+                                live2dContainer.style.display = 'none';
+                                live2dContainer.classList.add('hidden');
+                            }
+                            if (vrmContainer) {
+                                vrmContainer.style.display = 'block';
+                                vrmContainer.classList.remove('hidden');
+                            }
 
                             // 确保Three.js场景已初始化
                             if (!window.vrmManager._isInitialized || !window.vrmManager.scene || !window.vrmManager.camera || !window.vrmManager.renderer) {
@@ -1980,11 +2041,86 @@
                         }
                     } else {
                         // Live2D模型：使用原有逻辑
+                        // 【关键修复】先清理VRM资源，确保完全切换
+                        if (window.vrmManager) {
+                            try {
+                                console.log('[主页] 切换到Live2D，开始清理VRM资源...');
+                                
+                                // 1. 停止VRM动画循环（最关键）
+                                if (window.vrmManager._animationFrameId) {
+                                    cancelAnimationFrame(window.vrmManager._animationFrameId);
+                                    window.vrmManager._animationFrameId = null;
+                                }
+                                
+                                // 2. 停止VRM动画
+                                if (window.vrmManager.animation) {
+                                    window.vrmManager.animation.stopVRMAAnimation();
+                                    // 清理动画模块
+                                    if (typeof window.vrmManager.animation.dispose === 'function') {
+                                        window.vrmManager.animation.dispose();
+                                    }
+                                }
+                                
+                                // 3. 清理VRM模型（从场景中移除）
+                                if (window.vrmManager.currentModel && window.vrmManager.currentModel.vrm) {
+                                    const vrm = window.vrmManager.currentModel.vrm;
+                                    // 先隐藏模型
+                                    if (vrm.scene) {
+                                        vrm.scene.visible = false;
+                                    }
+                                    // 从场景中移除
+                                    if (window.vrmManager.scene && vrm.scene) {
+                                        window.vrmManager.scene.remove(vrm.scene);
+                                    }
+                                    // 调用dispose清理资源
+                                    if (window.vrmManager.core && typeof window.vrmManager.core.disposeVRM === 'function') {
+                                        window.vrmManager.core.disposeVRM();
+                                    }
+                                }
+                                
+                                // 4. 清理动画混合器
+                                if (window.vrmManager.animationMixer) {
+                                    window.vrmManager.animationMixer.stopAllAction();
+                                    if (window.vrmManager.currentModel && window.vrmManager.currentModel.vrm) {
+                                        window.vrmManager.animationMixer.uncacheRoot(window.vrmManager.currentModel.vrm.scene);
+                                    }
+                                    window.vrmManager.animationMixer = null;
+                                }
+                                
+                                // 5. 清理场景（清空所有对象）
+                                if (window.vrmManager.scene) {
+                                    // 遍历并移除所有子对象
+                                    while (window.vrmManager.scene.children.length > 0) {
+                                        window.vrmManager.scene.remove(window.vrmManager.scene.children[0]);
+                                    }
+                                }
+                                
+                                // 6. 停止渲染器渲染（通过隐藏canvas）
+                                if (window.vrmManager.renderer && window.vrmManager.renderer.domElement) {
+                                    window.vrmManager.renderer.domElement.style.display = 'none';
+                                    window.vrmManager.renderer.domElement.style.opacity = '0';
+                                }
+                                
+                                // 7. 重置当前模型引用
+                                window.vrmManager.currentModel = null;
+                                
+                                console.log('[主页] VRM资源清理完成');
+                            } catch (cleanupError) {
+                                console.warn('[主页] VRM清理时出现警告:', cleanupError);
+                            }
+                        }
+                        
                         // 隐藏VRM容器，显示Live2D容器
                         const live2dContainer = document.getElementById('live2d-container');
                         const vrmContainer = document.getElementById('vrm-container');
-                        if (live2dContainer) live2dContainer.style.display = 'block';
-                        if (vrmContainer) vrmContainer.style.display = 'none';
+                        if (live2dContainer) {
+                            live2dContainer.style.display = 'block';
+                            live2dContainer.classList.remove('hidden');
+                        }
+                        if (vrmContainer) {
+                            vrmContainer.style.display = 'none';
+                            vrmContainer.classList.add('hidden');
+                        }
                         
                         await window.live2dManager.loadModel(newModelPath, {
                             preferences: modelPreferences,
