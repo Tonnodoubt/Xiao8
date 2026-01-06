@@ -1,8 +1,7 @@
 /**
- * VRM 动画模块 - 终极修复版 (数据清洗 + 可视化诊断)
- * 1. 新增：四元数连续性修复 (解决旋转抽搐的数学根源)
- * 2. 新增：调试模式 (显示骨骼辅助线)
- * 3. 优化：严格的骨骼白名单
+ * VRM 动画模块 - 使用官方 @pixiv/three-vrm-animation 库
+ * 1. 使用官方库自动处理骨骼重定向和四元数问题
+ * 2. 保留自定义功能：口型同步、调试模式、播放速度控制等
  */
 class VRMAnimation {
     constructor(manager) {
@@ -34,7 +33,6 @@ class VRMAnimation {
             const safeDelta = (delta <= 0 || delta > 0.1) ? 0.016 : delta;
             this.vrmaMixer.update(safeDelta * this.playbackSpeed);
 
-            
             // 必须在动画更新后立即更新矩阵，确保骨骼状态同步
             const vrm = this.manager.currentModel?.vrm;
             if (vrm?.scene) {
@@ -53,21 +51,42 @@ class VRMAnimation {
         }
     }
 
-    async _getLoaderAndUtils() {
+    /**
+     * 初始化加载器（使用官方 VRMAnimationLoaderPlugin）
+     */
+    async _initLoader() {
         if (this._loaderPromise) return this._loaderPromise;
+        
         this._loaderPromise = (async () => {
-            const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
-            const { VRMLoaderPlugin } = await import('@pixiv/three-vrm'); // 简化导入
-            const loader = new GLTFLoader();
-            loader.register((parser) => new VRMLoaderPlugin(parser));
-            return loader;
+            console.log('[VRM Animation] 正在初始化加载器（使用官方库）...');
+            
+            try {
+                // 动态导入必要的模块
+                const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+                const { VRMAnimationLoaderPlugin } = await import('@pixiv/three-vrm-animation');
+                
+                // 创建加载器并注册官方插件
+                const loader = new GLTFLoader();
+                loader.register((parser) => new VRMAnimationLoaderPlugin(parser));
+                
+                console.log('[VRM Animation] 加载器初始化完成（官方库）');
+                return loader;
+            } catch (error) {
+                console.error('[VRM Animation] 加载器初始化失败:', error);
+                this._loaderPromise = null; // 重置，允许重试
+                throw error;
+            }
         })();
-        return this._loaderPromise;
+
+        return await this._loaderPromise;
     }
 
     async playVRMAAnimation(vrmaPath, options = {}) {
         const vrm = this.manager.currentModel?.vrm;
-        if (!vrm) return;
+        if (!vrm) {
+            console.warn('[VRM Animation] 没有加载的 VRM 模型');
+            return;
+        }
 
         try {
             // 物理防抖：暂时关闭 SpringBone
@@ -82,32 +101,42 @@ class VRMAnimation {
                 this.manager.animationMixer = null;
             }
 
-            const loader = await this._getLoaderAndUtils();
-            const gltf = await new Promise((resolve, reject) => loader.load(vrmaPath, resolve, undefined, reject));
-            const originalClip = gltf.animations[0];
+            // 确保加载器已初始化
+            const loader = await this._initLoader();
+            console.log('[VRM Animation] 正在加载动画:', vrmaPath);
+
+            // 使用官方库加载 VRMA 文件
+            const gltf = await loader.loadAsync(vrmaPath);
+            
+            // 获取官方库解析的动画数据
+            const vrmAnimations = gltf.userData?.vrmAnimations;
+            if (!vrmAnimations || vrmAnimations.length === 0) {
+                console.error('[VRM Animation] 动画文件加载成功，但没有找到 VRM 动画数据');
+                return;
+            }
+
+            // 使用第一个动画（通常只有一个）
+            const vrmAnimation = vrmAnimations[0];
 
             // 针对【当前模型】创建新的 Mixer
             if (this.vrmaMixer) {
                 this.vrmaMixer.stopAllAction();
-                this.vrmaMixer.uncacheRoot(this.vrmaMixer.getRoot()); // 清理旧绑定
+                this.vrmaMixer.uncacheRoot(this.vrmaMixer.getRoot());
                 this.vrmaMixer = null;
             }
             
             // 创建绑定到【当前新模型】(vrm.scene) 的混合器
             this.vrmaMixer = new window.THREE.AnimationMixer(vrm.scene);
 
-            // 1. 严格映射重定向
-            let clip = this._strictRetargetClip(originalClip, vrm);
+            // 使用官方库的 createVRMAnimationClip 创建动画 Clip
+            // 这会自动处理骨骼重定向和四元数问题
+            const { createVRMAnimationClip } = await import('@pixiv/three-vrm-animation');
+            const clip = createVRMAnimationClip(vrmAnimation, vrm);
             
-            // 检查是否有有效的动画轨道
             if (!clip || !clip.tracks || clip.tracks.length === 0) {
-                console.warn('[VRM Animation] 重定向后没有有效的动画轨道，可能骨骼映射失败');
-                throw new Error('动画重定向失败：没有找到匹配的骨骼');
+                console.warn('[VRM Animation] 创建的动画 Clip 没有有效的轨道');
+                throw new Error('动画 Clip 创建失败：没有找到匹配的骨骼');
             }
-            
-            // 2. 数据清洗：修复四元数跳变
-            // 这步操作会修改 clip 内部的数据，消除数学上的"翻转"
-            this._ensureQuaternionContinuity(clip);
 
             const newAction = this.vrmaMixer.clipAction(clip);
             if (!newAction) {
@@ -116,41 +145,31 @@ class VRMAnimation {
             
             newAction.setLoop(options.loop ? window.THREE.LoopRepeat : window.THREE.LoopOnce);
             newAction.clampWhenFinished = true;
-
-            // 强制设置旋转轨道的插值模式
-            clip.tracks.forEach(track => {
-                if (track.name.endsWith('.quaternion')) {
-                    // 四元数轨道必须使用线性插值（Three.js 限制）
-                    track.setInterpolation(window.THREE.InterpolateLinear);
-                }
-            });
             
             // 设置速度 (优先使用传入参数，否则用默认)
             this.playbackSpeed = (options.timeScale !== undefined) ? options.timeScale : 1.0;
             newAction.timeScale = 1.0; // Mixer 内部保持 1，我们在 update 里控制
 
-            // 处理“立即播放”逻辑
-
+            // 处理"立即播放"逻辑
             const fadeDuration = options.fadeDuration !== undefined ? options.fadeDuration : 0.4;
-            const isImmediate = options.immediate === true; // 新增参数控制
+            const isImmediate = options.immediate === true;
 
             if (isImmediate) {
-                // 【方案】如果要求立即播放（如初始加载）
-                if (this.currentAction) this.currentAction.stop(); // 停止旧的
+                // 如果要求立即播放（如初始加载）
+                if (this.currentAction) this.currentAction.stop();
                 
                 newAction.reset();
-                newAction.play(); // 直接播放，不使用 fadeIn
+                newAction.play();
                 
-                // ⚡️ 核心魔法：强制 Mixer 立即计算第 0 帧的数据
+                // 强制 Mixer 立即计算第 0 帧的数据
                 this.vrmaMixer.update(0);
                 
-                // ⚡️ 核心魔法：强制应用骨骼变换到场景中
-                // 这样浏览器渲染第一帧画面时，已经是动作姿态，而不是 T-Pose
+                // 强制应用骨骼变换到场景中
                 if (vrm.scene) {
                     vrm.scene.updateMatrixWorld(true);
                 }
             } else {
-                // 【方案】如果是切换动作（保持原有的丝滑过渡）
+                // 如果是切换动作（保持原有的丝滑过渡）
                 if (this.currentAction && this.currentAction !== newAction) {
                     // 同步旧状态防止跳变
                     this.vrmaMixer.update(0); 
@@ -174,9 +193,12 @@ class VRMAnimation {
             // 如果开启了调试，更新骨骼辅助线
             if (this.debug) this._updateSkeletonHelper();
 
+            console.log('[VRM Animation] 动画播放成功（使用官方库）');
+
         } catch (error) {
             console.error('[VRM Animation] 播放失败:', error);
             this.vrmaIsPlaying = false;
+            throw error;
         }
     }
 
@@ -213,144 +235,6 @@ class VRMAnimation {
         }
     }
 
-    /**
-     * 【核心修复算法】四元数连续性清洗 - 增强版
-     * 遍历所有旋转轨道，确保相邻帧的旋转路径最短。
-     * 解决"手指乱跳"和"手臂反转"的数学根源。
-     * 新增：对手臂骨骼的特殊处理，使用更严格的连续性检查
-     */
-    _ensureQuaternionContinuity(clip) {
-        const THREE = window.THREE;
-        
-        // 识别手臂相关骨骼（需要更严格的连续性处理）
-        const armBoneNames = ['shoulder', 'upperarm', 'lowerarm', 'hand'];
-        
-        clip.tracks.forEach(track => {
-            // 只处理旋转轨道 (quaternion)
-            if (!track.name.endsWith('.quaternion')) return;
-
-            const values = track.values; // flat array [x, y, z, w, x, y, z, w...]
-            const numKeys = values.length / 4;
-            
-            // 检查是否是手臂骨骼
-            const isArmBone = armBoneNames.some(name => track.name.toLowerCase().includes(name));
-            // 手臂骨骼使用更严格的阈值（0.1而不是0），避免微小跳变
-            const dotThreshold = isArmBone ? 0.1 : 0;
-            
-            // 临时变量
-            const prevQuat = new THREE.Quaternion();
-            const currQuat = new THREE.Quaternion();
-            const smoothedQuat = new THREE.Quaternion();
-
-            // 从第二帧开始检查
-            for (let i = 1; i < numKeys; i++) {
-                // 读取前一帧
-                prevQuat.fromArray(values, (i - 1) * 4);
-                // 读取当前帧
-                currQuat.fromArray(values, i * 4);
-
-                // 计算点积。如果点积 < 阈值，说明两个四元数虽然代表相同/相似的角度，
-                // 但是处于四维球面的对面（导致插值时会绕地球一圈）。
-                const dot = prevQuat.dot(currQuat);
-                if (dot < dotThreshold) {
-                    // 修复：将当前四元数所有分量取反
-                    // (q 和 -q 代表相同的旋转，但取反后离前一帧更近)
-                    values[i * 4]     = -values[i * 4];     // x
-                    values[i * 4 + 1] = -values[i * 4 + 1]; // y
-                    values[i * 4 + 2] = -values[i * 4 + 2]; // z
-                    values[i * 4 + 3] = -values[i * 4 + 3]; // w
-                    
-                    // 更新currQuat以用于下一次检查
-                    currQuat.fromArray(values, i * 4);
-                }
-                
-                // 【新增】对于手臂骨骼，额外检查角度变化是否过大
-                // 如果旋转角度超过阈值，可能是数据错误，进行平滑处理
-                if (isArmBone && i > 1) {
-                    const angle = prevQuat.angleTo(currQuat);
-                    // 如果单帧旋转超过90度，可能是数据异常，进行平滑
-                    // 使用更保守的阈值（90度而不是120度）来避免突然的大幅旋转
-                    if (angle > Math.PI / 2) {
-                        // 使用球面线性插值来平滑过渡，插值系数0.3让变化更渐进
-                        smoothedQuat.slerpQuaternions(prevQuat, currQuat, 0.3);
-                        smoothedQuat.normalize();
-                        smoothedQuat.toArray(values, i * 4);
-                    }
-                }
-            }
-        });
-    }
-
-    /**
-     * 严格白名单重定向 (含手指保护)
-     */
-    _strictRetargetClip(originalClip, vrm) {
-        const tracks = [];
-        const validBoneMap = new Map();
-        
-        if (vrm.humanoid) {
-             const getBoneNode = (name) => {
-                 return vrm.humanoid.getRawBoneNode ? vrm.humanoid.getRawBoneNode(name) : 
-                        (vrm.humanoid.humanBones?.[name]?.node || vrm.humanoid.humanBones?.[name]);
-             };
-
-             // 仅允许标准骨骼 (不包含 Twist/Metacarpal)
-             const standardBones = [
-                 'hips','spine','chest','upperChest','neck','head',
-                 'leftEye','rightEye',
-                 'leftShoulder','rightShoulder','leftUpperArm','rightUpperArm',
-                 'leftUpperArmTwist', 'rightUpperArmTwist', 
-                 'leftLowerArm', 'rightLowerArm',
-                 'leftLowerArmTwist', 'rightLowerArmTwist',
-                 'leftHand', 'rightHand',
-                 'leftUpperLeg','rightUpperLeg','leftLowerLeg','rightLowerLeg','leftFoot','rightFoot','leftToes','rightToes',
-                 // 手指 (仅 3 节，过滤掌骨 Metacarpal 以防手掌变形)
-                 'leftThumbProximal', 'leftThumbIntermediate', 'leftThumbDistal',
-                 'leftIndexProximal', 'leftIndexIntermediate', 'leftIndexDistal',
-                 'leftMiddleProximal', 'leftMiddleIntermediate', 'leftMiddleDistal',
-                 'leftRingProximal', 'leftRingIntermediate', 'leftRingDistal',
-                 'leftLittleProximal', 'leftLittleIntermediate', 'leftLittleDistal',
-                 'rightThumbProximal', 'rightThumbIntermediate', 'rightThumbDistal',
-                 'rightIndexProximal', 'rightIndexIntermediate', 'rightIndexDistal',
-                 'rightMiddleProximal', 'rightMiddleIntermediate', 'rightMiddleDistal',
-                 'rightRingProximal', 'rightRingIntermediate', 'rightRingDistal',
-                 'rightLittleProximal', 'rightLittleIntermediate', 'rightLittleDistal'
-             ];
-             
-             standardBones.forEach(boneName => {
-                 const node = getBoneNode(boneName);
-                 if (node) validBoneMap.set(node.name.toLowerCase(), { node, type: boneName });
-             });
-        }
-
-        originalClip.tracks.forEach((track) => {
-            //允许动作文件控制表情
-            //if (track.name.toLowerCase().includes('expression') || track.name.toLowerCase().includes('blendshape')) return;
-            const lastDotIndex = track.name.lastIndexOf('.');
-            const property = track.name.substring(lastDotIndex + 1);
-            let nodeName = track.name.substring(0, lastDotIndex);
-
-            if (property === 'scale') return; // 禁止缩放
-
-            const targetEntry = validBoneMap.get(nodeName.toLowerCase());
-            if (targetEntry) {
-                const { node, type } = targetEntry;
-                // 仅 Hips 允许位移，防止手指脱臼
-                if (property === 'position' && type !== 'hips') return;
-
-                const newTrack = track.clone();
-                newTrack.name = `${node.name}.${property}`;
-
-                tracks.push(newTrack);
-            } else if (this.debug && (nodeName.toLowerCase().includes('arm') || nodeName.toLowerCase().includes('hand'))) {
-                console.warn(`[VRM Animation] 未映射的手臂骨骼: ${nodeName} (${property})`);
-            }
-        });
-
-        const THREE = window.THREE;
-        return new THREE.AnimationClip(originalClip.name, originalClip.duration, tracks);
-    }
-
     // --- 调试工具 ---
     /**
      * 开启/关闭骨骼显示
@@ -379,7 +263,7 @@ class VRMAnimation {
         this.manager.scene.add(this.skeletonHelper);
     }
 
-    //口型同步代码
+    //口型同步代码（完全保留）
     startLipSync(analyser) {
         this.analyser = analyser;
         this.lipSyncActive = true;
@@ -443,8 +327,6 @@ class VRMAnimation {
         if (!this.analyser) return;
 
         // 检查数组是否存在，或者长度是否匹配
-        // 如果 AudioContext 发生变化（如切换设备），frequencyBinCount 可能会变
-        // 如果数组没初始化，或者长度不对，就立即重建一个正确的数组
         if (!this.frequencyData || this.frequencyData.length !== this.analyser.frequencyBinCount) {
             console.log('[VRM Animation] 自动修正口型同步数组长度');
             this.frequencyData = new Uint8Array(this.analyser.frequencyBinCount);
