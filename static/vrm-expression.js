@@ -14,6 +14,9 @@ class VRMExpression {
         this.blinkState = 0; // 0:睁眼, 1:闭眼, 2:睁眼
         this.blinkWeight = 0.0;
 
+        // --- 手动眨眼标志 (防止自动更新干扰) ---
+        this.manualBlinkInProgress = null; // 存储正在手动播放的眨眼表情名称
+
         // --- 情绪配置 ---
         this.autoChangeMood = false;
         this.moodTimer = 0;
@@ -162,21 +165,21 @@ class VRMExpression {
         this.blinkTimer += delta;
         if (this.blinkState === 0) {
             if (this.blinkTimer >= this.nextBlinkTime) {
-                this.blinkState = 1; 
+                this.blinkState = 1;
                 this.blinkTimer = 0;
             }
         } else if (this.blinkState === 1) {
-            this.blinkWeight += delta * 12.0; // 眨眼速度
+            this.blinkWeight += delta * 4.0; // 眨眼速度（降低从12.0到8.0，更自然）
             if (this.blinkWeight >= 1.0) {
                 this.blinkWeight = 1.0;
                 this.blinkState = 2;
             }
         } else if (this.blinkState === 2) {
-            this.blinkWeight -= delta * 10.0; 
+            this.blinkWeight -= delta * 4.0; // 睁眼速度（降低从10.0到6.0，更自然）
             if (this.blinkWeight <= 0.0) {
                 this.blinkWeight = 0.0;
-                this.blinkState = 0; 
-                this.nextBlinkTime = Math.random() * 3.0 + 2.0; 
+                this.blinkState = 0;
+                this.nextBlinkTime = Math.random() * 3.0 + 2.0;
             }
         }
     }
@@ -218,6 +221,11 @@ class VRMExpression {
             const lowerName = name.toLowerCase();
             const targetNameLower = targetName.toLowerCase();
 
+            // 【新增】如果是正在手动播放的单眼眨眼，跳过自动更新
+            if (this.manualBlinkInProgress && name === this.manualBlinkInProgress) {
+                return; // 跳过，让手动设置的值保持
+            }
+
             // 【修复】跳过口型表情，避免与口型同步模块冲突
             const lipSyncExpressions = ['aa', 'ih', 'ou', 'ee', 'oh'];
             const isLipSyncExpression = lipSyncExpressions.some(lip => lowerName.includes(lip));
@@ -243,10 +251,10 @@ class VRMExpression {
             }
             // --- B. 处理自动眨眼 (次优先级) ---
             // 条件：
-            // 1. 当前表情是眨眼类 (blink)
+            // 1. 当前表情是 blink (双眼眨眼，不包括 blinkLeft/blinkRight)
             // 2. 用户【没有】在手动测试眨眼 (防止手动 blinkLeft 时被自动 blink 覆盖)
             // 3. 该表情【不是】选中的那个 (否则会在上面 A 步被设为 1.0)
-            else if (lowerName.includes('blink') && !isUserTestingBlink) {
+            else if (lowerName === 'blink' && !isUserTestingBlink) {
                 expressionManager.setValue(name, this.blinkWeight);
                 return; // 眨眼由定时器控制，处理完直接跳过后续插值
             }
@@ -287,8 +295,66 @@ class VRMExpression {
     setBaseExpression(name) {
         // 彻底关闭自动切换，防止干扰
         this.autoChangeMood = false;
-        this.currentMood = name || 'neutral';
 
+        // 【修复】如果是眨眼表情，区分处理单眼和双眼
+        const lowerName = (name || '').toLowerCase();
+        if (lowerName.includes('blink')) {
+            console.log('[VRM Expression] 检测到眨眼表情，类型:', name);
+
+            if (!this.manager.currentModel || !this.manager.currentModel.vrm || !this.manager.currentModel.vrm.expressionManager) {
+                return;
+            }
+
+            const expressionManager = this.manager.currentModel.vrm.expressionManager;
+
+            // 判断是单眼还是双眼
+            if (lowerName.includes('left') || lowerName.includes('right')) {
+                // 单眼眨眼：直接设置权重，不使用 blinkWeight 动画
+                console.log('[VRM Expression] 触发单眼眨眼动画:', name);
+
+                // 设置手动眨眼标志，防止 _updateWeights 干扰
+                this.manualBlinkInProgress = name;
+
+                // 立即设置为1.0（闭眼）
+                expressionManager.setValue(name, 1.0);
+
+                // 150ms后保持闭眼状态（确保眼睛完全闭上）
+                setTimeout(() => {
+                    expressionManager.setValue(name, 1.0);
+                }, 350);
+
+                // 400ms后开始睁眼
+                setTimeout(() => {
+                    expressionManager.setValue(name, 0.0);
+                    this.currentMood = 'neutral';
+                    this.manualBlinkInProgress = null; // 清除标志
+                }, 400);
+
+            } else {
+                // 双眼眨眼：使用 blinkWeight 动画（原有逻辑）
+                console.log('[VRM Expression] 触发双眼眨眼动画:', name);
+
+                // 强制触发一次眨眼动画
+                this.blinkState = 1;  // 开始闭眼
+                this.blinkTimer = 0;
+                this.blinkWeight = 0.0;
+
+                // 临时启用自动眨眼来完成这次动画
+                const wasAutoBlink = this.autoBlink;
+                this.autoBlink = true;
+
+                // 动画完成后恢复原状态
+                setTimeout(() => {
+                    this.autoBlink = wasAutoBlink;
+                    this.currentMood = 'neutral';
+                }, 500);
+            }
+
+            return;
+        }
+
+        // 非眨眼表情：正常设置
+        this.currentMood = name || 'neutral';
     }
 }
 
