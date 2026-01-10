@@ -1610,6 +1610,14 @@
                     let oldForm = document.getElementById('catgirl-form-' + key);
                     if (oldForm) oldForm.style.display = '';
                 } else {
+                    // 检查是否已经存在"新增猫娘"的表单，如果存在，先移除旧的容器，防止出现空白条
+                    const existingNewForm = document.getElementById('catgirl-form-new');
+                    if (existingNewForm) {
+                        const existingBlock = existingNewForm.closest('.catgirl-block');
+                    if (existingBlock) {
+                        existingBlock.remove();
+                    }
+                }
                     // 新增猫娘时，创建一个新的表单块
                     const block = document.createElement('div');
                     block.className = 'catgirl-block';
